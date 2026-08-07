@@ -90,6 +90,8 @@ const ACTIVITY_API_ENDPOINT = (
 ).replace(/\/+$/, "");
 
 const GOAL_HOST_CACHE_TTL_MS = 30_000;
+/** Short on purpose: this runs per candidate, so a dead one must not stall the page. */
+const GOAL_HOST_PROBE_TIMEOUT_MS = 5_000;
 let cachedGoalHost: { endpoint: string; at: number } | null = null;
 
 /**
@@ -128,13 +130,18 @@ const LOOPBACK = new Set(["127.0.0.1", "localhost", "0.0.0.0", "::1", "[::1]"]);
  * itself is on loopback we are inside the container and the address was right
  * all along.
  */
-function reachableFrom(raw: string | undefined): string | undefined {
+function reachableFrom(raw: string | undefined, resolvedAt: string): string | undefined {
   if (!raw) return undefined;
   let target: URL;
   let disc: URL;
   try {
     target = new URL(raw);
-    disc = new URL(DISCOVERY_ENDPOINT);
+    // The rewrite host is whichever registry ANSWERED, not whichever registry
+    // this vessel registers with. On a federated spoke those are two different
+    // machines: goal shapes are resolved on the hub while registration stays
+    // local, so rewriting a hub record's loopback to the local discovery host
+    // would produce an address on the wrong machine entirely.
+    disc = new URL(resolvedAt);
   } catch {
     return raw;
   }
@@ -142,6 +149,52 @@ function reachableFrom(raw: string | undefined): string | undefined {
   if (LOOPBACK.has(disc.hostname)) return raw; // we are in-container; loopback is correct
   target.hostname = disc.hostname;
   return target.toString().replace(/\/+$/, "");
+}
+
+/**
+ * Where goal shapes are RESOLVED, which is not necessarily where this vessel
+ * REGISTERS.
+ *
+ * On a federated spoke those must differ. The spoke's own registry does import
+ * the hub's vessels, but it hands back their federation-transport addresses; the
+ * hub's registry hands back the hub's own goal-host as well, which is the one a
+ * spoke can actually reach over HTTP. Registration has to stay local either way,
+ * because registering on the hub publishes this container's private :8310 as a
+ * network-wide record nobody outside the container can dial — measured: doing it
+ * put exactly that record second in line for every hub-side consumer of
+ * `surfaceIntent`.
+ */
+function goalShapeResolutionEndpoint(): string {
+  const hub = process.env["HUB_DISCOVERY_URL"];
+  return typeof hub === "string" && hub.trim().length > 0
+    ? hub.trim().replace(/\/+$/, "")
+    : DISCOVERY_ENDPOINT;
+}
+
+/**
+ * Does this address actually serve goal shapes?
+ *
+ * The probe is a REAL resolve call and deliberately not `/health`. Measured on
+ * a live spoke: the federation transport answers `/health` with 200 and answers
+ * `/resolve` with 404, so a health check selects a candidate that then fails
+ * every call the surface makes. A liveness probe that is not the thing you are
+ * about to do is not evidence you can do it.
+ *
+ * `activeDispatches` is the cheapest shape goal-host serves and the one the
+ * board already polls, so a passing probe means the exact call path works.
+ */
+async function servesGoalShapes(base: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${base}/resolve`, {
+      method: "POST",
+      headers: upstreamHeaders(true),
+      body: JSON.stringify({ type: "activeDispatches" }),
+      signal: AbortSignal.timeout(GOAL_HOST_PROBE_TIMEOUT_MS),
+    });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
 }
 
 async function resolveGoalHostEndpoint(): Promise<string> {
@@ -154,8 +207,9 @@ async function resolveGoalHostEndpoint(): Promise<string> {
     cachedGoalHost = { endpoint: pinned, at: now };
     return pinned;
   }
+  const resolvedAt = goalShapeResolutionEndpoint();
   try {
-    const res = await fetch(`${DISCOVERY_ENDPOINT}/resolve`, {
+    const res = await fetch(`${resolvedAt}/resolve`, {
       method: "POST",
       headers: upstreamHeaders(true),
       body: JSON.stringify({
@@ -168,26 +222,37 @@ async function resolveGoalHostEndpoint(): Promise<string> {
           vessels?: Array<{ endpoint?: unknown; public_endpoint?: unknown }>;
         };
       };
-      const first = j?.content?.vessels?.[0];
-      // PREFER public_endpoint. It sits right beside `endpoint` in the same
-      // record the surface already receives, and it is the reachable one: a
-      // vessel registers its IN-CONTAINER address as `endpoint`, correct for a
-      // peer inside that container and dead for anyone else. Reading `endpoint`
-      // unconditionally is what made the lookup SUCCEED and then 502 — the
-      // failure the comment above this function narrates. The env override
-      // stays as an escape hatch but is no longer the only remedy, and it
-      // should not be: gating routing on an env var is behaviour the substrate
-      // cannot observe.
-      const endpoint = reachableFrom(
-        typeof first?.public_endpoint === "string" && first.public_endpoint.length > 0
-          ? first.public_endpoint
-          : typeof first?.endpoint === "string"
-            ? first.endpoint
-            : undefined,
-      );
-      if (typeof endpoint === "string" && endpoint.length > 0) {
-        cachedGoalHost = { endpoint: endpoint.replace(/\/+$/, ""), at: now };
-        return cachedGoalHost.endpoint;
+      const vessels = Array.isArray(j?.content?.vessels) ? j.content.vessels : [];
+      // EVERY candidate, in registry order — not `vessels[0]`.
+      //
+      // A shape has as many producers as the network has vessels serving it: the
+      // hub advertises three for `goal_execution` (its own goal-host, plus a
+      // re-exported record per federated peer). Taking the first and trusting it
+      // meant one undialable record at the front of that list took the whole
+      // surface down with a 502, while two working goal hosts sat behind it.
+      // Preferring `public_endpoint` is still right — it carries the host-mapped
+      // port — but it is a preference per candidate now, not a decision for all
+      // of them.
+      for (const v of vessels) {
+        const candidate = reachableFrom(
+          typeof v?.public_endpoint === "string" && v.public_endpoint.length > 0
+            ? v.public_endpoint
+            : typeof v?.endpoint === "string"
+              ? v.endpoint
+              : undefined,
+          resolvedAt,
+        );
+        if (typeof candidate !== "string" || candidate.length === 0) continue;
+        const base = candidate.replace(/\/+$/, "");
+        if (await servesGoalShapes(base)) {
+          cachedGoalHost = { endpoint: base, at: now };
+          return base;
+        }
+      }
+      if (vessels.length > 0) {
+        console.warn(
+          `[human-surface] ${vessels.length} vessel(s) advertise goal_execution at ${resolvedAt}; none answered a resolve call`,
+        );
       }
     }
   } catch (err) {

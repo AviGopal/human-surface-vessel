@@ -34,15 +34,93 @@ import type { RenderPolicy } from "./store.js";
  * renderer does not know falls through to verbatim, so accepting an unknown
  * form word here would produce a silent no-op on screen. It is refused instead.
  */
-export const CONTENT_FORMS = ["prose", "text", "rows", "diff", "empty"] as const;
+export const CONTENT_FORMS = [
+  "prose",
+  "text",
+  "rows",
+  "diff",
+  "empty",
+  "terminal",
+  "record",
+  "scalar",
+  "stub",
+] as const;
 export type ContentForm = (typeof CONTENT_FORMS)[number];
 
-/** How a human names each form. Left side is what people type. */
+/**
+ * Forms a human may NOT pin onto a shape.
+ *
+ * Both of these are facts about the CONTENT rather than presentation
+ * preferences, and pinning one would hide the thing it describes: an `empty`
+ * pin on a shape that later carries content renders that content as an
+ * emptiness notice, and a `stub` pin claims "no content carried" over a payload
+ * that was carried. A pin has to be a preference to be honourable.
+ */
+export const NON_PINNABLE_FORMS = ["empty", "stub"] as const satisfies readonly ContentForm[];
+
+export const PINNABLE_FORMS: readonly ContentForm[] = CONTENT_FORMS.filter(
+  (f) => !(NON_PINNABLE_FORMS as readonly ContentForm[]).includes(f),
+);
+
+/**
+ * MIRROR ASSERTION.
+ *
+ * `packages/design-tokens/index.ts` carries a byte-identical copy of the block
+ * above, because the vessel is a submodule that must not reach into the
+ * super-repo for a runtime import (law 11) — and neither of the two build
+ * graphs that compile these files can see the other's directory: the vessel
+ * typechecks with only its own repo mounted, the UI builds with only `ui/` and
+ * that package on the path. A shared import is therefore not available, and
+ * this assertion is honest about what it does and does not buy:
+ *
+ *   it PROVES  — this file's array and its written-out union agree, so the
+ *                half-edit that grows one without the other fails to compile
+ *                here AND, identically, over there;
+ *   it does NOT prove the two FILES agree. That is convention, and the
+ *                assertion text is duplicated verbatim so the two blocks diff
+ *                cleanly against each other.
+ */
+type MirroredForm =
+  | "prose"
+  | "text"
+  | "rows"
+  | "diff"
+  | "empty"
+  | "terminal"
+  | "record"
+  | "scalar"
+  | "stub";
+type FormsMirrorOk = [ContentForm] extends [MirroredForm]
+  ? [MirroredForm] extends [ContentForm]
+    ? true
+    : never
+  : never;
+export const CONTENT_FORMS_MIRRORED: FormsMirrorOk = true;
+
+/**
+ * How a human names each form. Left side is what people type.
+ *
+ * `empty` and `stub` are listed even though they cannot be pinned, and that is
+ * deliberate: a reader who types "show shellResult as empty" has named a real
+ * form, and must be told it is not pinnable rather than told it does not
+ * exist. Refusing with the wrong reason teaches the wrong vocabulary.
+ */
 const FORM_WORDS: ReadonlyArray<readonly [RegExp, ContentForm]> = [
   [/^(?:a\s+|an\s+|the\s+)?(?:tables?|tabular|rows?|grid|columns?|spreadsheet)$/i, "rows"],
   [/^(?:a\s+|an\s+|the\s+)?(?:prose|paragraphs?|markdown|writing|readable)$/i, "prose"],
   [/^(?:a\s+|an\s+|the\s+)?(?:verbatim|raw|literal|monospace|mono|code|plain|text|preformatted)$/i, "text"],
   [/^(?:a\s+|an\s+|the\s+)?(?:diffs?|patch(?:es)?|changes?)$/i, "diff"],
+  [
+    /^(?:a\s+|an\s+|the\s+)?(?:terminals?|console|shell|command output|terminal output|stdout)$/i,
+    "terminal",
+  ],
+  [
+    /^(?:a\s+|an\s+|the\s+)?(?:records?|fields?|key ?[/-]? ?values?|labell?ed fields?|objects?)$/i,
+    "record",
+  ],
+  [/^(?:a\s+|an\s+|the\s+)?(?:scalars?|single values?|one value|a value|values?|inline)$/i, "scalar"],
+  [/^(?:a\s+|an\s+|the\s+)?(?:nothing|empty|blank)$/i, "empty"],
+  [/^(?:a\s+|an\s+|the\s+)?(?:stubs?|provenance(?: only)?)$/i, "stub"],
 ];
 
 function formWord(word: string): ContentForm | null {
@@ -137,7 +215,7 @@ export interface IntentReading {
 export const GRAMMAR: readonly string[] = [
   "make the text bigger / smaller (add 'much' or 'a bit' to change the step)",
   "set the text to 16px",
-  "show <shape> as a table | rows | prose | verbatim | diff",
+  "show <shape> as a table | rows | prose | verbatim | diff | terminal | record | value",
   "stop overriding <shape> (drop one form pin)",
   "make it denser / tighter / looser / roomier",
   "expand the ledger / collapse the ledger",
@@ -324,15 +402,17 @@ export function readSurfaceIntent(text: string, current: RenderPolicy): IntentRe
       if (form === null) {
         unparsed.push({
           text: clause,
-          reason: `'${rest}' is not a form this surface can render — the forms are ${CONTENT_FORMS.join(", ")}`,
+          // PINNABLE, not every form: offering a word the next branch is about
+          // to refuse would be an instruction to make the same mistake again.
+          reason: `'${rest}' is not a form this surface can render — the forms are ${PINNABLE_FORMS.join(", ")}`,
           suggested_goal: `Add a '${rest}' content form to the human surface renderer in repos/human-surface-vessel/ui/src/components/ContentRender.tsx`,
         });
         continue;
       }
-      if (form === "empty") {
+      if ((NON_PINNABLE_FORMS as readonly ContentForm[]).includes(form)) {
         unparsed.push({
           text: clause,
-          reason: `'empty' is a fact about content, not a presentation choice — it cannot be pinned`,
+          reason: `'${form}' is a fact about content, not a presentation choice — it cannot be pinned, because pinning it would hide the very content it claims is absent`,
           suggested_goal: "",
         });
         continue;
