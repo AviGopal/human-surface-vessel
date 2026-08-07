@@ -417,7 +417,13 @@ proxyRouter.post("/api/grade", async (c) => {
           execution_id: body["execution_id"],
           activity_id: body["activity_id"] ?? "unattributed",
           verdict: body["verdict"],
-          confidence: body["confidence"] ?? null,
+          // DEFAULT, not passthrough-null. The trace store types this as a float
+          // and rejects NULL outright, so forwarding an absent field as null
+          // turned every verdict into a 500 the reader saw as "not recorded".
+          // A label arriving here is a human's, and a human's verdict is the
+          // ground truth this corpus exists to hold — 1 is the honest default,
+          // and a caller that means something else can still say so.
+          confidence: typeof body["confidence"] === "number" ? body["confidence"] : 1,
           notes: body["notes"] ?? null,
           labeler: "human",
         },

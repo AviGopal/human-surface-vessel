@@ -302,6 +302,13 @@ export async function submitGrade(g: GradeSubmission): Promise<void> {
       execution_id: g.executionId,
       goal: g.goal,
       verdict: g.verdict,
+      // A human verdict is the ground truth this corpus is FOR, so it carries
+      // full confidence. Omitting the field sent `confidence: null` through the
+      // proxy and the trace store rejected it — "Found NULL for field
+      // `confidence` … but expected a float" — so every verdict a person
+      // submitted 500'd and never reached the corpus. The doc comment above this
+      // function has always specified `confidence: 1`; the body did not send it.
+      confidence: 1,
       labeler: "human",
       notes: g.notes,
     }),
