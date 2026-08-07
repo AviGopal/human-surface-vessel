@@ -17,7 +17,14 @@
  *       the query's `enabled` flag so state is HELD rather than discarded.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useBoard } from "../api/queries";
 import type { ActiveDispatch } from "../api/types";
 import { sortRuns } from "../lib/sort";
@@ -61,6 +68,15 @@ export function RunsRegion({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [committed, setCommitted] = useState<readonly Positioned[]>([]);
   const [buffered, setBuffered] = useState<readonly Positioned[]>([]);
+
+  /**
+   * The roving tab stop, held as a DISPATCH ID rather than as an index.
+   *
+   * Same reasoning as the P4 key: committing the buffer inserts rows at the
+   * top, and an index would silently hand the tab stop to a different run —
+   * the reader would arrow away from where they thought they were.
+   */
+  const [focusedId, setFocusedId] = useState<string | null>(null);
 
   const data = board.data;
   /** Every dispatch id this region has ever accounted for, committed or buffered. */
@@ -138,6 +154,68 @@ export function RunsRegion({
     scrollRef.current?.scrollTo({ top: 0 });
   }, [buffered]);
 
+  /**
+   * Arrow-key traversal within the list.
+   *
+   * Before this, the list was 50 consecutive tab stops that a keyboard reader
+   * could not get past, and every stop scrolled the fixed-height window — so
+   * the act of moving toward a target moved the target. One tab stop enters
+   * the list; arrows move inside it; Tab leaves.
+   */
+  const onListKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
+      if (!keys.includes(event.key)) return;
+      if (committed.length === 0) return;
+
+      const currentId = focusedId ?? committed[0]?.dispatchId ?? null;
+      const at = committed.findIndex((p) => p.dispatchId === currentId);
+      // A row that fell off the board leaves the tab stop at the top rather
+      // than at a position, which would be somebody else's run.
+      const from = at === -1 ? 0 : at;
+
+      let next = from;
+      if (event.key === "ArrowDown") next = Math.min(from + 1, committed.length - 1);
+      if (event.key === "ArrowUp") next = Math.max(from - 1, 0);
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = committed.length - 1;
+
+      const target = committed[next];
+      if (!target) return;
+      event.preventDefault();
+      setFocusedId(target.dispatchId);
+      const el = scrollRef.current?.querySelector<HTMLElement>(
+        `[data-dispatch-id="${CSS.escape(target.dispatchId)}"]`,
+      );
+      el?.focus();
+      // `nearest` so a row already in view does not scroll the window under
+      // the reader just because focus arrived on it.
+      el?.scrollIntoView({ block: "nearest" });
+    },
+    [committed, focusedId],
+  );
+
+  /**
+   * The one row that holds the list's tab stop.
+   *
+   * The membership test is load-bearing: a run that has fallen off the 50-row
+   * board leaves `focusedId` naming a row that no longer exists, and without
+   * this every row would get `tabIndex={-1}` — a list no keyboard could enter
+   * at all, which is a worse failure than the 50 stops this replaced.
+   */
+  const rovingId = committed.some((p) => p.dispatchId === focusedId)
+    ? focusedId
+    : (committed[0]?.dispatchId ?? null);
+
+  /**
+   * A poll that has failed, held until one succeeds. `isError` alone flaps
+   * while a query cycles through `pending`, and a region that hides its own
+   * outage one second in three is worse than one that never reported it.
+   */
+  const failed = board.isError || board.failureCount > 0;
+  const errorMessage =
+    board.error instanceof Error ? board.error.message : "the upstream did not answer";
+
   const nonTerminalSeen = new Set<string>();
   for (const p of committed) {
     if (p.row.status === "running" && nonTerminalSeen.size < LIVE_DETAIL_BUDGET) {
@@ -169,17 +247,34 @@ export function RunsRegion({
         aria-relevant="additions text"
         aria-busy={board.isFetching}
         aria-label="Dispatched runs, newest first"
+        onKeyDown={onListKeyDown}
       >
-        {board.isError && committed.length === 0 ? (
-          <p className="sf-error" style={{ margin: "var(--sf-space-4)" }}>
-            The board could not be read: {(board.error as Error).message}. This is the surface
-            failing, not the fleet being idle — nothing here says anything about what is running.
+        {/*
+          * `failed`, not `isError`. A poll that is in flight toward a retry
+          * momentarily reports neither error nor data, and rendering the
+          * loading placeholder on that moment made the region alternate once
+          * per second between its own honest failure banner and a neutral
+          * "Reading the board…" — a measured L E E L E E over thirty seconds.
+          * Once a poll has failed, the failure stands until one succeeds.
+          */}
+        {failed && committed.length === 0 ? (
+          <p className="sf-error" role="status" style={{ margin: "var(--sf-space-4)" }}>
+            The board could not be read: {errorMessage}. This is the surface failing, not the fleet
+            being idle — nothing here says anything about what is running.
           </p>
         ) : null}
 
-        {committed.length === 0 && !board.isError ? (
+        {committed.length === 0 && !failed ? (
           <p className="sf-empty">
-            {board.isLoading ? "Reading the board…" : "Nothing has been dispatched yet."}
+            {board.isLoading ? (
+              "Reading the board…"
+            ) : (
+              <>
+                <strong>Nothing has been dispatched yet.</strong>
+                Ask for something in the box above and it lands here, verdict first — reached or
+                not reached, never a status.
+              </>
+            )}
           </p>
         ) : null}
 
@@ -197,6 +292,8 @@ export function RunsRegion({
             liveDetail={nonTerminalSeen.has(p.dispatchId)}
             onSelect={onSelect}
             intervalMs={intervalMs}
+            tabStop={p.dispatchId === rovingId}
+            onFocused={setFocusedId}
           />
         ))}
         </div>

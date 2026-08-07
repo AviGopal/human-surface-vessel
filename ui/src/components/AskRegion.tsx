@@ -75,6 +75,30 @@ function ContractPanel({ contract, goal }: { contract: RunContract; goal: string
 
 function OutcomeNote({ outcome }: { outcome: DispatchOutcome }): ReactNode {
   switch (outcome.kind) {
+    case "reshaped":
+      // Say plainly that NOTHING was dispatched. The reader is watching a runs
+      // board; if this read like an acceptance they would wait for a row that
+      // is never coming.
+      return (
+        <p className="sf-outcome" role="status">
+          This changed the interface itself — nothing was dispatched and no run will appear below.
+          {outcome.revision >= 0 ? ` Render policy is now revision ${outcome.revision}.` : ""}
+          <ul className="sf-outcome-changes">
+            {outcome.changes.map((c) => (
+              <li key={`${c.field}-${c.to}`}>
+                <b>{c.field}</b>: {c.from} → {c.to}
+                {c.because ? <span className="sf-outcome-because"> · from “{c.because}”</span> : null}
+              </li>
+            ))}
+          </ul>
+          {outcome.unparsed.length > 0 ? (
+            <span className="sf-outcome-unparsed">
+              Not understood, and therefore not applied:{" "}
+              {outcome.unparsed.map((u) => `“${u}”`).join(", ")}. The rest was applied.
+            </span>
+          ) : null}
+        </p>
+      );
     case "accepted":
       return outcome.coalesced ? (
         <p className="sf-warn">
@@ -143,7 +167,15 @@ export function AskRegion({ onDispatched }: { onDispatched: (dispatchId: string)
       { goal: text, operator: "human-surface", tags: ["surface:do-anything"] },
       {
         onSuccess: (outcome) => {
+          // The contract describes A WALK THAT WILL RUN. It is built optimistically
+          // on submit, because the reader deserves to see it before the wait — but
+          // only ACCEPTED means a walk actually runs. On every other outcome it is
+          // withdrawn, or the surface would show "what will happen" beside "nothing
+          // was dispatched" and contradict itself in one frame. That is the exact
+          // failure this surface exists to prevent, so it must not commit it.
+          if (outcome.kind !== "accepted") setContract(null);
           if (outcome.kind === "accepted" && outcome.dispatchId) onDispatched(outcome.dispatchId);
+          // "reshaped" deliberately falls through: there is no run to select.
           if (outcome.kind === "refused" && outcome.dispatchId) onDispatched(outcome.dispatchId);
         },
       },

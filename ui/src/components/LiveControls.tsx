@@ -41,12 +41,28 @@ export function LiveControls({ frozen, regionName }: { frozen: boolean; regionNa
         ))}
       </select>
 
-      <span aria-live="polite">
-        {paused ? (
-          <span className="sf-frozen-note">paused</span>
-        ) : frozen ? (
-          <span className="sf-frozen-note">held — you are in this region</span>
-        ) : null}
+      {/*
+        The note's WIDTH IS RESERVED by a hidden sizer carrying the longest
+        string, with both children stacked in one grid cell.
+
+        Previously this span was empty until the pointer entered the region,
+        then grew — displacing the pause button 151.5px to the left, on
+        pointerenter. The control that exists to stop the panel moving was
+        itself moving out from under the pointer, which made it unclickable by
+        mouse and reachable only by keyboard. Reserving the space means the
+        message can change without any sibling shifting.
+      */}
+      <span className="sf-live-note">
+        <span className="sf-live-note-sizer" aria-hidden="true">
+          held — you are in this region
+        </span>
+        <span className="sf-live-note-live" aria-live="polite">
+          {paused ? (
+            <span className="sf-frozen-note">paused</span>
+          ) : frozen ? (
+            <span className="sf-frozen-note">held — you are in this region</span>
+          ) : null}
+        </span>
       </span>
     </div>
   );

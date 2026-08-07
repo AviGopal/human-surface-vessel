@@ -137,6 +137,34 @@ function parseBlocks(source: string): Block[] {
   return blocks;
 }
 
+/**
+ * Whether a paragraph is really a machine record that arrived unfenced.
+ *
+ * The failure this closes: an answer body containing a bare
+ * `{"shape":"shellResult","stdout":"76325\n"}` line rendered in the READING
+ * SERIF, while the identical bytes rendered in mono 700px lower inside the
+ * same run's impulse card — two type roles for one artefact on one screen.
+ * A CSS rule cannot reach it, because unfenced JSON carries no backticks and
+ * so never becomes a `<code>` element in the first place.
+ *
+ * The test is `JSON.parse` succeeding on an object or array, not a regex: a
+ * sentence that merely contains a brace is prose and must stay prose.
+ */
+function isMachineRecordLine(lines: readonly string[]): boolean {
+  if (lines.length !== 1) return false;
+  const text = (lines[0] ?? "").trim();
+  if (text.length < 2) return false;
+  const opens = text.startsWith("{") || text.startsWith("[");
+  const closes = text.endsWith("}") || text.endsWith("]");
+  if (!opens || !closes) return false;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "object" && parsed !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function Prose({ source }: { source: string }): ReactNode {
   const blocks = parseBlocks(source);
   return (
@@ -179,7 +207,16 @@ export function Prose({ source }: { source: string }): ReactNode {
             return <hr key={key} />;
           case "p":
           default:
-            return <p key={key}>{renderInline(block.lines.join(" "), key)}</p>;
+            // Machine record reads as machine record, in the same mono role it
+            // gets everywhere else in this surface. Content is unchanged and
+            // nothing is hidden — only the type role is corrected.
+            return isMachineRecordLine(block.lines) ? (
+              <pre key={key} className="sf-verbatim" data-lang="json">
+                {block.lines.join("\n")}
+              </pre>
+            ) : (
+              <p key={key}>{renderInline(block.lines.join(" "), key)}</p>
+            );
         }
       })}
     </div>

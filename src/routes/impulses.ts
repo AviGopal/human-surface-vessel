@@ -13,7 +13,7 @@
  */
 
 import { Hono } from "hono";
-import { DISCOVERY_SHAPES, type DiscoveryShape } from "../config.js";
+import { DISCOVERY_SHAPES, METABOB_API_KEY, type DiscoveryShape } from "../config.js";
 import {
   asVisibility,
   recordAssertion,
@@ -27,7 +27,9 @@ import {
   type Observation,
   getRenderPolicy,
   writeRenderPolicy,
+  recordSurfaceIntent,
 } from "../store.js";
+import { GRAMMAR, readSurfaceIntent } from "../surface-intent.js";
 
 type Pointer = Record<string, unknown>;
 
@@ -102,6 +104,62 @@ function asks(p: Pointer): Ask[] | undefined {
   return Array.isArray(v) ? (v as Ask[]) : undefined;
 }
 
+
+const DEV_VESSEL_ENDPOINT = (
+  process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090"
+).replace(/\/+$/, "");
+
+/**
+ * File a human complaint as a substrateGap, keyed exactly as the substrate's own
+ * legibility detector keys its findings.
+ *
+ * `source: "human_reported"` is the only field that distinguishes it, and it is
+ * load-bearing: the detector is permitted to CLOSE its own findings on
+ * re-observation, and must never close a human's, because the human saw
+ * something the detector's rules cannot express.
+ */
+async function fileFeedbackGap(entry: {
+  panelId: string;
+  kind: string;
+  complaintKind: string;
+  value: unknown;
+}): Promise<void> {
+  const slug = String(entry.panelId)
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  const text = typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value);
+  await fetch(`${DEV_VESSEL_ENDPOINT}/v2/impulses/resolve`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(METABOB_API_KEY ? { Authorization: `ApiKey ${METABOB_API_KEY}` } : {}),
+    },
+    body: JSON.stringify({
+      impulse: {
+        pointer: {
+          type: "substrateGap_write",
+          gap: {
+            id: `ui-feedback-${slug}-${entry.complaintKind}`,
+            category: "ui_legibility",
+            source: "human_reported",
+            status: "open",
+            summary: `UI feedback (${entry.complaintKind}) on ${entry.panelId}: ${text}`,
+            detected_at: new Date().toISOString(),
+            classification_metadata: {
+              surface: "human-surface-vessel",
+              region: entry.panelId,
+              kind: entry.complaintKind,
+              interaction: entry.kind,
+            },
+          },
+        },
+      },
+    }),
+    signal: AbortSignal.timeout(8_000),
+  });
+}
+
 export const impulsesRouter = new Hono();
 
 impulsesRouter.post("/v2/impulses/resolve", async (c) => {
@@ -156,6 +214,24 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         kind: feedbackKind(pointer),
         visibility: asVisibility(pointer["visibility"], "public"),
       });
+      // ONE FUNNEL. A human complaint about this surface is filed into the SAME
+      // keyspace the substrate's own `ui_legibility_scan` files into —
+      // `ui-feedback-<region>-<kind>` — differing only in `source`. That is the
+      // whole point of the shared key: a detector that files into its own
+      // private list can never be compared against what humans actually notice,
+      // and agreement or disagreement between the two is the only signal that
+      // says whether the detector's rules match the thing people complain about.
+      //
+      // Fire-and-forget: a gap-store outage must not lose the complaint, and the
+      // in-memory record above has already succeeded.
+      // The complaint CATEGORY is distinct from the store's interaction enum.
+      // `Feedback.kind` is answer|reaction|dismiss — what the human DID with an
+      // ask. A complaint category is hard_to_see|hard_to_understand|wrong — what
+      // is WRONG. Collapsing them keyed every complaint about a region as
+      // `...-answer`, so two different problems with the same region collided on
+      // one gap id and the second silently overwrote the first.
+      const complaintKind = optStr(pointer, "complaint_kind") ?? entry.kind;
+      void fileFeedbackGap({ ...entry, complaintKind }).catch(() => {});
       return c.json({ resolved: true, success: true, shape: type, body: entry });
     }
 
@@ -280,6 +356,77 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         ...(typeof pointer["note"] === "string" ? { note: pointer["note"] as string } : {}),
       });
       return c.json({ resolved: true, success: true, shape: type, body: next });
+    }
+
+    case "surfaceIntent": {
+      // Prose in, interface change out. Deterministic parse FIRST: the LLM is
+      // one resolver among many and never the controller, and "make the text
+      // bigger" is a parse, not a reasoning problem.
+      const text = optStr(pointer, "text") ?? optStr(pointer, "instruction") ?? optStr(pointer, "body");
+      if (!text || text.trim() === "") {
+        return c.json(
+          {
+            resolved: false,
+            success: false,
+            shape: type,
+            error: "text required — the instruction to read",
+            grammar: GRAMMAR,
+          },
+          400,
+        );
+      }
+      const reading = readSurfaceIntent(text, getRenderPolicy());
+
+      if (!reading.understood) {
+        // NOT a no-op reported as success. Nothing moved, so nothing is
+        // written, the revision does not advance, and the caller is told
+        // exactly which words were not read and what this parser does read.
+        recordSurfaceIntent({
+          text,
+          changedFields: [],
+          unparsed: reading.unparsed.map((u) => u.text),
+          appliedRevision: null,
+        });
+        return c.json(
+          {
+            resolved: false,
+            success: false,
+            shape: type,
+            understood: false,
+            applied: false,
+            error: "no part of this instruction could be read",
+            changes: [],
+            unparsed: reading.unparsed,
+            grammar: reading.grammar,
+            policy_revision: getRenderPolicy().revision,
+          },
+          422,
+        );
+      }
+
+      // Writes through the SAME shaped impulse every other author uses, so the
+      // surface picks it up on its next read with no rebuild and no deploy.
+      const next = writeRenderPolicy(reading.patch);
+      recordSurfaceIntent({
+        text,
+        changedFields: reading.changes.map((ch) => ch.field),
+        unparsed: reading.unparsed.map((u) => u.text),
+        appliedRevision: next.revision,
+      });
+      return c.json({
+        resolved: true,
+        success: true,
+        shape: type,
+        understood: true,
+        applied: true,
+        // A partial read is stated as partial. Some of what was asked for did
+        // not happen, and that must not be invisible under a green result.
+        partial: reading.unparsed.length > 0,
+        changes: reading.changes,
+        unparsed: reading.unparsed,
+        ...(reading.unparsed.length > 0 ? { grammar: reading.grammar } : {}),
+        body: next,
+      });
     }
 
     default:

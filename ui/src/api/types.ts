@@ -126,7 +126,27 @@ export interface ActiveDispatch {
  * a dispatch that will never emit. Branch on the discriminant, never on the
  * HTTP status.
  */
+export interface SurfaceChange {
+  readonly field: string;
+  readonly from: string;
+  readonly to: string;
+  readonly because: string;
+}
+
 export type DispatchOutcome =
+  /**
+   * The instruction reshaped THIS SURFACE rather than dispatching a walk.
+   * It is a distinct outcome and not a kind of "accepted": nothing was
+   * dispatched, there is no dispatchId, and no run will appear on the board.
+   * Collapsing it into acceptance would be the same class of lie as reporting
+   * a status where a verdict belongs.
+   */
+  | {
+      readonly kind: "reshaped";
+      readonly changes: readonly SurfaceChange[];
+      readonly unparsed: readonly string[];
+      readonly revision: number;
+    }
   | { readonly kind: "accepted"; readonly dispatchId: string; readonly coalesced: boolean }
   | { readonly kind: "refused"; readonly dispatchId: string; readonly reason: string | null }
   | { readonly kind: "draining"; readonly message: string }

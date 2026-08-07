@@ -40,6 +40,17 @@ export function useBoard(opts: { enabled: boolean; intervalMs: number }): UseQue
     staleTime: 0,
     // A poll that fails once must not blank a board the reader is using.
     placeholderData: (previous) => previous,
+    // NO RETRY, and this is about honesty rather than about load.
+    //
+    // A retrying query re-enters `pending` on the way to each attempt, so
+    // `isError` FLAPS: on a 2s poll against a dead upstream the region spent
+    // roughly one second in three rendering "Reading the board…" over the top
+    // of its own failure banner — a surface whose entire premise is that it
+    // cannot report a status as an outcome, hiding its outage on a loop.
+    // With retry off, a failed poll is a failed poll until the next one, and
+    // the region reads `failureCount` rather than `isError` so even a
+    // momentary return to `pending` cannot repaint the failure as loading.
+    retry: false,
   });
 }
 

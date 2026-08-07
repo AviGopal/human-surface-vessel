@@ -253,6 +253,7 @@ export function counts(): Record<string, number> {
     events: events.length,
     assertions: asserts.length,
     attachments: attachments.length,
+    intents: intents.length,
   };
 }
 
@@ -348,6 +349,50 @@ let renderPolicy: RenderPolicy = {
   updatedAt: Date.now(),
   note: "default — no override; the built-in heuristic is in force",
 };
+
+/**
+ * A typed instruction and what it actually did.
+ *
+ * Kept because a render change with no record of who asked for it, in what
+ * words, is exactly the untraced mutation the surface is forbidden to make.
+ * `unparsed` is stored alongside `changedFields` on purpose: the instructions
+ * the parser could NOT read are the demand signal for the next rule, and they
+ * are only a signal if they survive the request that produced them.
+ */
+export interface SurfaceIntentRecord {
+  id: string;
+  text: string;
+  changedFields: string[];
+  unparsed: string[];
+  /** The revision this instruction produced, or null when it moved nothing. */
+  appliedRevision: number | null;
+  visibility: Visibility;
+  receivedAt: number;
+}
+
+const intents: SurfaceIntentRecord[] = [];
+
+export function recordSurfaceIntent(
+  i: Omit<SurfaceIntentRecord, "id" | "receivedAt" | "visibility"> & {
+    id?: string;
+    visibility?: Visibility;
+  },
+): SurfaceIntentRecord {
+  const entry: SurfaceIntentRecord = {
+    ...i,
+    id: i.id ?? rid("int"),
+    visibility: asVisibility(i.visibility, "public"),
+    receivedAt: Date.now(),
+  };
+  intents.push(entry);
+  if (intents.length > MAX_HISTORY) intents.shift();
+  emit("surface_intent", entry);
+  return entry;
+}
+
+export function recentSurfaceIntents(limit = 50): SurfaceIntentRecord[] {
+  return intents.slice(-limit).reverse();
+}
 
 export function getRenderPolicy(): RenderPolicy {
   return renderPolicy;

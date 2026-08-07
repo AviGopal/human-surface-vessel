@@ -55,7 +55,60 @@ function str(v: unknown): string | null {
  * dispatch is somebody ELSE'S older run and claiming credit for it is a lie; a
  * refusal is terminal and arrives as 200; a drain is temporary and retryable.
  */
+/**
+ * An instruction about the SURFACE is tried against the surface first.
+ *
+ * Order matters and is deliberate. The parser is a deterministic, closed set of
+ * rules; it either understands an instruction or refuses it, cheaply and
+ * without an LLM. Only what it refuses becomes a goal. That is the floor-first
+ * arrangement the substrate asks for everywhere else — the LLM is one resolver
+ * among many, never the controller — applied to the surface's own controls.
+ *
+ * A refusal here is NOT an error: it means "this was not about me", and the
+ * instruction goes to the walk unchanged. Anything the parser understood only
+ * PARTLY is reported with the clause it dropped, because silently applying half
+ * an instruction is worse than applying none.
+ */
+async function trySurfaceIntent(instruction: string): Promise<DispatchOutcome | null> {
+  let res: Response;
+  try {
+    res = await fetch("/api/surface-intent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ instruction }),
+    });
+  } catch {
+    // The surface being unreachable must not swallow the instruction; let the
+    // normal dispatch path run and report its own failure honestly.
+    return null;
+  }
+  if (res.status === 422) return null; // not about the surface — send it to the walk
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => null)) as null | {
+    applied?: boolean;
+    changes?: Array<{ field?: string; from?: string; to?: string; because?: string }>;
+    unparsed?: string[];
+    policy?: { revision?: number };
+  };
+  if (!body || body.applied !== true) return null;
+  return {
+    kind: "reshaped",
+    changes: (body.changes ?? []).map((c) => ({
+      field: String(c.field ?? ""),
+      from: String(c.from ?? ""),
+      to: String(c.to ?? ""),
+      because: String(c.because ?? ""),
+    })),
+    unparsed: (body.unparsed ?? []).map(String),
+    revision: typeof body.policy?.revision === "number" ? body.policy.revision : -1,
+  };
+}
+
 export async function dispatchGoal(req: DispatchRequest): Promise<DispatchOutcome> {
+  const reshaped = await trySurfaceIntent(req.goal);
+  if (reshaped) return reshaped;
+
   const res = await fetch("/api/run-goal", {
     method: "POST",
     headers: { "content-type": "application/json" },

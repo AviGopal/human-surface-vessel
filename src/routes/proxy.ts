@@ -26,12 +26,14 @@
  */
 
 import { Hono } from "hono";
-import { getRenderPolicy } from "../store.js";
+import { getRenderPolicy, recentSurfaceIntents, recordSurfaceIntent, writeRenderPolicy } from "../store.js";
+import { GRAMMAR, readSurfaceIntent } from "../surface-intent.js";
 import {
   DISCOVERY_ENDPOINT,
   GOAL_HOST_ENDPOINT,
   METABOB_API_KEY,
   PORT,
+  RESOLVE_PATH,
 } from "../config.js";
 
 /** The host maps container ports by convention 8xxx → 18xxx. */
@@ -107,6 +109,41 @@ let cachedGoalHost: { endpoint: string; at: number } | null = null;
  * remapping loopback to the discovery host with the port offset; until this
  * vessel does the same, an explicit override is the escape hatch.
  */
+
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "0.0.0.0", "::1", "[::1]"]);
+
+/**
+ * Rewrite a loopback address into one this process can actually dial.
+ *
+ * Every vessel registers its IN-CONTAINER address, and `public_endpoint` only
+ * changes the PORT (8210 -> 18210), not the host — both are 127.0.0.1. That is
+ * correct for a peer inside that container and dead for anyone else, and
+ * because the lookup SUCCEEDS the caller gets an address it cannot reach rather
+ * than an error it can handle.
+ *
+ * The derivation is obsidian-vessel's federation sidecar's, and it is sound for
+ * the same reason: whatever host we reach DISCOVERY on is a host that publishes
+ * this fleet's mapped ports, so the discovery host plus the already-offset
+ * public port is reachable by construction. Nothing is hardcoded — if discovery
+ * itself is on loopback we are inside the container and the address was right
+ * all along.
+ */
+function reachableFrom(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  let target: URL;
+  let disc: URL;
+  try {
+    target = new URL(raw);
+    disc = new URL(DISCOVERY_ENDPOINT);
+  } catch {
+    return raw;
+  }
+  if (!LOOPBACK.has(target.hostname)) return raw;
+  if (LOOPBACK.has(disc.hostname)) return raw; // we are in-container; loopback is correct
+  target.hostname = disc.hostname;
+  return target.toString().replace(/\/+$/, "");
+}
+
 async function resolveGoalHostEndpoint(): Promise<string> {
   const now = Date.now();
   if (cachedGoalHost && now - cachedGoalHost.at < GOAL_HOST_CACHE_TTL_MS) {
@@ -127,10 +164,27 @@ async function resolveGoalHostEndpoint(): Promise<string> {
     });
     if (res.ok) {
       const j = (await res.json().catch(() => null)) as null | {
-        content?: { vessels?: Array<{ endpoint?: unknown }> };
+        content?: {
+          vessels?: Array<{ endpoint?: unknown; public_endpoint?: unknown }>;
+        };
       };
       const first = j?.content?.vessels?.[0];
-      const endpoint = first?.endpoint;
+      // PREFER public_endpoint. It sits right beside `endpoint` in the same
+      // record the surface already receives, and it is the reachable one: a
+      // vessel registers its IN-CONTAINER address as `endpoint`, correct for a
+      // peer inside that container and dead for anyone else. Reading `endpoint`
+      // unconditionally is what made the lookup SUCCEED and then 502 — the
+      // failure the comment above this function narrates. The env override
+      // stays as an escape hatch but is no longer the only remedy, and it
+      // should not be: gating routing on an env var is behaviour the substrate
+      // cannot observe.
+      const endpoint = reachableFrom(
+        typeof first?.public_endpoint === "string" && first.public_endpoint.length > 0
+          ? first.public_endpoint
+          : typeof first?.endpoint === "string"
+            ? first.endpoint
+            : undefined,
+      );
       if (typeof endpoint === "string" && endpoint.length > 0) {
         cachedGoalHost = { endpoint: endpoint.replace(/\/+$/, ""), at: now };
         return cachedGoalHost.endpoint;
@@ -342,6 +396,43 @@ proxyRouter.get("/api/gaps", async (c) => {
   }
 });
 
+// ─── human feedback (browser write) ─────────────────────────────────────────
+
+/**
+ * A complaint about this surface, from the person looking at it.
+ *
+ * It self-posts the `uiFeedback` SHAPE rather than calling the store directly,
+ * so a complaint travels the same path a complaint from anywhere else would —
+ * one code path, one place for the gap-filing side effect to live.
+ */
+proxyRouter.post("/api/feedback", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
+  if (!body || typeof body["panel_id"] !== "string" || !body["value"]) {
+    return c.json(
+      { error: "panel_id and value are required" },
+      400,
+      corsHeaders(c.req.header("Origin")),
+    );
+  }
+  return passthrough({
+    url: `http://127.0.0.1:${PORT}${RESOLVE_PATH}`,
+    method: "POST",
+    rawBody: JSON.stringify({
+      impulse: {
+        pointer: {
+          type: "uiFeedback",
+          panel_id: body["panel_id"],
+          value: body["value"],
+          kind: "reaction",
+          complaint_kind: body["kind"] ?? "wrong",
+          visibility: "public",
+        },
+      },
+    }),
+    origin: c.req.header("Origin"),
+  });
+});
+
 // ─── render policy (browser read) ───────────────────────────────────────────
 
 /**
@@ -352,6 +443,96 @@ proxyRouter.get("/api/gaps", async (c) => {
  */
 proxyRouter.get("/api/render-policy", (c) =>
   c.json(getRenderPolicy(), 200, corsHeaders(c.req.header("Origin"))),
+);
+
+// ─── typed instruction → interface change (browser write) ───────────────────
+
+/**
+ * The prose box. A person types "make the text bigger and show shellResult as
+ * a table" and the interface changes.
+ *
+ * Resolved IN PROCESS rather than by dialling this vessel's own resolver over
+ * HTTP, and that is the security-boundary decision this file exists to make:
+ * a self-loopback would either need the API key in a request the browser can
+ * see the shape of, or would have to trust an address the vessel advertises but
+ * cannot always dial (goal-host hit exactly that wall from outside the
+ * container). Calling the parser directly keeps the key server-side by
+ * construction — there is no outbound request to attach it to.
+ *
+ * `text` is the ONLY input accepted. The browser never sends a policy patch:
+ * if it could, a hostile page could set any token to any value while the
+ * response would still read as a human instruction. Everything the surface can
+ * be told to do must survive the parser.
+ */
+proxyRouter.post("/api/surface-intent", async (c) => {
+  const origin = c.req.header("Origin");
+  const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
+  const raw = body?.["text"] ?? body?.["instruction"];
+  const text = typeof raw === "string" ? raw : "";
+  if (text.trim() === "") {
+    return c.json(
+      { applied: false, understood: false, error: "text required", grammar: GRAMMAR },
+      400,
+      corsHeaders(origin),
+    );
+  }
+
+  const reading = readSurfaceIntent(text, getRenderPolicy());
+
+  if (!reading.understood) {
+    recordSurfaceIntent({
+      text,
+      changedFields: [],
+      unparsed: reading.unparsed.map((u) => u.text),
+      appliedRevision: null,
+    });
+    // 422, not 200: the reader asked for something and it did not happen.
+    // `suggested_goal` rides along so the surface can OFFER a dispatch — P2
+    // says a suggestion inserts into the input, it never sends. Nothing here
+    // dispatches, and nothing here may be changed to.
+    return c.json(
+      {
+        applied: false,
+        understood: false,
+        changes: [],
+        unparsed: reading.unparsed,
+        grammar: reading.grammar,
+        policy: getRenderPolicy(),
+      },
+      422,
+      corsHeaders(origin),
+    );
+  }
+
+  const next = writeRenderPolicy(reading.patch);
+  recordSurfaceIntent({
+    text,
+    changedFields: reading.changes.map((ch) => ch.field),
+    unparsed: reading.unparsed.map((u) => u.text),
+    appliedRevision: next.revision,
+  });
+  return c.json(
+    {
+      applied: true,
+      understood: true,
+      partial: reading.unparsed.length > 0,
+      changes: reading.changes,
+      unparsed: reading.unparsed,
+      ...(reading.unparsed.length > 0 ? { grammar: reading.grammar } : {}),
+      policy: next,
+    },
+    200,
+    corsHeaders(origin),
+  );
+});
+
+/** What the box understands, so the surface can say so without guessing. */
+proxyRouter.get("/api/surface-intent/grammar", (c) =>
+  c.json(
+    { grammar: GRAMMAR, recent: recentSurfaceIntents(20) },
+    200,
+    corsHeaders(c.req.header("Origin")),
+  ),
 );
 
 export { corsHeaders, resolveGoalHostEndpoint };

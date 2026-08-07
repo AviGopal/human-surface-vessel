@@ -18,6 +18,7 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLiveControls, useRegionFreeze } from "../state/liveControls";
+import { ComplainButton } from "./ComplainButton";
 
 export interface InterfaceGap {
   readonly id: string;
@@ -59,8 +60,19 @@ function GapRow({ gap }: { gap: InterfaceGap }): ReactNode {
         <span className="sf-gap-meta">
           {SOURCE_LABEL[gap.source] ?? gap.source}
           {closedBy ? ` · closed by ${closedBy} on re-observation` : ""}
-          {reopened ? ` · reopened ${gap.reopen_count}×` : ""}
         </span>
+        {/*
+          * A reopen count is the panel's most alarming datum — it says a fix
+          * did not hold — and it was rendered in the quietest ink available,
+          * at the tail of a metadata line, while `CLOSED` got a badge. It is
+          * a badge now, and it is deliberately NOT the closed/open pair: a
+          * gap that keeps coming back is neither.
+          */}
+        {reopened ? (
+          <span className="sf-gap-reopened">
+            reopened {gap.reopen_count}× — the fix did not hold
+          </span>
+        ) : null}
       </span>
     </li>
   );
@@ -84,13 +96,30 @@ export function GapStrip(): ReactNode {
   const closed = gaps.filter((g) => g.status === "closed");
 
   return (
-    <section className="sf-region sf-gaps" {...handlers}>
+    /*
+     * This region sat OUTSIDE both header systems: its title was a `<span>`
+     * on a class with no CSS rule anywhere in the stylesheet, so it rendered
+     * as a plain sentence beside three tracked uppercase labels — and the
+     * document's heading outline was `Ask, Runs, Detail` and nothing else,
+     * which made the region invisible to a screen reader's heading list.
+     */
+    <section className="sf-region sf-gaps" aria-labelledby="sf-gaps-title" {...handlers}>
       <header className="sf-region-head">
-        <span className="sf-eyebrow">What this interface knows is wrong with it</span>
-        <span className="sf-gap-count">
-          {open.length} open · {closed.length} closed
+        <h2 className="sf-region-title" id="sf-gaps-title">
+          Known wrong with this interface
+        </h2>
+        <span className="sf-gap-head-right">
+          <ComplainButton region="the surface" />
+          <span className="sf-gap-count">
+            {open.length} open · {closed.length} closed
+          </span>
         </span>
       </header>
+
+      <p className="sf-note sf-muted" style={{ margin: "var(--sf-space-4) var(--sf-space-6) 0" }}>
+        What this interface knows is wrong with it — the substrate's own legibility findings and
+        human complaints in one list, so agreement and disagreement between them are visible.
+      </p>
 
       {q.isError ? (
         <p className="sf-gap-empty">

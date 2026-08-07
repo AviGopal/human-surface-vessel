@@ -36,6 +36,14 @@ export interface RunRowProps {
   readonly liveDetail: boolean;
   readonly onSelect: (dispatchId: string) => void;
   readonly intervalMs: number;
+  /**
+   * Whether this row currently holds the list's single tab stop. The list is
+   * one stop with arrow-key traversal inside it, because 50 consecutive stops
+   * that each scrolled a fixed-height window meant a keyboard reader moved the
+   * target by reaching for it.
+   */
+  readonly tabStop: boolean;
+  readonly onFocused: (dispatchId: string) => void;
 }
 
 export function RunRow({
@@ -46,6 +54,8 @@ export function RunRow({
   liveDetail,
   onSelect,
   intervalMs,
+  tabStop,
+  onFocused,
 }: RunRowProps): ReactNode {
   const terminal = row.status === "completed" || row.status === "failed";
 
@@ -84,6 +94,9 @@ export function RunRow({
       className="sf-run-row"
       data-selected={selected}
       data-state={state}
+      data-dispatch-id={row.dispatchId}
+      tabIndex={tabStop ? 0 : -1}
+      onFocus={() => onFocused(row.dispatchId)}
       onClick={() => onSelect(row.dispatchId)}
       aria-current={selected ? "true" : undefined}
     >
@@ -107,7 +120,17 @@ export function RunRow({
           question, or a run that has gone quiet. Explanation sprayed across
           successes manufactures over-reliance. */}
       {state === "not-reached" || state === "waiting" || state === "stalled" ? (
-        <span className="sf-run-reason">
+        /* Clamped to one line in CSS, with the whole sentence on `title` and
+           in DETAIL — three not-reached rows repeating one byte-identical
+           sentence was consuming half the visible board. */
+        <span
+          className="sf-run-reason"
+          title={
+            state === "waiting" && solicitation
+              ? `Waiting on you — ${solicitation.evidenceLine}`
+              : reason
+          }
+        >
           {state === "waiting" && solicitation
             ? `Waiting on you — ${solicitation.evidenceLine.slice(0, 160)}`
             : reason}

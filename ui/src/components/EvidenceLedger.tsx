@@ -128,7 +128,11 @@ function AnswerEntry({
   provenanceRetained: boolean;
 }): ReactNode {
   return (
-    <article className="sf-ledger-entry">
+    // The answer card is marked. Every impulse is still mirrored and every
+    // card still carries its own content — this says which one is the answer,
+    // where before a UUID and the thing you came for had the same border, the
+    // same background and the same padding.
+    <article className="sf-ledger-entry sf-ledger-entry--answer">
       <div className="sf-ledger-head">
         <span className="sf-shape-badge">goal_answer</span>
         <span className="sf-note">

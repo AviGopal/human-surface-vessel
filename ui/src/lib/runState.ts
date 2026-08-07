@@ -100,7 +100,9 @@ export function verdictSentence(args: {
 export function whatHappensNext(state: RunState, canInject: boolean): string {
   switch (state) {
     case "reached":
-      return "Done. If the evidence below does not match what you asked for, grade it — that is the only signal that corrects the posterior.";
+      // "above", not "below": WHAT HAPPENS NEXT is part four and renders
+      // AFTER the evidence ledger.
+      return "Done. If the evidence above does not match what you asked for, grade it — that is the only signal that corrects the posterior.";
     case "not-reached":
       return "Nothing further will happen on its own. Grade it if the verdict is wrong, or re-ask with the missing information — a wrong output is usually a fact that was not available at the moment it was needed.";
     case "waiting":

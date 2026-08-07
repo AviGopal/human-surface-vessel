@@ -13,6 +13,59 @@
  */
 @import "../../../../packages/design-tokens/tokens.css";
 
+/* ── token overrides ───────────────────────────────────────────────────────
+ *
+ * THESE VALUES BELONG IN `packages/design-tokens/tokens.css`. They are
+ * re-declared here because `packages/` is outside this change's writable
+ * scope; the correct home for every declaration below is the token package,
+ * and moving them there is a follow-up, not a design decision.
+ *
+ * P11 still holds: there is not one colour literal here. Everything below is
+ * a size, a length, or `none`.
+ *
+ * The live render-policy impulse (`useTokenOverrides`) writes custom
+ * properties as INLINE styles on the root element and therefore still wins
+ * over all of this. These are defaults; the shaped impulse remains the thing
+ * that steers behaviour at use time (law 1).
+ */
+:root {
+  /* The scale rendered three of its six steps, and `xs`/`sm` were 0.5px
+     apart while carrying two different roles. Respaced so the steps are
+     perceptually distinct and so `xl`/`2xl` are usable at all. */
+  --sf-text-sm: 13.5px;
+  --sf-text-lg: 18px;
+  --sf-text-xl: 22px;
+  --sf-text-2xl: 28px;
+
+  /* The runs board showed 9% of itself at a hard 290px on every viewport.
+     Viewport-proportional, NOT content-proportional: the region still does
+     not resize around its contents, which is what P3/P5 depend on. */
+  --sf-live-region-height: clamp(290px, 45vh, 720px);
+
+  /* Measure. Prose ran to 178 characters because nothing on the page had a
+     max-width at all. Two measures: one for reading, one for UI captions,
+     which are smaller type and tolerate a longer line. */
+  --sf-measure-prose: 70ch;
+  --sf-measure-ui: 84ch;
+
+  /* How far a scroll region fades at its clipped edges, so a row sliced
+     through its baseline reads as continuation rather than as damage. */
+  --sf-edge-fade: 12px;
+}
+
+/* A shadow tuned for paper is invisible on a dark ground — it is pure paint
+   cost on every row. Both blocks, because the explicit toggle (0,2,0) beats a
+   bare `:root`, and it must win in both directions. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sf-shadow: none;
+  }
+}
+
+:root[data-theme="dark"] {
+  --sf-shadow: none;
+}
+
 /* ─────────────────────────────── ground ──────────────────────────────────── */
 
 html,
@@ -37,10 +90,13 @@ body {
 
 /* Visible focus everywhere. A keyboard reader who cannot see where they are is
    not a reader. */
+/* No `border-radius` here on purpose: setting one made focusing a run row —
+   which is `--sf-radius-md` — visibly change the row's corners, so the target
+   moved the instant it was reached. The ring inherits whatever radius the
+   element already has. */
 :where(a, button, input, textarea, select, [tabindex]):focus-visible {
   outline: 2px solid var(--sf-accent);
   outline-offset: 2px;
-  border-radius: var(--sf-radius-sm);
 }
 
 /* ─────────────────────────────── layout ──────────────────────────────────── */
@@ -72,38 +128,75 @@ body {
   flex-wrap: wrap;
 }
 
+/* A region title was the SMALLEST text on the page, below body size, which is
+   not a hierarchy — it is a hierarchy inverted. */
 .sf-region-title {
-  font-size: var(--sf-text-xs);
+  font-size: var(--sf-text-sm);
   letter-spacing: var(--sf-tracking-label);
   text-transform: uppercase;
   color: var(--sf-ink-3);
   font-weight: 600;
   margin: 0;
+  text-wrap: balance;
 }
 
+/* The two largest steps of the space scale were used three times in the whole
+   stylesheet, so every region sat at one uniform density from title to foot.
+   A region's own padding is where the scale has to be spent first. */
 .sf-region-body {
-  padding: var(--sf-space-4);
+  padding: var(--sf-space-5) var(--sf-space-6);
 }
 
 /* ─────────────────────────────── typography ──────────────────────────────── */
 
+/* The serif role existed but was the same SIZE as the sans UI role, so the two
+   differed only in letterform — which is not a role, it is a font swap. Prose
+   is set a step above UI chrome, and given a measure: it ran to 150+
+   characters because nothing on this page had a max-width at all. */
 .sf-prose {
   font-family: var(--sf-font-serif);
+  font-size: calc(var(--sf-text-base) + 1.5px);
   line-height: var(--sf-leading-prose);
   color: var(--sf-ink);
+  max-width: var(--sf-measure-prose);
 }
 
 .sf-prose p {
   margin: 0 0 var(--sf-space-3);
 }
 
+/* Three heading levels that all resolved to one size is one heading level. */
 .sf-prose h1,
 .sf-prose h2,
 .sf-prose h3 {
   font-family: var(--sf-font-sans);
-  font-size: var(--sf-text-lg);
   line-height: var(--sf-leading-tight);
-  margin: var(--sf-space-4) 0 var(--sf-space-2);
+  margin: var(--sf-space-5) 0 var(--sf-space-2);
+  text-wrap: balance;
+}
+
+.sf-prose h1 {
+  font-size: var(--sf-text-xl);
+  font-weight: 600;
+}
+
+.sf-prose h2 {
+  font-size: var(--sf-text-lg);
+  font-weight: 600;
+}
+
+.sf-prose h3 {
+  font-size: var(--sf-text-base);
+  font-weight: 600;
+}
+
+/* Machine data rendered in the reading serif inside `goal_answer` and in mono
+   700px lower inside the same run's impulse card — two type roles for the
+   same bytes on one screen. A paragraph that is nothing but a code span is
+   machine record, and reads as one. */
+.sf-prose p:has(> code:only-child) {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-sm);
 }
 
 .sf-prose ul,
@@ -144,9 +237,12 @@ body {
   color: var(--sf-ink-3);
 }
 
+/* A wider measure than prose because this is smaller type, but a measure all
+   the same — the widest of these ran 178 characters. */
 .sf-note {
   color: var(--sf-ink-2);
   font-size: var(--sf-text-sm);
+  max-width: var(--sf-measure-ui);
 }
 
 .sf-label {
@@ -178,6 +274,16 @@ body {
 .sf-button:disabled {
   cursor: not-allowed;
   color: var(--sf-ink-3);
+}
+
+/* A disabled primary that keeps its accent fill and only dims its LABEL reads
+   as the page's live call to action in a broken state, and measured 2.04:1.
+   Recess it instead: it is the same control, unavailable, not a damaged one. */
+.sf-button-primary:disabled {
+  background: var(--sf-panel-alt);
+  border-color: var(--sf-rule);
+  color: var(--sf-ink-3);
+  font-weight: 600;
 }
 
 .sf-button-primary {
@@ -219,10 +325,32 @@ body {
   padding: var(--sf-space-3);
 }
 
+/* The interval control was the only unstyled OS widget on the page, sitting
+   directly beside a `.sf-button` it did not match. It is brought onto the
+   button's own metrics — background, border, radius, padding, height — and
+   the NATIVE ARROW IS KEPT: replacing it needs an embedded SVG, and an
+   embedded SVG needs a colour literal, which P11 forbids outright. A native
+   affordance beats a rule violation. */
 .sf-select {
   width: auto;
-  padding: var(--sf-space-1) var(--sf-space-2);
+  padding: var(--sf-space-2) var(--sf-space-2);
   font-size: var(--sf-text-sm);
+  background: var(--sf-panel-alt);
+  border-color: var(--sf-rule-strong);
+  line-height: var(--sf-leading-tight);
+  cursor: pointer;
+}
+
+.sf-select:hover {
+  border-color: var(--sf-accent);
+}
+
+/* The four verdict radios were the page's other native widgets. `accent-color`
+   tints them from the token without rebuilding the control, so the platform
+   keeps its own focus, hit target and high-contrast behaviour. */
+.sf-grade-options input[type="radio"] {
+  accent-color: var(--sf-accent);
+  margin: 0;
 }
 
 .sf-textarea {
@@ -250,7 +378,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sf-space-2);
-  margin-top: var(--sf-space-3);
+  margin-top: var(--sf-space-4);
 }
 
 .sf-chip {
@@ -270,8 +398,41 @@ body {
   background: var(--sf-accent-soft);
 }
 
+/*
+ * Three producer states, three paints — because two of them were collapsed
+ * and the legend below the chips ("a dashed chip has no confirmed producer")
+ * was consequently unfalsifiable: every chip was dashed, including the ones
+ * whose lookup had simply not answered yet.
+ *
+ * A chip goes dashed only on a CONFIRMED negative. "Not answered yet" is its
+ * own paint, and it is quieter, not louder — an unknown must not shout as
+ * loudly as a known absence.
+ */
 .sf-chip[data-producer="unverified"] {
   border-style: dashed;
+}
+
+.sf-chip[data-producer="unknown"] {
+  border-style: solid;
+  opacity: 0.72;
+}
+
+/*
+ * The self-change chip. It is not derived from the fleet vocabulary and it is
+ * not part of the producer legend, so it carries neither the solid/dashed
+ * distinction nor a `data-producer` value at all — it advertises a different
+ * kind of thing: that this surface is itself changeable by instruction.
+ */
+.sf-chip[data-kind="self"] {
+  border-color: var(--sf-accent);
+  border-style: solid;
+  color: var(--sf-accent);
+  background: var(--sf-accent-soft);
+}
+
+.sf-chip[data-kind="self"]:hover {
+  color: var(--sf-ink);
+  border-color: var(--sf-ink);
 }
 
 .sf-contract {
@@ -342,9 +503,23 @@ body {
   background: var(--sf-waiting-bg);
 }
 
+/*
+ * `accepted` is the state EVERY run occupies for its first seconds, so in
+ * practice it was the state most live runs were rendered in — and it was
+ * painted in the neutral grey a disabled control uses, which made the only
+ * genuinely-moving rows the quietest things on a board of fifty. Meanwhile
+ * the amber in-flight pair was defined and used once, for a state the common
+ * case rarely reached.
+ *
+ * The PAINT moves to the in-flight pair. The SEMANTICS do not (rule P10):
+ * the label still reads `accepted`, the mark is still the hollow ring, and
+ * `stalled` remains its own state and its own colour. Accepted is not being
+ * relabelled as running — it is being admitted to be in flight, which is what
+ * "a dispatch id exists" already meant.
+ */
 .sf-verdict[data-state="accepted"] {
-  color: var(--sf-accepted);
-  background: var(--sf-accepted-bg);
+  color: var(--sf-running);
+  background: var(--sf-running-bg);
 }
 
 .sf-verdict[data-state="stalled"] {
@@ -359,12 +534,33 @@ body {
 /* ─────────────────────────────── runs ───────────────────────────────────── */
 
 .sf-runs-scroll {
-  /* FIXED height, from the token. The region does not grow with its contents,
-     so nothing below it moves when a run arrives. */
+  /* Height from the token, which is now viewport-proportional and still
+     CONTENT-independent: the region does not grow when a run arrives, which
+     is what P3 and P5 rest on, but a taller window is no longer worth
+     nothing. At 290px this showed 4.5 of 50 rows on every screen size. */
   height: var(--sf-live-region-height);
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
+  /* A clipped region cut its top and bottom rows through their baselines with
+     a hard edge, which reads as damage. The fade says "continues".
+     A mask reads only the ALPHA channel, so the opaque stop can be any fully
+     opaque value — it is `var(--sf-ink)` rather than a literal because P11
+     admits no exception for a colour that is never seen as a colour. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    var(--sf-ink) var(--sf-edge-fade),
+    var(--sf-ink) calc(100% - var(--sf-edge-fade)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    var(--sf-ink) var(--sf-edge-fade),
+    var(--sf-ink) calc(100% - var(--sf-edge-fade)),
+    transparent 100%
+  );
 }
 
 .sf-run-row {
@@ -387,6 +583,25 @@ body {
   background: var(--sf-panel-alt);
 }
 
+/*
+ * An in-flight rail. `inset` box-shadow rather than `border-left` on purpose:
+ * a border would shift the row's content 2px the moment a run started
+ * emitting, and a row that moves when its state changes is the exact failure
+ * this region was rebuilt to remove.
+ */
+.sf-run-row[data-state="accepted"],
+.sf-run-row[data-state="running"] {
+  box-shadow: inset 2px 0 0 var(--sf-running);
+}
+
+.sf-run-row[data-state="stalled"] {
+  box-shadow: inset 2px 0 0 var(--sf-stalled);
+}
+
+.sf-run-row[data-state="waiting"] {
+  box-shadow: inset 2px 0 0 var(--sf-waiting);
+}
+
 .sf-run-row[data-selected="true"] {
   background: var(--sf-accent-soft);
 }
@@ -403,6 +618,11 @@ body {
   font-style: italic;
 }
 
+.sf-run-meta,
+.sf-run-elapsed {
+  font-variant-numeric: tabular-nums;
+}
+
 .sf-run-elapsed {
   font-family: var(--sf-font-mono);
   font-size: var(--sf-text-sm);
@@ -417,12 +637,32 @@ body {
   white-space: nowrap;
 }
 
+/*
+ * Clamped to one line. Uncapped, a not-reached row took roughly twice the
+ * height of a reached one, and three consecutive failures repeated the same
+ * byte-identical sentence down half the visible board — at a squint that
+ * repetition, not the verdicts, was the most prominent thing in the region.
+ *
+ * P8 is why it is CLAMPED rather than removed: the reason still rides
+ * alongside its row, and the whole sentence is in DETAIL, which already
+ * renders it. The `title` carries it for a pointer as well.
+ */
 .sf-run-reason {
   grid-column: 2 / -1;
   font-size: var(--sf-text-sm);
   color: var(--sf-ink-2);
   white-space: normal;
+  max-width: var(--sf-measure-ui);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
+
+/* Deliberately NO "expand the selected row" exception. Selecting a row would
+   then change its height and push every row beneath it — a moving board is
+   the failure, and DETAIL already carries the sentence in full. */
 
 /* The viewport wrapper exists solely to give the pill something to overlay. */
 .sf-runs-viewport {
@@ -458,10 +698,29 @@ body {
   box-shadow: var(--sf-shadow);
 }
 
+/*
+ * An empty state is not an apology, it is the region's affordance with
+ * nothing in it yet. Left-aligned on the same measure as everything else,
+ * because a centred grey sentence floating in a bordered box is the shape a
+ * reader learns to skip.
+ */
 .sf-empty {
-  padding: var(--sf-space-6) var(--sf-space-4);
-  color: var(--sf-ink-3);
-  text-align: center;
+  padding: var(--sf-space-5) 0;
+  color: var(--sf-ink-2);
+  max-width: var(--sf-measure-ui);
+}
+
+.sf-empty strong {
+  display: block;
+  color: var(--sf-ink);
+  font-weight: 600;
+  margin-bottom: var(--sf-space-1);
+}
+
+/* Inside the fixed-height scroll region the empty state gets the padding the
+   rows would have had, so the box does not read as broken. */
+.sf-runs-scroll .sf-empty {
+  padding: var(--sf-space-5) var(--sf-space-4);
 }
 
 .sf-live-controls {
@@ -472,15 +731,22 @@ body {
   color: var(--sf-ink-3);
 }
 
+/*
+ * NOT a state token. This said "held — you are in this region" in
+ * `--sf-waiting`, which is the colour a RUN wears when it is blocked on a
+ * human answer — so a chrome message about the poll cadence was borrowing the
+ * vocabulary of a verdict, and it was the only thing on the page wearing that
+ * colour outside a badge. Chrome speaks in ink; verdicts keep the palette.
+ */
 .sf-frozen-note {
-  color: var(--sf-waiting);
+  color: var(--sf-ink);
   font-weight: 600;
 }
 
 /* ─────────────────────────────── detail ─────────────────────────────────── */
 
 .sf-detail-part {
-  padding: var(--sf-space-4) 0;
+  padding: var(--sf-space-6) 0;
   border-top: 1px solid var(--sf-rule);
 }
 
@@ -489,18 +755,25 @@ body {
   padding-top: 0;
 }
 
+/* The two things a reader came here for — what was asked, and what happened —
+   are now the largest text on the page. They were 17px: two and a half pixels
+   larger than a form caption, for the answer. */
 .sf-detail-goal {
   font-family: var(--sf-font-serif);
-  font-size: var(--sf-text-lg);
+  font-size: var(--sf-text-xl);
   line-height: var(--sf-leading-prose);
   margin: var(--sf-space-2) 0 0;
+  max-width: var(--sf-measure-prose);
+  text-wrap: pretty;
 }
 
 .sf-verdict-sentence {
   font-family: var(--sf-font-serif);
-  font-size: var(--sf-text-lg);
+  font-size: var(--sf-text-xl);
   line-height: var(--sf-leading-prose);
-  margin: var(--sf-space-2) 0 0;
+  margin: var(--sf-space-3) 0 0;
+  max-width: var(--sf-measure-prose);
+  text-wrap: pretty;
 }
 
 .sf-machine-record {
@@ -508,6 +781,8 @@ body {
   font-family: var(--sf-font-mono);
   font-size: var(--sf-text-xs);
   color: var(--sf-ink-3);
+  max-width: var(--sf-measure-ui);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ─────────────────────────────── ledger ─────────────────────────────────── */
@@ -515,8 +790,18 @@ body {
 .sf-ledger-entry {
   border: 1px solid var(--sf-rule);
   border-radius: var(--sf-radius-sm);
-  margin-bottom: var(--sf-space-3);
+  margin-bottom: var(--sf-space-4);
   background: var(--sf-panel);
+}
+
+/*
+ * The answer and a UUID had the same border, background and padding, so the
+ * card a reader came for was indistinguishable from the one they will never
+ * read. The rail marks WHICH IMPULSE IS THE ANSWER; it does not hide the
+ * others, and every impulse is still mirrored regardless of outcome.
+ */
+.sf-ledger-entry--answer {
+  border-left: 3px solid var(--sf-accent);
 }
 
 .sf-ledger-head {
@@ -548,11 +833,14 @@ body {
 
 /* Truncation and length ride ALONGSIDE the content, never instead of it. This
    sits BELOW the content in source order for exactly that reason. */
+/* Solid: it was the only dashed rule on a page of 1px solid ones, and next to
+   them it read as a rendering fault rather than as a distinction. */
 .sf-ledger-foot {
   padding: var(--sf-space-2) var(--sf-space-3);
-  border-top: 1px dashed var(--sf-rule);
+  border-top: 1px solid var(--sf-rule);
   font-size: var(--sf-text-xs);
   color: var(--sf-ink-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .sf-ledger-empty {
@@ -738,18 +1026,135 @@ summary {
 
 /* ── interface gaps ───────────────────────────────────────────────────────── */
 .sf-gaps { margin-top: var(--sf-space-4); }
-.sf-gap-count { font-family: var(--sf-font-mono); font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
-.sf-gap-empty { padding: var(--sf-space-4) var(--sf-space-5); color: var(--sf-ink-3); font-size: var(--sf-text-base); }
+
+.sf-gap-count {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-gap-empty {
+  padding: var(--sf-space-5) var(--sf-space-6);
+  color: var(--sf-ink-2);
+  font-size: var(--sf-text-base);
+  max-width: var(--sf-measure-ui);
+}
+
 .sf-gap-list { list-style: none; margin: 0; padding: 0; }
-.sf-gap-row { display: grid; grid-template-columns: 92px 1fr; gap: var(--sf-space-4);
-  align-items: baseline; padding: var(--sf-space-3) var(--sf-space-5);
-  border-bottom: 1px solid var(--sf-rule); }
+
+.sf-gap-row {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: var(--sf-space-4);
+  align-items: baseline;
+  padding: var(--sf-space-4) var(--sf-space-6);
+  border-bottom: 1px solid var(--sf-rule);
+}
+
 .sf-gap-row:last-child { border-bottom: 0; }
-.sf-gap-state { font-family: var(--sf-font-mono); font-size: var(--sf-text-xs); font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px;
-  border-radius: var(--sf-radius-sm); text-align: center; }
+
+/*
+ * `open`/`closed` inherit the verdict badge wholesale rather than running a
+ * second, incompatible system: uppercase mono bold beside lowercase sans with
+ * a dot, for the same good/bad semantic, taught a reader two vocabularies for
+ * one distinction. Same shape, same case, same mark, same size.
+ */
+.sf-gap-state {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sf-space-2);
+  font-size: var(--sf-text-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px var(--sf-space-2);
+  border-radius: var(--sf-radius-sm);
+  white-space: nowrap;
+}
+
+/* Empty alternative text, so the mark is decorative to a screen reader — the
+   same treatment `StateBadge` gives its mark with `aria-hidden`. The two
+   badge systems have to match in announcement as well as in paint. */
+.sf-gap-state::before {
+  content: "●" / "";
+  font-size: var(--sf-text-xs);
+}
+
 .sf-gap-state[data-status="open"]   { background: var(--sf-not-reached-bg); color: var(--sf-not-reached); }
 .sf-gap-state[data-status="closed"] { background: var(--sf-reached-bg);     color: var(--sf-reached); }
-.sf-gap-body { display: flex; flex-direction: column; gap: 3px; }
-.sf-gap-summary { font-size: var(--sf-text-base); color: var(--sf-ink); line-height: var(--sf-leading-normal); }
-.sf-gap-meta { font-family: var(--sf-font-mono); font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
+
+.sf-gap-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sf-space-1); }
+
+.sf-gap-summary {
+  font-size: var(--sf-text-base);
+  color: var(--sf-ink);
+  line-height: var(--sf-leading-normal);
+  max-width: var(--sf-measure-prose);
+  text-wrap: pretty;
+}
+
+.sf-gap-meta {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+  max-width: var(--sf-measure-ui);
+}
+
+/*
+ * A gap that has been closed and reopened four times was announcing that in
+ * the quietest ink on the panel, at the tail of a metadata line, while the
+ * word CLOSED got a badge. A repeat reopening is the panel's most alarming
+ * datum: it says the fix did not hold. It gets the badge.
+ */
+.sf-gap-reopened {
+  align-self: flex-start;
+  font-size: var(--sf-text-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px var(--sf-space-2);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-stalled-bg);
+  color: var(--sf-stalled);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── an instruction that reshaped the surface ─────────────────────────────── */
+.sf-outcome-changes { margin: var(--sf-space-2) 0 0; padding-left: var(--sf-space-5); }
+.sf-outcome-changes li { font-size: var(--sf-text-sm); color: var(--sf-ink-2); line-height: var(--sf-leading-normal); }
+.sf-outcome-because { color: var(--sf-ink-3); font-style: italic; }
+.sf-outcome-unparsed { display: block; margin-top: var(--sf-space-2);
+  font-size: var(--sf-text-sm); color: var(--sf-stalled); }
+
+/* ── the live-region note reserves its own width ──────────────────────────────
+   Both children occupy one grid cell; the hidden sizer carries the longest
+   string, so the box never resizes when the message changes and no sibling
+   control can be displaced by it. */
+.sf-live-note { display: inline-grid; justify-items: end; }
+.sf-live-note > * { grid-area: 1 / 1; }
+.sf-live-note-sizer { visibility: hidden; pointer-events: none; user-select: none; }
+
+/* ── the human half of the funnel ─────────────────────────────────────────── */
+.sf-gap-head-right { display: inline-flex; align-items: center; gap: var(--sf-space-4); }
+.sf-complain-open { background: none; border: 0; padding: 0; cursor: pointer;
+  font-family: var(--sf-font-sans); font-size: var(--sf-text-sm);
+  color: var(--sf-accent); text-decoration: underline; text-underline-offset: 3px; }
+.sf-complain-open:hover { color: var(--sf-ink); }
+.sf-complain { display: flex; flex-direction: column; gap: var(--sf-space-3);
+  padding: var(--sf-space-4); margin: var(--sf-space-3) var(--sf-space-6) 0;
+  border: 1px solid var(--sf-rule-strong); border-radius: var(--sf-radius-sm);
+  background: var(--sf-panel-alt); }
+.sf-complain-kinds { display: flex; gap: var(--sf-space-2); flex-wrap: wrap; }
+.sf-complain-kind { font-family: var(--sf-font-sans); font-size: var(--sf-text-sm);
+  padding: 4px 10px; border: 1px solid var(--sf-rule-strong);
+  border-radius: var(--sf-radius-sm); background: var(--sf-panel);
+  color: var(--sf-ink-2); cursor: pointer; }
+.sf-complain-kind[aria-pressed="true"] { background: var(--sf-accent-soft);
+  border-color: var(--sf-accent); color: var(--sf-ink); font-weight: 600; }
+.sf-complain-text { min-height: 60px; font-family: var(--sf-font-sans);
+  font-size: var(--sf-text-base); color: var(--sf-ink); background: var(--sf-paper);
+  border: 1px solid var(--sf-rule-strong); border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-3); resize: vertical; }
+.sf-complain-actions { display: flex; align-items: center; gap: var(--sf-space-3); flex-wrap: wrap; }
+.sf-complain-note { font-size: var(--sf-text-sm); color: var(--sf-ink-2); max-width: 60ch; }
+.sf-complain-failed { color: var(--sf-not-reached); }

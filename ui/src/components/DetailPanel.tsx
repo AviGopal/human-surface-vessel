@@ -126,7 +126,10 @@ export function DetailPanel({ dispatchId }: { dispatchId: string | null }): Reac
         </div>
         <div className="sf-region-body">
           <p className="sf-empty">
-            Open a run to see what it was asked, what happened, and what it actually produced.
+            <strong>No run is open.</strong>
+            Pick a row on the board above and this shows four things, in this order: what was
+            asked, what actually happened, every impulse the run produced, and what you can do
+            next. A run's URL is shareable and survives a reload.
           </p>
         </div>
       </section>
@@ -156,6 +159,27 @@ export function DetailPanel({ dispatchId }: { dispatchId: string | null }): Reac
         humanGraded: walk.humanGraded,
       })
     : "";
+
+  /**
+   * Whether the answer card below already OPENS with this exact sentence.
+   *
+   * The panel was saying everything three times: the goal under "what was
+   * asked", again as the answer card's heading, again inside the `goal`
+   * impulse card; the verdict sentence twice within 400px. This removes one
+   * of those repeats and only when it is a real repeat — a prefix comparison
+   * on normalised whitespace, so a sentence that merely resembles the answer
+   * still gets rendered.
+   *
+   * P1 is not at risk: the verdict itself is the StateBadge, which still
+   * leads this part unconditionally. What is suppressed is a duplicated
+   * REASON, never the verdict, and never on a run whose answer does not
+   * already carry it.
+   */
+  const normalise = (s: string): string => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const sentenceIsEchoedByAnswer =
+    sentence.length > 24 &&
+    typeof walk?.answerBody === "string" &&
+    normalise(walk.answerBody).startsWith(normalise(sentence));
 
   const isTerminalState = stateIsTerminal(state);
   const explanation = walk && !isTerminalState ? null : walk ? pathExplanation(walk) : null;
@@ -206,7 +230,13 @@ export function DetailPanel({ dispatchId }: { dispatchId: string | null }): Reac
               <div style={{ marginTop: "var(--sf-space-2)" }}>
                 <StateBadge state={state} />
               </div>
-              <p className="sf-verdict-sentence">{sentence}</p>
+              {sentenceIsEchoedByAnswer ? (
+                <p className="sf-note sf-muted" style={{ marginTop: "var(--sf-space-2)" }}>
+                  The reason is the opening of the answer itself, below — it is not repeated here.
+                </p>
+              ) : (
+                <p className="sf-verdict-sentence">{sentence}</p>
+              )}
               {walk.humanGraded ? (
                 <p className="sf-note">
                   A human overrode the machine verdict on this run

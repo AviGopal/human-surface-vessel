@@ -35,6 +35,14 @@ export function Surface(): ReactNode {
 
   return (
     <main className="sf-app">
+      {/*
+        * The document had no `h1` at all, so its heading outline started at
+        * `h2: Ask` with nothing above it — a screen reader's heading list had
+        * no root. It is visually hidden rather than rendered because the
+        * geometry is deliberately three regions and no chrome bar; the
+        * outline needs a root, the layout does not need a banner.
+        */}
+      <h1 className="sf-visually-hidden">The do-anything surface</h1>
       <AskRegion onDispatched={open} />
       <RunsRegion selectedDispatchId={selected} onSelect={open} />
       <DetailPanel dispatchId={selected} />

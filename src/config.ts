@@ -69,6 +69,13 @@ export const DISCOVERY_SHAPES = [
   // form heuristic, which is demoted from a decision to a prior.
   "renderPolicy",
   "renderPolicy_write",
+  // Prose from a human, parsed into a `renderPolicy` patch. Advertised as its
+  // own shape rather than hidden behind `renderPolicy_write` because the two
+  // consume different things: one takes a policy patch a machine already knows
+  // how to build, the other takes a sentence and OWNS the decomposition — which
+  // is the whole point of a human surface (a person sends language; the system
+  // does the translation, not the person).
+  "surfaceIntent",
 ] as const;
 
 export type DiscoveryShape = (typeof DISCOVERY_SHAPES)[number];
