@@ -197,6 +197,56 @@ async function servesGoalShapes(base: string): Promise<boolean> {
   }
 }
 
+/**
+ * Every address advertising `shape`, in registry order, rewritten to something
+ * this process can dial.
+ *
+ * EVERY candidate, not `vessels[0]`. A shape has as many producers as the
+ * network has vessels serving it: the hub advertises three for `goal_execution`
+ * — its own goal-host, plus a re-exported record per federated peer. Taking the
+ * first and trusting it meant one undialable record at the front of that list
+ * took the whole surface down with a 502 while two working producers sat behind
+ * it. Preferring `public_endpoint` is still right, because it carries the
+ * host-mapped port; it is a preference per candidate now rather than a decision
+ * made once for all of them.
+ */
+async function candidateEndpointsFor(shape: string): Promise<readonly string[]> {
+  const resolvedAt = goalShapeResolutionEndpoint();
+  try {
+    const res = await fetch(`${resolvedAt}/resolve`, {
+      method: "POST",
+      headers: upstreamHeaders(true),
+      body: JSON.stringify({ pointer: { type: "vesselCapability", shape } }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return [];
+    const j = (await res.json().catch(() => null)) as null | {
+      content?: { vessels?: Array<{ endpoint?: unknown; public_endpoint?: unknown }> };
+    };
+    const vessels = Array.isArray(j?.content?.vessels) ? j.content.vessels : [];
+    const out: string[] = [];
+    for (const v of vessels) {
+      const candidate = reachableFrom(
+        typeof v?.public_endpoint === "string" && v.public_endpoint.length > 0
+          ? v.public_endpoint
+          : typeof v?.endpoint === "string"
+            ? v.endpoint
+            : undefined,
+        resolvedAt,
+      );
+      if (typeof candidate === "string" && candidate.length > 0) {
+        out.push(candidate.replace(/\/+$/, ""));
+      }
+    }
+    return out;
+  } catch (err) {
+    console.warn(
+      `[human-surface] discovery lookup for ${shape} failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return [];
+  }
+}
+
 async function resolveGoalHostEndpoint(): Promise<string> {
   const now = Date.now();
   if (cachedGoalHost && now - cachedGoalHost.at < GOAL_HOST_CACHE_TTL_MS) {
@@ -207,57 +257,16 @@ async function resolveGoalHostEndpoint(): Promise<string> {
     cachedGoalHost = { endpoint: pinned, at: now };
     return pinned;
   }
-  const resolvedAt = goalShapeResolutionEndpoint();
-  try {
-    const res = await fetch(`${resolvedAt}/resolve`, {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: JSON.stringify({
-        pointer: { type: "vesselCapability", shape: "goal_execution" },
-      }),
-    });
-    if (res.ok) {
-      const j = (await res.json().catch(() => null)) as null | {
-        content?: {
-          vessels?: Array<{ endpoint?: unknown; public_endpoint?: unknown }>;
-        };
-      };
-      const vessels = Array.isArray(j?.content?.vessels) ? j.content.vessels : [];
-      // EVERY candidate, in registry order — not `vessels[0]`.
-      //
-      // A shape has as many producers as the network has vessels serving it: the
-      // hub advertises three for `goal_execution` (its own goal-host, plus a
-      // re-exported record per federated peer). Taking the first and trusting it
-      // meant one undialable record at the front of that list took the whole
-      // surface down with a 502, while two working goal hosts sat behind it.
-      // Preferring `public_endpoint` is still right — it carries the host-mapped
-      // port — but it is a preference per candidate now, not a decision for all
-      // of them.
-      for (const v of vessels) {
-        const candidate = reachableFrom(
-          typeof v?.public_endpoint === "string" && v.public_endpoint.length > 0
-            ? v.public_endpoint
-            : typeof v?.endpoint === "string"
-              ? v.endpoint
-              : undefined,
-          resolvedAt,
-        );
-        if (typeof candidate !== "string" || candidate.length === 0) continue;
-        const base = candidate.replace(/\/+$/, "");
-        if (await servesGoalShapes(base)) {
-          cachedGoalHost = { endpoint: base, at: now };
-          return base;
-        }
-      }
-      if (vessels.length > 0) {
-        console.warn(
-          `[human-surface] ${vessels.length} vessel(s) advertise goal_execution at ${resolvedAt}; none answered a resolve call`,
-        );
-      }
+  const candidates = await candidateEndpointsFor("goal_execution");
+  for (const base of candidates) {
+    if (await servesGoalShapes(base)) {
+      cachedGoalHost = { endpoint: base, at: now };
+      return base;
     }
-  } catch (err) {
+  }
+  if (candidates.length > 0) {
     console.warn(
-      `[human-surface] goal-host discovery lookup failed: ${err instanceof Error ? err.message : String(err)}`,
+      `[human-surface] ${candidates.length} vessel(s) advertise goal_execution; none answered a resolve call`,
     );
   }
   const fallback = GOAL_HOST_ENDPOINT.replace(/\/+$/, "");
@@ -444,27 +453,47 @@ proxyRouter.post("/api/grade", async (c) => {
  * both kinds of finding in one place — and can watch one close.
  */
 proxyRouter.get("/api/gaps", async (c) => {
-  const dev = (
-    process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090"
-  ).replace(/\/+$/, "");
-  try {
-    const upstream = await fetch(`${dev}/v2/impulses/resolve`, {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: JSON.stringify({
-        impulse: { pointer: { type: "substrateGap", category: "ui_legibility", limit: 40 } },
-      }),
-      signal: AbortSignal.timeout(12_000),
-    });
-    const j = (await upstream.json()) as { body?: { gaps?: unknown[] } };
-    return c.json({ gaps: j?.body?.gaps ?? [] }, 200, corsHeaders(c.req.header("Origin")));
-  } catch (err) {
-    return c.json(
-      { gaps: [], error: err instanceof Error ? err.message : String(err) },
-      502,
-      corsHeaders(c.req.header("Origin")),
-    );
+  const body = JSON.stringify({
+    impulse: { pointer: { type: "substrateGap", category: "ui_legibility", limit: 40 } },
+  });
+  const ask = async (base: string): Promise<unknown[] | null> => {
+    try {
+      const upstream = await fetch(`${base.replace(/\/+$/, "")}/v2/impulses/resolve`, {
+        method: "POST",
+        headers: upstreamHeaders(true),
+        body,
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!upstream.ok) return null;
+      const j = (await upstream.json()) as { body?: { gaps?: unknown[] } };
+      return Array.isArray(j?.body?.gaps) ? j.body.gaps : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // BY SHAPE, through discovery — the same path the goal shapes take.
+  //
+  // This used to read a single hardcoded loopback env, which is correct only
+  // where a gap store happens to run in this container. On a UI-only spoke
+  // nothing serves `substrateGap` locally, so the panel 502'd permanently and
+  // the surface could not show a person what is known to be wrong with it —
+  // on exactly the deployment whose whole job is to show a person things.
+  // The env stays as a last resort so a lone substrate with no registry still
+  // works.
+  for (const base of await candidateEndpointsFor("substrateGap")) {
+    const gaps = await ask(base);
+    if (gaps) return c.json({ gaps }, 200, corsHeaders(c.req.header("Origin")));
   }
+  const pinned = process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090";
+  const gaps = await ask(pinned);
+  if (gaps) return c.json({ gaps }, 200, corsHeaders(c.req.header("Origin")));
+
+  return c.json(
+    { gaps: [], error: "no vessel serving substrateGap answered" },
+    502,
+    corsHeaders(c.req.header("Origin")),
+  );
 });
 
 // ─── human feedback (browser write) ─────────────────────────────────────────
