@@ -1,0 +1,7 @@
+node_modules/
+dist/
+
+# Scratch HOME for container builds. The build runs as the host user inside
+# `oven/bun:1` so nothing lands root-owned in the tree; bun wants a writable
+# HOME for its cache, and that cache is not a file git should carry.
+.container-home/

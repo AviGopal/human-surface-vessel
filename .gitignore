@@ -1,0 +1,9 @@
+node_modules/
+*.log
+
+# Container build debris — bun install cache when HOME is redirected into the repo.
+# Regenerable; 146MB of it. Never commit.
+.container-home/
+ui/.container-home/
+ui/node_modules/
+ui/dist/

@@ -1,0 +1,755 @@
+@import "tailwindcss";
+
+/*
+ * The tokens are consumed from the shared package, not re-authored here.
+ * Rule P11: there is not one colour literal in this file, or anywhere else in
+ * this surface — not even inside a comment, so that a scanner looking for hex
+ * values finds nothing here at all. Every colour is a `--sf-*` custom property,
+ * which is what makes the conformance check possible: a probe can assert that a
+ * row rendered var(--sf-not-reached), which is about intent, where asserting a
+ * literal hex value breaks the moment the palette is retuned and proves nothing.
+ *
+ * The scope is @avigopal. @metabob is deprecated.
+ */
+@import "../../../../packages/design-tokens/tokens.css";
+
+/* ─────────────────────────────── ground ──────────────────────────────────── */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--sf-paper);
+  color: var(--sf-ink);
+  font-family: var(--sf-font-sans);
+  font-size: var(--sf-text-base);
+  line-height: var(--sf-leading-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Visible focus everywhere. A keyboard reader who cannot see where they are is
+   not a reader. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--sf-accent);
+  outline-offset: 2px;
+  border-radius: var(--sf-radius-sm);
+}
+
+/* ─────────────────────────────── layout ──────────────────────────────────── */
+
+.sf-app {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--sf-space-4);
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--sf-space-5) var(--sf-space-5) var(--sf-space-7);
+  min-height: 100%;
+}
+
+.sf-region {
+  background: var(--sf-panel);
+  border: 1px solid var(--sf-rule);
+  border-radius: var(--sf-radius-md);
+  box-shadow: var(--sf-shadow);
+}
+
+.sf-region-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sf-space-3);
+  padding: var(--sf-space-3) var(--sf-space-4);
+  border-bottom: 1px solid var(--sf-rule);
+  flex-wrap: wrap;
+}
+
+.sf-region-title {
+  font-size: var(--sf-text-xs);
+  letter-spacing: var(--sf-tracking-label);
+  text-transform: uppercase;
+  color: var(--sf-ink-3);
+  font-weight: 600;
+  margin: 0;
+}
+
+.sf-region-body {
+  padding: var(--sf-space-4);
+}
+
+/* ─────────────────────────────── typography ──────────────────────────────── */
+
+.sf-prose {
+  font-family: var(--sf-font-serif);
+  line-height: var(--sf-leading-prose);
+  color: var(--sf-ink);
+}
+
+.sf-prose p {
+  margin: 0 0 var(--sf-space-3);
+}
+
+.sf-prose h1,
+.sf-prose h2,
+.sf-prose h3 {
+  font-family: var(--sf-font-sans);
+  font-size: var(--sf-text-lg);
+  line-height: var(--sf-leading-tight);
+  margin: var(--sf-space-4) 0 var(--sf-space-2);
+}
+
+.sf-prose ul,
+.sf-prose ol {
+  margin: 0 0 var(--sf-space-3);
+  padding-left: var(--sf-space-6);
+}
+
+.sf-prose li {
+  margin-bottom: var(--sf-space-1);
+}
+
+.sf-prose blockquote {
+  margin: 0 0 var(--sf-space-3);
+  padding-left: var(--sf-space-3);
+  border-left: 2px solid var(--sf-rule-strong);
+  color: var(--sf-ink-2);
+}
+
+.sf-prose code,
+.sf-code {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-sm);
+}
+
+.sf-prose code {
+  background: var(--sf-panel-alt);
+  padding: 0 var(--sf-space-1);
+  border-radius: var(--sf-radius-sm);
+}
+
+.sf-mono {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-sm);
+}
+
+.sf-muted {
+  color: var(--sf-ink-3);
+}
+
+.sf-note {
+  color: var(--sf-ink-2);
+  font-size: var(--sf-text-sm);
+}
+
+.sf-label {
+  font-size: var(--sf-text-xs);
+  letter-spacing: var(--sf-tracking-label);
+  text-transform: uppercase;
+  color: var(--sf-ink-3);
+  font-weight: 600;
+}
+
+/* ─────────────────────────────── controls ───────────────────────────────── */
+
+.sf-button {
+  font: inherit;
+  font-size: var(--sf-text-sm);
+  color: var(--sf-ink);
+  background: var(--sf-panel-alt);
+  border: 1px solid var(--sf-rule-strong);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-2) var(--sf-space-3);
+  cursor: pointer;
+}
+
+.sf-button:hover:not(:disabled) {
+  background: var(--sf-accent-soft);
+  border-color: var(--sf-accent);
+}
+
+.sf-button:disabled {
+  cursor: not-allowed;
+  color: var(--sf-ink-3);
+}
+
+.sf-button-primary {
+  background: var(--sf-accent);
+  color: var(--sf-accent-ink);
+  border-color: var(--sf-accent);
+  font-weight: 600;
+}
+
+.sf-button-primary:hover:not(:disabled) {
+  background: var(--sf-accent);
+  color: var(--sf-accent-ink);
+  border-color: var(--sf-ink);
+}
+
+.sf-button-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sf-ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sf-button-quiet:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sf-ink);
+}
+
+.sf-input,
+.sf-textarea,
+.sf-select {
+  font: inherit;
+  width: 100%;
+  color: var(--sf-ink);
+  background: var(--sf-panel);
+  border: 1px solid var(--sf-rule-strong);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-3);
+}
+
+.sf-select {
+  width: auto;
+  padding: var(--sf-space-1) var(--sf-space-2);
+  font-size: var(--sf-text-sm);
+}
+
+.sf-textarea {
+  /* Fixed rows: the ASK region does not resize around its contents. */
+  resize: none;
+  min-height: 84px;
+  font-size: var(--sf-text-lg);
+  line-height: var(--sf-leading-normal);
+}
+
+/* ─────────────────────────────── ask ─────────────────────────────────────── */
+
+.sf-ask-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sf-space-3);
+}
+
+.sf-ask-row > form {
+  flex: 1;
+  min-width: 0;
+}
+
+.sf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sf-space-2);
+  margin-top: var(--sf-space-3);
+}
+
+.sf-chip {
+  font: inherit;
+  font-size: var(--sf-text-sm);
+  background: var(--sf-panel-alt);
+  color: var(--sf-ink-2);
+  border: 1px solid var(--sf-rule);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-1) var(--sf-space-3);
+  cursor: pointer;
+}
+
+.sf-chip:hover {
+  border-color: var(--sf-accent);
+  color: var(--sf-ink);
+  background: var(--sf-accent-soft);
+}
+
+.sf-chip[data-producer="unverified"] {
+  border-style: dashed;
+}
+
+.sf-contract {
+  margin-top: var(--sf-space-4);
+  padding: var(--sf-space-3) var(--sf-space-4);
+  background: var(--sf-panel-alt);
+  border: 1px solid var(--sf-rule);
+  border-left: 3px solid var(--sf-accent);
+  border-radius: var(--sf-radius-sm);
+}
+
+.sf-contract dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  gap: var(--sf-space-2) var(--sf-space-4);
+}
+
+.sf-contract dt {
+  color: var(--sf-ink-3);
+  font-size: var(--sf-text-xs);
+  letter-spacing: var(--sf-tracking-label);
+  text-transform: uppercase;
+  font-weight: 600;
+  padding-top: 2px;
+}
+
+.sf-contract dd {
+  margin: 0;
+  font-size: var(--sf-text-sm);
+  color: var(--sf-ink);
+}
+
+/* ─────────────────────────────── state badge ────────────────────────────── */
+
+.sf-verdict {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sf-space-2);
+  border-radius: var(--sf-radius-sm);
+  padding: 2px var(--sf-space-2);
+  font-weight: 700;
+  font-size: var(--sf-text-sm);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* `reached` and `not-reached` are the SAME weight. Neither is quieter. That
+   equality is the whole design thesis: a surface cannot render a hollow
+   completion as a success when failure is as loud as success. */
+.sf-verdict[data-state="reached"] {
+  color: var(--sf-reached);
+  background: var(--sf-reached-bg);
+}
+
+.sf-verdict[data-state="not-reached"] {
+  color: var(--sf-not-reached);
+  background: var(--sf-not-reached-bg);
+}
+
+.sf-verdict[data-state="running"] {
+  color: var(--sf-running);
+  background: var(--sf-running-bg);
+}
+
+.sf-verdict[data-state="waiting"] {
+  color: var(--sf-waiting);
+  background: var(--sf-waiting-bg);
+}
+
+.sf-verdict[data-state="accepted"] {
+  color: var(--sf-accepted);
+  background: var(--sf-accepted-bg);
+}
+
+.sf-verdict[data-state="stalled"] {
+  color: var(--sf-stalled);
+  background: var(--sf-stalled-bg);
+}
+
+.sf-verdict-mark {
+  font-size: var(--sf-text-xs);
+}
+
+/* ─────────────────────────────── runs ───────────────────────────────────── */
+
+.sf-runs-scroll {
+  /* FIXED height, from the token. The region does not grow with its contents,
+     so nothing below it moves when a run arrives. */
+  height: var(--sf-live-region-height);
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.sf-run-row {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr) 4.5rem auto;
+  align-items: baseline;
+  gap: var(--sf-space-3);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--sf-rule);
+  padding: var(--sf-space-3) var(--sf-space-4);
+  cursor: pointer;
+  color: var(--sf-ink);
+}
+
+.sf-run-row:hover {
+  background: var(--sf-panel-alt);
+}
+
+.sf-run-row[data-selected="true"] {
+  background: var(--sf-accent-soft);
+}
+
+.sf-run-goal {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sf-run-goal[data-missing="true"] {
+  color: var(--sf-ink-3);
+  font-style: italic;
+}
+
+.sf-run-elapsed {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-sm);
+  color: var(--sf-ink-3);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sf-run-meta {
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+  white-space: nowrap;
+}
+
+.sf-run-reason {
+  grid-column: 2 / -1;
+  font-size: var(--sf-text-sm);
+  color: var(--sf-ink-2);
+  white-space: normal;
+}
+
+/* The viewport wrapper exists solely to give the pill something to overlay. */
+.sf-runs-viewport {
+  position: relative;
+}
+
+/*
+ * The pill is an OVERLAY, and that is load-bearing rather than decorative.
+ *
+ * Buffering starts precisely when the reader is scrolled into the region or
+ * interacting with it — that is, when they are reading. A pill in normal flow
+ * would appear at that moment, take its own height, and push the whole scroll
+ * region and everything below it downward: the arrival would move the rows it
+ * was buffered to protect. Absolute positioning takes no layout space, so the
+ * pill's appearance moves nothing at all.
+ */
+.sf-new-pill {
+  position: absolute;
+  top: var(--sf-space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: block;
+  font: inherit;
+  font-size: var(--sf-text-sm);
+  font-weight: 600;
+  background: var(--sf-accent);
+  color: var(--sf-accent-ink);
+  border: 1px solid var(--sf-accent);
+  border-radius: var(--sf-radius-md);
+  padding: var(--sf-space-1) var(--sf-space-4);
+  cursor: pointer;
+  box-shadow: var(--sf-shadow);
+}
+
+.sf-empty {
+  padding: var(--sf-space-6) var(--sf-space-4);
+  color: var(--sf-ink-3);
+  text-align: center;
+}
+
+.sf-live-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+}
+
+.sf-frozen-note {
+  color: var(--sf-waiting);
+  font-weight: 600;
+}
+
+/* ─────────────────────────────── detail ─────────────────────────────────── */
+
+.sf-detail-part {
+  padding: var(--sf-space-4) 0;
+  border-top: 1px solid var(--sf-rule);
+}
+
+.sf-detail-part:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.sf-detail-goal {
+  font-family: var(--sf-font-serif);
+  font-size: var(--sf-text-lg);
+  line-height: var(--sf-leading-prose);
+  margin: var(--sf-space-2) 0 0;
+}
+
+.sf-verdict-sentence {
+  font-family: var(--sf-font-serif);
+  font-size: var(--sf-text-lg);
+  line-height: var(--sf-leading-prose);
+  margin: var(--sf-space-2) 0 0;
+}
+
+.sf-machine-record {
+  margin-top: var(--sf-space-3);
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+}
+
+/* ─────────────────────────────── ledger ─────────────────────────────────── */
+
+.sf-ledger-entry {
+  border: 1px solid var(--sf-rule);
+  border-radius: var(--sf-radius-sm);
+  margin-bottom: var(--sf-space-3);
+  background: var(--sf-panel);
+}
+
+.sf-ledger-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sf-space-2) var(--sf-space-3);
+  padding: var(--sf-space-2) var(--sf-space-3);
+  background: var(--sf-panel-alt);
+  border-bottom: 1px solid var(--sf-rule);
+}
+
+.sf-shape-badge {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  background: var(--sf-accent-soft);
+  color: var(--sf-accent);
+  border: 1px solid var(--sf-rule);
+  border-radius: var(--sf-radius-sm);
+  padding: 0 var(--sf-space-2);
+  font-weight: 600;
+}
+
+.sf-ledger-body {
+  padding: var(--sf-space-3);
+  max-height: 26rem;
+  overflow: auto;
+}
+
+/* Truncation and length ride ALONGSIDE the content, never instead of it. This
+   sits BELOW the content in source order for exactly that reason. */
+.sf-ledger-foot {
+  padding: var(--sf-space-2) var(--sf-space-3);
+  border-top: 1px dashed var(--sf-rule);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+}
+
+.sf-ledger-empty {
+  padding: var(--sf-space-3);
+  color: var(--sf-ink-2);
+  font-size: var(--sf-text-sm);
+  font-style: italic;
+}
+
+.sf-verbatim {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  color: var(--sf-ink);
+}
+
+.sf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--sf-text-sm);
+}
+
+.sf-table th,
+.sf-table td {
+  border: 1px solid var(--sf-rule);
+  padding: var(--sf-space-1) var(--sf-space-2);
+  text-align: left;
+  vertical-align: top;
+  font-family: var(--sf-font-mono);
+}
+
+.sf-table th {
+  background: var(--sf-panel-alt);
+  color: var(--sf-ink-2);
+  font-weight: 600;
+}
+
+.sf-diff {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* Foreground only, no fill: a diff line is not a verdict and must not read as
+   one, even though it borrows the same two tokens. */
+.sf-diff-line[data-kind="added"] {
+  color: var(--sf-reached);
+}
+
+.sf-diff-line[data-kind="removed"] {
+  color: var(--sf-not-reached);
+}
+
+.sf-diff-line[data-kind="hunk"] {
+  color: var(--sf-accent);
+  font-weight: 600;
+}
+
+.sf-diff-line[data-kind="meta"] {
+  color: var(--sf-ink-3);
+}
+
+/* ─────────────────────────────── grading ───────────────────────────────── */
+
+.sf-grade {
+  margin-top: var(--sf-space-3);
+  padding: var(--sf-space-3);
+  border: 1px solid var(--sf-rule);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-panel-alt);
+}
+
+.sf-grade-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sf-space-2);
+  margin: var(--sf-space-2) 0 var(--sf-space-3);
+  border: none;
+  padding: 0;
+}
+
+.sf-grade-option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sf-space-2);
+  font-size: var(--sf-text-sm);
+  cursor: pointer;
+}
+
+.sf-error {
+  color: var(--sf-not-reached);
+  background: var(--sf-not-reached-bg);
+  border: 1px solid var(--sf-not-reached);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-2) var(--sf-space-3);
+  font-size: var(--sf-text-sm);
+  margin-top: var(--sf-space-2);
+}
+
+.sf-ok {
+  color: var(--sf-reached);
+  background: var(--sf-reached-bg);
+  border: 1px solid var(--sf-reached);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-2) var(--sf-space-3);
+  font-size: var(--sf-text-sm);
+  margin-top: var(--sf-space-2);
+}
+
+.sf-warn {
+  color: var(--sf-stalled);
+  background: var(--sf-stalled-bg);
+  border: 1px solid var(--sf-stalled);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-2) var(--sf-space-3);
+  font-size: var(--sf-text-sm);
+  margin-top: var(--sf-space-2);
+}
+
+.sf-waiting-panel {
+  color: var(--sf-waiting);
+  background: var(--sf-waiting-bg);
+  border: 1px solid var(--sf-waiting);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-3);
+  margin-top: var(--sf-space-2);
+}
+
+.sf-walklog {
+  margin-top: var(--sf-space-2);
+  max-height: 16rem;
+  overflow: auto;
+  background: var(--sf-panel-alt);
+  border: 1px solid var(--sf-rule);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-2);
+}
+
+.sf-walklog li {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-2);
+  list-style: none;
+  padding: 1px 0;
+  word-break: break-word;
+}
+
+.sf-walklog ol {
+  margin: 0;
+  padding: 0;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--sf-ink-2);
+  font-size: var(--sf-text-sm);
+}
+
+.sf-shape-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sf-space-1);
+  margin-top: var(--sf-space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.sf-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── interface gaps ───────────────────────────────────────────────────────── */
+.sf-gaps { margin-top: var(--sf-space-4); }
+.sf-gap-count { font-family: var(--sf-font-mono); font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
+.sf-gap-empty { padding: var(--sf-space-4) var(--sf-space-5); color: var(--sf-ink-3); font-size: var(--sf-text-base); }
+.sf-gap-list { list-style: none; margin: 0; padding: 0; }
+.sf-gap-row { display: grid; grid-template-columns: 92px 1fr; gap: var(--sf-space-4);
+  align-items: baseline; padding: var(--sf-space-3) var(--sf-space-5);
+  border-bottom: 1px solid var(--sf-rule); }
+.sf-gap-row:last-child { border-bottom: 0; }
+.sf-gap-state { font-family: var(--sf-font-mono); font-size: var(--sf-text-xs); font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px;
+  border-radius: var(--sf-radius-sm); text-align: center; }
+.sf-gap-state[data-status="open"]   { background: var(--sf-not-reached-bg); color: var(--sf-not-reached); }
+.sf-gap-state[data-status="closed"] { background: var(--sf-reached-bg);     color: var(--sf-reached); }
+.sf-gap-body { display: flex; flex-direction: column; gap: 3px; }
+.sf-gap-summary { font-size: var(--sf-text-base); color: var(--sf-ink); line-height: var(--sf-leading-normal); }
+.sf-gap-meta { font-family: var(--sf-font-mono); font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
