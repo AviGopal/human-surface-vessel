@@ -859,6 +859,20 @@ body {
   color: var(--sf-ink);
 }
 
+/* Verbatim that must NOT reflow.
+   `pre-wrap` is right for a long JSON ribbon with no internal alignment — it
+   keeps the block inside the column instead of pushing the page sideways. It is
+   wrong the moment the text has columns: a truncated shellResult is the single
+   most information-dense thing on a run page, and wrapping it re-broke exactly
+   the alignment the terminal renderer exists to preserve. Where a fallback is
+   showing something a command printed, it scrolls rather than wraps. */
+.sf-verbatim--fixed {
+  white-space: pre;
+  word-break: normal;
+  overflow-x: auto;
+  tab-size: 8;
+}
+
 .sf-table {
   width: 100%;
   border-collapse: collapse;
@@ -905,6 +919,175 @@ body {
 
 .sf-diff-line[data-kind="meta"] {
   color: var(--sf-ink-3);
+}
+
+/* A wide thing scrolls inside itself. The page body must never scroll sideways
+   because one impulse had eleven columns — moving the whole layout out from
+   under a reader is a worse failure than a scrollbar. */
+.sf-scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* A cell that stands in for a value it cannot hold reads as a summary, so it is
+   never mistaken for the value itself. */
+.sf-cell-summary {
+  color: var(--sf-ink-3);
+  font-style: italic;
+}
+
+/* ─────────────────────────────── terminal ──────────────────────────────── */
+
+/* `pre`, NOT `pre-wrap`. Soft-wrapping is exactly what destroyed the systemd
+   unit table's column alignment; a line that runs off the right edge is
+   recoverable by scrolling, a reflowed table is not. The scroll lives here, on
+   the block, and `.sf-terminal-wrap` keeps it from widening the card. */
+.sf-terminal-wrap {
+  max-width: 100%;
+}
+
+.sf-terminal {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-sm);
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 8;
+  line-height: var(--sf-leading-normal);
+  margin: 0;
+  color: var(--sf-ink);
+}
+
+.sf-envelope-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sf-space-2);
+  margin-top: var(--sf-space-2);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+}
+
+/* Its own class, not `.sf-chip`: that one carries a clickable hover affordance
+   this must not borrow. Foreground only, no fill, on the `.sf-diff-line`
+   precedent — an exit code is not a verdict and must not read as one. A zero
+   stays neutral on purpose: success is the unremarkable case, and painting it
+   the reach colour would put a second green verdict on a card that already
+   carries the real one. */
+.sf-exit-chip {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  border: 1px solid var(--sf-rule);
+  border-radius: var(--sf-radius-sm);
+  padding: 0 var(--sf-space-2);
+  color: var(--sf-ink-2);
+}
+
+.sf-exit-chip[data-exit="nonzero"] {
+  color: var(--sf-not-reached);
+  border-color: var(--sf-not-reached);
+}
+
+.sf-envelope-stderr summary {
+  cursor: pointer;
+  color: var(--sf-ink-3);
+}
+
+.sf-envelope-stderr > .sf-verbatim {
+  margin-top: var(--sf-space-2);
+}
+
+/* ──────────────────────────────── record ───────────────────────────────── */
+
+/* `display: contents` on the row so the key and the value are direct grid
+   items and every key column lines up across the whole record — which is the
+   only reason to draw a record as a grid rather than as stacked pairs. */
+.sf-record {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) 1fr;
+  gap: var(--sf-space-1) var(--sf-space-3);
+  margin: 0;
+}
+
+.sf-record-row {
+  display: contents;
+}
+
+.sf-record-key {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+}
+
+.sf-record-value {
+  margin: 0;
+  min-width: 0;
+}
+
+.sf-record--nested {
+  margin-top: var(--sf-space-1);
+}
+
+.sf-record-more summary {
+  cursor: pointer;
+  color: var(--sf-ink-3);
+  font-size: var(--sf-text-xs);
+}
+
+.sf-value-list {
+  margin: 0;
+  padding-left: var(--sf-space-4);
+}
+
+/* ──────────────────────────────── scalar ───────────────────────────────── */
+
+/* Reading type, and deliberately NOT `.sf-verbatim`: `4`, or a goal sentence,
+   is not a code listing, and putting it in a monospace block is how a one-word
+   answer came to look like a fragment of machine output. Only an identifier
+   earns mono. */
+.sf-scalar {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sf-space-2);
+}
+
+.sf-scalar-label {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-3);
+}
+
+.sf-scalar-value {
+  font-size: var(--sf-text-base);
+  color: var(--sf-ink);
+  word-break: break-word;
+}
+
+.sf-scalar-value[data-mono="true"] {
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-sm);
+}
+
+.sf-scalar-copy {
+  font: inherit;
+  font-size: var(--sf-text-xs);
+  background: none;
+  border: 1px solid var(--sf-rule);
+  border-radius: var(--sf-radius-sm);
+  color: var(--sf-ink-3);
+  padding: 0 var(--sf-space-2);
+  cursor: pointer;
+}
+
+.sf-scalar-copy:hover {
+  color: var(--sf-ink);
+  border-color: var(--sf-accent);
+}
+
+.sf-stub {
+  padding: var(--sf-space-3);
+  color: var(--sf-ink-2);
+  font-size: var(--sf-text-sm);
 }
 
 /* ─────────────────────────────── grading ───────────────────────────────── */
@@ -1119,12 +1302,37 @@ summary {
   white-space: nowrap;
 }
 
-/* ── an instruction that reshaped the surface ─────────────────────────────── */
+/* ── an instruction that reshaped the surface ─────────────────────────────────
+   `.sf-outcome` was referenced by the component and never defined, so a reshaped
+   outcome — the one message that confirms a typed instruction landed — was the
+   only outcome kind rendering as bare body text while accepted/refused/draining
+   all got a card. The confirmation of the feedback mechanism was the least
+   legible thing on the page.
+
+   It takes `--sf-accepted` rather than `--sf-reached`: nothing was dispatched and
+   nothing reached, and borrowing the reach colour here would be the same lie as
+   reporting a status where a verdict belongs. */
+.sf-outcome {
+  color: var(--sf-accepted);
+  background: var(--sf-accepted-bg);
+  border: 1px solid var(--sf-accepted);
+  border-radius: var(--sf-radius-sm);
+  padding: var(--sf-space-2) var(--sf-space-3);
+  font-size: var(--sf-text-sm);
+  margin-top: var(--sf-space-3);
+}
+
 .sf-outcome-changes { margin: var(--sf-space-2) 0 0; padding-left: var(--sf-space-5); }
 .sf-outcome-changes li { font-size: var(--sf-text-sm); color: var(--sf-ink-2); line-height: var(--sf-leading-normal); }
 .sf-outcome-because { color: var(--sf-ink-3); font-style: italic; }
 .sf-outcome-unparsed { display: block; margin-top: var(--sf-space-2);
   font-size: var(--sf-text-sm); color: var(--sf-stalled); }
+.sf-outcome-unparsed-list { margin: var(--sf-space-1) 0 0; padding-left: var(--sf-space-5); }
+.sf-outcome-unparsed-list li { line-height: var(--sf-leading-normal); margin-top: var(--sf-space-1); }
+/* The suggestion sits on its own line so it reads as an offer rather than as
+   part of the sentence that refused the clause. It inserts; it never sends. */
+.sf-outcome-suggest { display: block; margin-top: var(--sf-space-1);
+  font-size: var(--sf-text-xs); text-align: left; }
 
 /* ── the live-region note reserves its own width ──────────────────────────────
    Both children occupy one grid cell; the hidden sizer carries the longest

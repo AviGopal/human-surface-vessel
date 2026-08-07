@@ -35,7 +35,7 @@
  */
 
 import type { ReactNode } from "react";
-import { detectForm, normalizeLedger, PREVIEW_CAP, type LedgerEntry } from "../lib/ledger";
+import { normalizeLedger, planContent, PREVIEW_CAP, type LedgerEntry } from "../lib/ledger";
 import { formatChars } from "../lib/time";
 import { describesFilesystem, extractPaths } from "../lib/tree";
 import type { ExecutionPath, RawProvenance } from "../api/types";
@@ -87,7 +87,7 @@ function Entry({
     );
   }
 
-  const form = detectForm(entry.shape, entry.preview, formByShape);
+  const plan = planContent(entry.shape, entry.preview, entry.truncated, formByShape);
 
   return (
     <article className="sf-ledger-entry">
@@ -95,7 +95,7 @@ function Entry({
 
       {/* The content, first and always. */}
       <div className="sf-ledger-body">
-        <ContentRender form={form} text={entry.preview} />
+        <ContentRender plan={plan} />
       </div>
 
       {/* Length rides alongside — below, never instead. */}
@@ -106,10 +106,26 @@ function Entry({
             {formatChars(entry.chars)} characters — this is a preview, not the output. The full
             content is in the trace.
           </>
+        ) : plan.form === "stub" ? (
+          // A count of the WRAPPER is not a count of the output. Printing "108
+          // characters, rendered in full" over an impulse that carried nothing
+          // is the receipt problem this component exists to fix, in its purest
+          // form: a number where the content should be, and the number is a
+          // number about something else.
+          <>provenance only — 0 characters of content</>
+        ) : plan.text !== entry.preview ? (
+          // The same correction, for the envelope case: what is on screen is
+          // the payload, and `entry.chars` counts the envelope around it. Say
+          // both, and say which is which.
+          <>
+            {formatChars(plan.text.length)} characters of content, unwrapped from a{" "}
+            {formatChars(entry.chars)}-character {plan.envelopeShape ?? entry.shape} record · read as{" "}
+            <span className="sf-mono">{plan.form}</span>
+          </>
         ) : (
           <>
             {formatChars(entry.chars)} characters, rendered in full · read as{" "}
-            <span className="sf-mono">{form}</span>
+            <span className="sf-mono">{plan.form}</span>
           </>
         )}
       </div>
@@ -117,15 +133,83 @@ function Entry({
   );
 }
 
+/**
+ * Split an authored answer into prose and the machine blobs embedded in it.
+ *
+ * The answer builder writes markdown and then pastes the impulse it reasoned
+ * from underneath a "## Basis" heading. Rendering the whole thing as markdown
+ * therefore ran the blob through a paragraph renderer, and HTML whitespace
+ * collapsing turned every escaped newline in it into a space — so the most
+ * prominent card on the page destroyed the column alignment of the very output
+ * it was citing, while the identical bytes rendered correctly as a terminal
+ * listing in the ledger entry directly below it.
+ *
+ * Segments split on blank lines, which is where the builder joins them. A
+ * segment that parses whole as JSON is content and goes to the form pipeline;
+ * everything else is prose and stays markdown. Order is preserved, because the
+ * blob's position under its heading is part of what the answer says.
+ */
+interface AnswerSegment {
+  readonly kind: "prose" | "machine";
+  readonly text: string;
+  /**
+   * The shape the blob declares for itself, used for the render-policy pin
+   * lookup. Keying the pin on `goal_answer` instead would mean "show shellResult
+   * as terminal" changed the ledger entry but not the copy of the same bytes in
+   * the answer card above it — the two would disagree on screen about one
+   * instruction.
+   */
+  readonly declaredShape?: string;
+}
+
+function segmentAnswer(body: string): readonly AnswerSegment[] {
+  const out: AnswerSegment[] = [];
+  for (const chunk of body.split(/\n\s*\n/)) {
+    const text = chunk.trim();
+    if (text.length === 0) continue;
+    let machine = false;
+    let declaredShape: string | undefined;
+    if (text.startsWith("{") || text.startsWith("[")) {
+      try {
+        const parsed: unknown = JSON.parse(text);
+        machine = true;
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          const s = (parsed as Record<string, unknown>)["shape"];
+          if (typeof s === "string" && s.length > 0) declaredShape = s;
+        }
+      } catch {
+        // A blob the builder truncated mid-JSON does not parse. It stays prose
+        // and the GUARD inside heuristicForm keeps it out of the reflowing
+        // paragraph renderer — refusing to unwrap is not the same as pretending
+        // it is a sentence.
+        machine = false;
+      }
+    }
+    // Merge consecutive prose so a paragraph break inside markdown does not
+    // become a rendering boundary that loses list or heading continuity.
+    const last = out[out.length - 1];
+    if (!machine && last && last.kind === "prose") {
+      out[out.length - 1] = { kind: "prose", text: `${last.text}\n\n${text}` };
+      continue;
+    }
+    out.push({ kind: machine ? "machine" : "prose", text, ...(declaredShape ? { declaredShape } : {}) });
+  }
+  return out;
+}
+
 /** Tier 1 of the fallback: real content, without per-impulse provenance. */
 function AnswerEntry({
   answerBody,
   producedBy,
   provenanceRetained,
+  formByShape,
 }: {
   answerBody: string;
   producedBy: string | undefined;
   provenanceRetained: boolean;
+  /** The same `renderPolicy` pins the ledger entries use, so one instruction
+      cannot leave the answer card and the entry below it disagreeing. */
+  formByShape?: Readonly<Record<string, string>>;
 }): ReactNode {
   return (
     // The answer card is marked. Every impulse is still mirrored and every
@@ -151,7 +235,29 @@ function AnswerEntry({
         </span>
       </div>
       <div className="sf-ledger-body">
-        <Prose source={answerBody} />
+        {segmentAnswer(answerBody).map((segment, i) =>
+          segment.kind === "prose" ? (
+            <Prose
+              // Segments carry no id. Their ORDER is their identity: the answer
+              // is re-segmented wholesale on every content change and never
+              // reconciled row by row, so position is the only stable handle.
+              // @interaction:exempt P4 — answer segments carry no domain id; position IS identity and the body is re-segmented wholesale, never reconciled
+              key={`s${i}`}
+              source={segment.text}
+            />
+          ) : (
+            <ContentRender
+              // @interaction:exempt P4 — answer segments carry no domain id; position IS identity and the body is re-segmented wholesale, never reconciled
+              key={`s${i}`}
+              plan={planContent(
+                segment.declaredShape ?? "goal_answer",
+                segment.text,
+                false,
+                formByShape,
+              )}
+            />
+          ),
+        )}
       </div>
       <div className="sf-ledger-foot">
         {formatChars(answerBody.length)} characters, rendered in full
@@ -240,6 +346,7 @@ export function EvidenceLedger({
             answerBody={answerBody}
             producedBy={selectedTemplateId}
             provenanceRetained
+            formByShape={formByShape}
           />
         ) : null}
         {entries.map((entry, i) => (
@@ -267,6 +374,7 @@ export function EvidenceLedger({
           answerBody={answerBody}
           producedBy={selectedTemplateId}
           provenanceRetained={false}
+          formByShape={formByShape}
         />
         <TreeNote goal={goal} answerBody={answerBody} provenanceText="" />
       </div>
