@@ -17,6 +17,7 @@ import type {
   GoalWalkState,
   GradeSubmission,
   SolicitationOutcome,
+  UnparsedClause,
 } from "./types";
 
 export class SurfaceError extends Error {
@@ -43,6 +44,35 @@ async function readJson(res: Response): Promise<Record<string, unknown>> {
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/**
+ * Normalize the `unparsed` array off the wire.
+ *
+ * Tolerates a bare string as well as the record, because an older vessel on the
+ * other end of this proxy sends strings — and a surface that renders nothing at
+ * all when a clause was refused is worse than one that renders the clause with
+ * no reason attached.
+ */
+function asClauses(raw: unknown): readonly UnparsedClause[] {
+  if (!Array.isArray(raw)) return [];
+  const out: UnparsedClause[] = [];
+  for (const item of raw) {
+    if (typeof item === "string") {
+      out.push({ text: item, reason: "", suggestedGoal: "" });
+      continue;
+    }
+    if (typeof item !== "object" || item === null) continue;
+    const rec = item as Record<string, unknown>;
+    const text = str(rec["text"]);
+    if (!text) continue;
+    out.push({
+      text,
+      reason: str(rec["reason"]) ?? "",
+      suggestedGoal: str(rec["suggested_goal"]) ?? "",
+    });
+  }
+  return out;
 }
 
 /* ────────────────────────────── dispatch ─────────────────────────────────── */
@@ -100,7 +130,11 @@ async function trySurfaceIntent(instruction: string): Promise<DispatchOutcome | 
       to: String(c.to ?? ""),
       because: String(c.because ?? ""),
     })),
-    unparsed: (body.unparsed ?? []).map(String),
+    // Read the clause RECORD. The wire has always carried {text, reason,
+    // suggested_goal} on both the 200 and the 422 branch; this used to be
+    // `.map(String)`, which turned each one into the literal `[object Object]`
+    // and discarded the only two fields that tell a person what to do next.
+    unparsed: asClauses(body.unparsed),
     revision: typeof body.policy?.revision === "number" ? body.policy.revision : -1,
   };
 }

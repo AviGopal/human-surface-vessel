@@ -73,14 +73,25 @@ function ContractPanel({ contract, goal }: { contract: RunContract; goal: string
   );
 }
 
-function OutcomeNote({ outcome }: { outcome: DispatchOutcome }): ReactNode {
+function OutcomeNote({
+  outcome,
+  onSuggest,
+}: {
+  outcome: DispatchOutcome;
+  /** P2: puts the text in the box. It must not be able to send. */
+  onSuggest: (text: string) => void;
+}): ReactNode {
   switch (outcome.kind) {
     case "reshaped":
       // Say plainly that NOTHING was dispatched. The reader is watching a runs
       // board; if this read like an acceptance they would wait for a row that
       // is never coming.
       return (
-        <p className="sf-outcome" role="status">
+        // A DIV, not a P. This block carries lists, and a <ul> inside a <p> is
+        // auto-closed by the parser — the browser silently ends the paragraph
+        // before the list and reparents everything after it, so the outcome note
+        // loses its own styling exactly when it has the most to say.
+        <div className="sf-outcome" role="status">
           This changed the interface itself — nothing was dispatched and no run will appear below.
           {outcome.revision >= 0 ? ` Render policy is now revision ${outcome.revision}.` : ""}
           <ul className="sf-outcome-changes">
@@ -93,11 +104,30 @@ function OutcomeNote({ outcome }: { outcome: DispatchOutcome }): ReactNode {
           </ul>
           {outcome.unparsed.length > 0 ? (
             <span className="sf-outcome-unparsed">
-              Not understood, and therefore not applied:{" "}
-              {outcome.unparsed.map((u) => `“${u}”`).join(", ")}. The rest was applied.
+              Not understood, and therefore not applied. The rest was applied.
+              <ul className="sf-outcome-unparsed-list">
+                {outcome.unparsed.map((u) => (
+                  <li key={u.text}>
+                    “{u.text}”
+                    {u.reason ? <span className="sf-outcome-because"> — {u.reason}</span> : null}
+                    {u.suggestedGoal ? (
+                      // P2: a suggestion INSERTS into the box. It never sends.
+                      // The parser refusing a clause is not permission to guess
+                      // what the person meant and dispatch it for them.
+                      <button
+                        type="button"
+                        className="sf-button sf-button-quiet sf-outcome-suggest"
+                        onClick={() => onSuggest(u.suggestedGoal)}
+                      >
+                        put “{u.suggestedGoal}” in the box
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             </span>
           ) : null}
-        </p>
+        </div>
       );
     case "accepted":
       return outcome.coalesced ? (
@@ -151,6 +181,28 @@ export function AskRegion({ onDispatched }: { onDispatched: (dispatchId: string)
     if (el) {
       el.focus();
       // Cursor at the end, so finishing the sentence is the obvious next act.
+      window.requestAnimationFrame(() => {
+        el.selectionStart = el.value.length;
+        el.selectionEnd = el.value.length;
+      });
+    }
+  };
+
+  /**
+   * P2 again, but REPLACING rather than appending.
+   *
+   * `insert` appends, which is right for a starter chip building up a sentence.
+   * It is wrong here: the box still holds the instruction whose clause was just
+   * refused (submit does not clear it), so appending would produce the refused
+   * words followed by the goal that replaces them. Taking the suggestion means
+   * switching from steering the surface to asking for work, so the old text goes.
+   * This still cannot dispatch — nothing in this component can.
+   */
+  const replaceWith = (text: string): void => {
+    setGoal(text);
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
       window.requestAnimationFrame(() => {
         el.selectionStart = el.value.length;
         el.selectionEnd = el.value.length;
@@ -251,7 +303,7 @@ export function AskRegion({ onDispatched }: { onDispatched: (dispatchId: string)
             The dispatch never left this surface: {(dispatch.error as Error).message}. Nothing ran.
           </p>
         ) : null}
-        {dispatch.data ? <OutcomeNote outcome={dispatch.data} /> : null}
+        {dispatch.data ? <OutcomeNote outcome={dispatch.data} onSuggest={replaceWith} /> : null}
         {contract ? <ContractPanel contract={contract.contract} goal={contract.goal} /> : null}
       </div>
     </section>

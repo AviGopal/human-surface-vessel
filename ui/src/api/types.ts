@@ -133,6 +133,23 @@ export interface SurfaceChange {
   readonly because: string;
 }
 
+/**
+ * One clause of a typed instruction the parser could not read.
+ *
+ * This is a RECORD, not a string, because the parser already knows more than the
+ * clause text: why no rule matched, and what goal would do the thing instead.
+ * It was previously typed as `string[]` and flattened with `.map(String)`, which
+ * rendered every refusal as the literal text `[object Object]` — the reason and
+ * the suggested goal were computed on the server and thrown away one line before
+ * they reached the person who needed them.
+ */
+export interface UnparsedClause {
+  readonly text: string;
+  readonly reason: string;
+  /** A goal that WOULD do this, when the parser can name one. Empty when it cannot. */
+  readonly suggestedGoal: string;
+}
+
 export type DispatchOutcome =
   /**
    * The instruction reshaped THIS SURFACE rather than dispatching a walk.
@@ -144,7 +161,7 @@ export type DispatchOutcome =
   | {
       readonly kind: "reshaped";
       readonly changes: readonly SurfaceChange[];
-      readonly unparsed: readonly string[];
+      readonly unparsed: readonly UnparsedClause[];
       readonly revision: number;
     }
   | { readonly kind: "accepted"; readonly dispatchId: string; readonly coalesced: boolean }

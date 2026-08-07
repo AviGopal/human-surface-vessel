@@ -85,10 +85,10 @@ export function ComplainButton({ region }: { region: string }): ReactNode {
         onChange={(e) => setText(e.target.value)}
       />
       <div className="sf-complain-actions">
-        <button type="button" className="sf-btn" onClick={() => void send()} disabled={state === "sending"}>
+        <button type="button" className="sf-button sf-button-primary" onClick={() => void send()} disabled={state === "sending"}>
           {state === "sending" ? "filing…" : "file it"}
         </button>
-        <button type="button" className="sf-btn sf-btn-ghost" onClick={() => setOpen(false)}>
+        <button type="button" className="sf-button sf-button-quiet" onClick={() => setOpen(false)}>
           cancel
         </button>
         {state === "filed" ? (
