@@ -22,6 +22,18 @@ import type { DispatchStatus } from "../api/types";
  */
 export const STALL_AFTER_MS = 90_000;
 
+/**
+ * How long a run may sit having produced NOTHING before the board stops calling
+ * it merely accepted.
+ *
+ * Deliberately far longer than STALL_AFTER_MS. That one watches a run that has
+ * already shown it is alive and then went quiet, which is strong evidence. This
+ * one watches a run that has never shown anything, where the honest competing
+ * explanation is a busy dispatcher rather than a dead walk — so it waits long
+ * enough that queueing is no longer the likely story.
+ */
+export const SILENT_ACCEPT_STALL_MS = 300_000;
+
 export interface RunFacts {
   readonly status: DispatchStatus;
   readonly reached: boolean | null;
@@ -31,6 +43,17 @@ export interface RunFacts {
   readonly hasProgress: boolean;
   /** ms since the progress fingerprint last changed, or null if never seen. */
   readonly quietForMs: number | null;
+  /**
+   * ms since the SERVER accepted this dispatch, from `startedAt` on the wire.
+   *
+   * `quietForMs` is measured from first observation IN THIS BROWSER SESSION, so
+   * it cannot see silence that predates the page load: a run queued for twenty
+   * minutes reads as freshly accepted the moment somebody opens the board.
+   * `startedAt` is absolute and already on every dispatch record, so a run that
+   * has produced nothing at all can be judged against when it was actually
+   * received rather than against when this tab happened to notice it.
+   */
+  readonly acceptedForMs: number | null;
 }
 
 export function deriveRunState(f: RunFacts): RunState {
@@ -41,10 +64,20 @@ export function deriveRunState(f: RunFacts): RunState {
   }
   if (f.awaitingAnswer) return "waiting";
   if (f.quietForMs !== null && f.quietForMs > STALL_AFTER_MS) return "stalled";
-  // A dispatch id and nothing else. `ageMs` is deliberately NOT consulted here:
-  // a run that has emitted nothing is `accepted` whether it is one second old
-  // or thirty, and only sustained silence (above) promotes that to `stalled`.
-  if (!f.hasProgress) return "accepted";
+  // A dispatch id and nothing else.
+  //
+  // Age alone still cannot mean stalled — a legitimately long walk is not
+  // stuck. But a run that has produced NO observable progress AT ALL, measured
+  // from the server's own accept time, is a different case: after this long
+  // there is nothing to distinguish it from one that died on arrival, and
+  // leaving it as `accepted` tells the reader it is fine. Measured behind a
+  // busy dispatcher, runs sat at `accepted` for six minutes and the board said
+  // nothing was wrong.
+  if (!f.hasProgress) {
+    return f.acceptedForMs !== null && f.acceptedForMs > SILENT_ACCEPT_STALL_MS
+      ? "stalled"
+      : "accepted";
+  }
   return "running";
 }
 
@@ -67,6 +100,8 @@ export function verdictSentence(args: {
   goalReachReason: string | null;
   error?: string;
   humanGraded: boolean;
+  /** Distinguishes "worked then stopped" from "never started". */
+  everProgressed?: boolean;
 }): string {
   const reason = args.goalReachReason?.trim();
   if (args.state === "reached") {
@@ -90,7 +125,9 @@ export function verdictSentence(args: {
   }
   if (args.state === "waiting") return "Blocked on a human answer. Nothing advances until the question is answered.";
   if (args.state === "stalled")
-    return "Accepted, then silent. Nothing has changed for over a minute and a half — this is a liveness failure, not a verdict.";
+    return args.everProgressed
+      ? "Accepted, then silent. It was working and stopped emitting — this is a liveness failure, not a verdict."
+      : "Accepted, and nothing has happened since. Long enough that a busy dispatcher no longer explains it — this is a liveness failure, not a verdict.";
   if (args.state === "accepted")
     return "Accepted. A dispatch id exists and nothing else does yet — the walk was received, which is not the same as started.";
   return reason || "In flight.";

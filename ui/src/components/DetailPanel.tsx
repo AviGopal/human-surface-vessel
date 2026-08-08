@@ -146,6 +146,12 @@ export function DetailPanel({ dispatchId }: { dispatchId: string | null }): Reac
         awaitingAnswer: solicitation !== null,
         hasProgress: hasProgress(walk),
         quietForMs: terminal ? null : quietForMs,
+        // NULL here on purpose. `goalWalkState` does not carry `startedAt` —
+        // only the board's `activeDispatches` record does — so the detail panel
+        // cannot measure server-anchored silence and must not guess at it. The
+        // board row, which is where a person scans for a stuck run anyway, has
+        // the timestamp and makes the call there.
+        acceptedForMs: null,
       })
     : "accepted";
 

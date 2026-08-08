@@ -331,6 +331,82 @@ function envelopeMeta(
  *   S6  classify the object, first match wins.
  *   S7  the guess, on the raw preview or on the unwrapped payload.
  */
+/**
+ * The payload of a command envelope that was cut off mid-string.
+ *
+ * This is NOT parsing truncated JSON, and the distinction is the whole reason
+ * it is allowed. Parsing a fragment means guessing at structure that was never
+ * received. Here nothing is guessed: the opening `{"shape":"…","stdout":"` is
+ * matched WHOLE, so the key is known and the string's start is known, and every
+ * byte after that quote up to the cut is that string's content under a decoding
+ * that is fully determined. The only thing missing is the end, and the footer
+ * already tells the reader this is a preview.
+ *
+ * It is deliberately narrow. It requires the envelope opening at position zero
+ * and refuses if the payload string ever CLOSES — a closed string means the
+ * object had more structure after it that this function cannot see, and that is
+ * exactly the territory where a partial read becomes a guess.
+ *
+ * Why it exists: measured over the goals people actually type, the answers they
+ * want are big. `list the running systemd units` and `read <file> and explain`
+ * both blow past the 2000-character preview cap, so the truncated branch was
+ * not a rare tail — it was the common case for the most useful questions, and
+ * it put escaped JSON on the screen every time.
+ */
+const TRUNCATED_ENVELOPE =
+  /^\s*\{"shape"\s*:\s*"([^"\\]{1,80})"\s*,\s*"(stdout|stderr|content)"\s*:\s*"/;
+
+export function truncatedEnvelopePayload(
+  preview: string,
+): { text: string; envelopeShape: string } | null {
+  const m = TRUNCATED_ENVELOPE.exec(preview);
+  if (!m) return null;
+  const body = preview.slice(m[0].length);
+  // A closing quote means the string ENDED inside what we can see, so the cut
+  // fell somewhere later in the object and there is structure here this
+  // function is not entitled to interpret.
+  if (/(^|[^\\])"/.test(body)) return null;
+  const text = decodeJsonStringBody(body);
+  if (text.trim().length === 0) return null;
+  return { text, envelopeShape: m[1] ?? "" };
+}
+
+/**
+ * Decode the inside of a JSON string. Only the escapes JSON defines, and a
+ * trailing lone backslash — the cut can land mid-escape — is dropped rather
+ * than rendered as a stray character.
+ */
+function decodeJsonStringBody(raw: string): string {
+  const body = raw.endsWith("\\") ? raw.slice(0, -1) : raw;
+  let out = "";
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c !== "\\") {
+      out += c;
+      continue;
+    }
+    const n = body[++i];
+    if (n === "n") out += "\n";
+    else if (n === "t") out += "\t";
+    else if (n === "r") out += "\r";
+    else if (n === "b") out += "\b";
+    else if (n === "f") out += "\f";
+    else if (n === '"') out += '"';
+    else if (n === "\\") out += "\\";
+    else if (n === "/") out += "/";
+    else if (n === "u") {
+      const hex = body.slice(i + 1, i + 5);
+      if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+        out += String.fromCharCode(parseInt(hex, 16));
+        i += 4;
+      }
+    } else if (n !== undefined) {
+      out += n;
+    }
+  }
+  return out;
+}
+
 export function planContent(
   shape: string,
   preview: string,
@@ -344,7 +420,17 @@ export function planContent(
     return { form: pinned, text: preview };
   }
 
-  if (truncated) return { form: heuristicForm(shape, preview, false), text: preview };
+  if (truncated) {
+    const prefix = truncatedEnvelopePayload(preview);
+    if (prefix) {
+      return {
+        form: heuristicForm(shape, prefix.text, true),
+        text: prefix.text,
+        ...(prefix.envelopeShape ? { envelopeShape: prefix.envelopeShape } : {}),
+      };
+    }
+    return { form: heuristicForm(shape, preview, false), text: preview };
+  }
 
   let parsed: unknown;
   try {

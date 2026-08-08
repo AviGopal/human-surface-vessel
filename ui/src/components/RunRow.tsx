@@ -75,6 +75,7 @@ export function RunRow({
     awaitingAnswer: solicitation !== null,
     hasProgress: walk ? hasProgress(walk) : Boolean(row.executionId ?? row.selectedTemplateId),
     quietForMs: terminal ? null : quietForMs,
+    acceptedForMs: terminal ? null : Math.max(0, now - startedAtMs),
   });
 
   const reason = verdictSentence({
