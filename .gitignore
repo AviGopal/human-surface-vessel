@@ -6,4 +6,8 @@ node_modules/
 .container-home/
 ui/.container-home/
 ui/node_modules/
-ui/dist/
+
+# NOT ui/dist/ — it is TRACKED on purpose. The substrate updates itself by
+# pulling this repo and nothing rebuilds on pull, so git is the only channel by
+# which a UI change reaches a running surface. See ui/.gitignore for the full
+# reasoning and the cost.

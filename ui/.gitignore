@@ -1,5 +1,31 @@
 node_modules/
-dist/
+
+# Explicitly un-ignore, because the SUPER-REPO root .gitignore carries a blanket
+# `dist/`. Without this negation the directory is excluded before git descends
+# into it, and every future build would need `git add -f` — a delivery channel
+# that depends on someone remembering a flag is not a delivery channel.
+!dist/
+!dist/**
+
+# dist/ is TRACKED, deliberately. It is not "a build artifact in git" by
+# accident — it is this vessel's DELIVERY CHANNEL.
+#
+# The substrate updates itself by pulling this repo. The surface's systemd unit
+# runs src/index.ts, which serves ui/dist; nothing rebuilds on pull, and
+# post_install builds exactly once at install time. So while dist/ was ignored
+# there was NO path by which a UI source change reached a deployed surface — a
+# container could sit on current source and serve a bundle built the night
+# before, which is exactly what both deployments were doing (observed
+# 2026-08-08: source at 85122e84, bundle from 20:42 the previous evening).
+#
+# Tracking it means a pull delivers a working surface with no toolchain, no
+# build step at boot that can fail, and no private-clone credential needed just
+# to render a page. Vite content-hashes filenames and empties the directory each
+# build, so this replaces rather than accumulates.
+#
+# THE COST, stated plainly: a ui/src change is only live once its rebuilt dist
+# is committed WITH it. scripts/git-hooks/pre-commit enforces that for commits
+# that run hooks. A commit path that bypasses hooks does not get the check.
 
 # Scratch HOME for container builds. The build runs as the host user inside
 # `oven/bun:1` so nothing lands root-owned in the tree; bun wants a writable
