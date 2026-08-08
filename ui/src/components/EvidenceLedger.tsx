@@ -170,9 +170,51 @@ interface AnswerSegment {
   readonly truncated: boolean;
 }
 
+/**
+ * A line that is a COMPLETE envelope on its own.
+ *
+ * A MATCH, not a guess, on the same terms as `truncatedEnvelopePayload`: the
+ * line must parse as JSON, be a plain object, and DECLARE a shape. Anything
+ * looser (any line that starts with `{`, any line that parses) would start
+ * pulling ordinary prose that happens to contain braces out of the paragraph
+ * it belongs to.
+ *
+ * WHY THIS EXISTS. `segmentAnswer` splits on BLANK lines and asks whether the
+ * whole chunk starts with `{`. The answer builder does not always leave a blank
+ * line: it writes a heading, a sentence, then the envelope the walk produced,
+ * each separated by a single newline. That whole thing is one chunk beginning
+ * with `#`, so it went to markdown — and markdown draws `{"stdout":"27\n"}`
+ * with the escape visible. Measured on the deployed surface: this single case
+ * was 4 of 5 unreadable results, across three different goal kinds.
+ *
+ * The fix is a PRE-SPLIT rather than a new branch: isolate such a line with
+ * blank lines and let the existing, already-tested machine path claim it.
+ */
+const SHAPED_ENVELOPE_LINE = /^\s*\{.*\}\s*$/;
+
+function isolateEnvelopeLines(body: string): string {
+  if (!body.includes("{")) return body;
+  return body
+    .split("\n")
+    .map((line) => {
+      if (!SHAPED_ENVELOPE_LINE.test(line)) return line;
+      try {
+        const parsed: unknown = JSON.parse(line.trim());
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return line;
+        const shape = (parsed as Record<string, unknown>)["shape"];
+        if (typeof shape !== "string" || shape.length === 0) return line;
+        // Blank lines around it make this line its own chunk below.
+        return `\n${line.trim()}\n`;
+      } catch {
+        return line;
+      }
+    })
+    .join("\n");
+}
+
 function segmentAnswer(body: string): readonly AnswerSegment[] {
   const out: AnswerSegment[] = [];
-  for (const chunk of body.split(/\n\s*\n/)) {
+  for (const chunk of isolateEnvelopeLines(body).split(/\n\s*\n/)) {
     const text = chunk.trim();
     if (text.length === 0) continue;
     let machine = false;
