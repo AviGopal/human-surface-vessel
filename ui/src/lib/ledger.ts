@@ -364,8 +364,20 @@ function envelopeMeta(
  * not a rare tail — it was the common case for the most useful questions, and
  * it put escaped JSON on the screen every time.
  */
+/**
+ * `{"shape":"X", <simple pairs>, "<payload>":"` — the payload key need not come
+ * immediately after the shape.
+ *
+ * The intervening pairs are restricted to COMPLETE scalar values: a quoted
+ * string with no escapes, a number, or a literal. That is what keeps this a
+ * match rather than a parse — every byte before the payload quote is fully
+ * accounted for, so the position of that quote is known rather than estimated.
+ * `fileContent` puts `path` between the two, and requiring adjacency meant
+ * reading a file — one of the most common things anybody asks for — still put
+ * escaped JSON on the screen.
+ */
 const TRUNCATED_ENVELOPE =
-  /^\s*\{"shape"\s*:\s*"([^"\\]{1,80})"\s*,\s*"(stdout|stderr|content)"\s*:\s*"/;
+  /^\s*\{"shape"\s*:\s*"([^"\\]{1,80})"\s*,\s*(?:"[A-Za-z_][A-Za-z0-9_]*"\s*:\s*(?:"[^"\\]*"|-?\d+(?:\.\d+)?|true|false|null)\s*,\s*)*"(stdout|stderr|content|text|output)"\s*:\s*"/;
 
 export function truncatedEnvelopePayload(
   preview: string,
