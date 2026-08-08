@@ -269,9 +269,14 @@ async function resolveGoalHostEndpoint(): Promise<string> {
       `[human-surface] ${candidates.length} vessel(s) advertise goal_execution; none answered a resolve call`,
     );
   }
-  const fallback = GOAL_HOST_ENDPOINT.replace(/\/+$/, "");
-  cachedGoalHost = { endpoint: fallback, at: now };
-  return fallback;
+  // NOT CACHED. A fallback is what happens when resolution FAILED, and caching
+  // it treats a failure like an answer: one transient registry miss — a vessel
+  // mid-re-registration, a restart, a dropped packet — became thirty seconds of
+  // hard 502 for every request, because each one returned the cached bad
+  // address instantly without ever retrying discovery. Measured: fourteen
+  // goals dispatched in about two seconds, all failing, from a single blip that
+  // had already cleared. Resolution is cheap and this path is rare; re-resolve.
+  return GOAL_HOST_ENDPOINT.replace(/\/+$/, "");
 }
 
 // ─── passthrough ────────────────────────────────────────────────────────────

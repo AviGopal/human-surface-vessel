@@ -206,14 +206,25 @@ export function heuristicForm(shape: string, text: string, fromEnvelope: boolean
   const trimmed = text.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) return DEFAULT_CONTENT_FORM;
 
-  if (looksLikeProse(text)) return "prose";
-  if (PROSE_HINT.test(shape) && trimmed.split(/\s+/).length > 12) return "prose";
-
+  // PROVENANCE BEATS THE GUESS, and this is why it sits ABOVE the prose tests.
+  //
+  // `fromEnvelope` is not a heuristic — it is the fact that these bytes came out
+  // of a command, carried by the envelope they were unwrapped from. Everything
+  // below is inference from punctuation and line length. `looksLikeProse` used
+  // to run first and it won on real command output: `systemctl list-units`
+  // prints a DESCRIPTION column full of sentences, so the whole listing was
+  // classified as prose and reflowed, which is precisely the column-destroying
+  // render the terminal form exists to prevent.
+  //
+  // Multi-line output is a terminal block. A single short line is a value.
   if (fromEnvelope) {
     const lines = text.split("\n").filter((l) => l.trim().length > 0);
     if (lines.length >= 2) return "terminal";
     if (lines.length === 1 && trimmed.length <= SCALAR_MAX_CHARS) return "scalar";
   }
+
+  if (looksLikeProse(text)) return "prose";
+  if (PROSE_HINT.test(shape) && trimmed.split(/\s+/).length > 12) return "prose";
 
   // Everything else is verbatim monospace, and that is the DESIGNED common
   // case: most shapes will never earn a bespoke renderer and do not need one.
