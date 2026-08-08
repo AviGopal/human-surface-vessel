@@ -35,7 +35,13 @@
  */
 
 import type { ReactNode } from "react";
-import { normalizeLedger, planContent, PREVIEW_CAP, type LedgerEntry } from "../lib/ledger";
+import {
+  normalizeLedger,
+  planContent,
+  PREVIEW_CAP,
+  truncatedEnvelopePayload,
+  type LedgerEntry,
+} from "../lib/ledger";
 import { formatChars } from "../lib/time";
 import { describesFilesystem, extractPaths } from "../lib/tree";
 import type { ExecutionPath, RawProvenance } from "../api/types";
@@ -160,6 +166,8 @@ interface AnswerSegment {
    * instruction.
    */
   readonly declaredShape?: string;
+  /** The blob was cut off by the preview cap; planContent must be told so. */
+  readonly truncated: boolean;
 }
 
 function segmentAnswer(body: string): readonly AnswerSegment[] {
@@ -168,6 +176,7 @@ function segmentAnswer(body: string): readonly AnswerSegment[] {
     const text = chunk.trim();
     if (text.length === 0) continue;
     let machine = false;
+    let truncatedBlob = false;
     let declaredShape: string | undefined;
     if (text.startsWith("{") || text.startsWith("[")) {
       try {
@@ -178,21 +187,34 @@ function segmentAnswer(body: string): readonly AnswerSegment[] {
           if (typeof s === "string" && s.length > 0) declaredShape = s;
         }
       } catch {
-        // A blob the builder truncated mid-JSON does not parse. It stays prose
-        // and the GUARD inside heuristicForm keeps it out of the reflowing
-        // paragraph renderer — refusing to unwrap is not the same as pretending
-        // it is a sentence.
-        machine = false;
+        // It did not parse — but the answer builder pastes whatever the walk
+        // produced, INCLUDING a preview the store already cut off. The ledger
+        // entry for those same bytes renders as a terminal block; this card was
+        // still handing them to markdown, so the identical output read cleanly
+        // in one place and as escaped JSON in the other, on the same page.
+        // The same conservative matcher decides: it recognises the envelope
+        // opening whole or it declines.
+        const cut = truncatedEnvelopePayload(text);
+        if (cut) {
+          machine = true;
+          truncatedBlob = true;
+          if (cut.envelopeShape) declaredShape = cut.envelopeShape;
+        }
       }
     }
     // Merge consecutive prose so a paragraph break inside markdown does not
     // become a rendering boundary that loses list or heading continuity.
     const last = out[out.length - 1];
     if (!machine && last && last.kind === "prose") {
-      out[out.length - 1] = { kind: "prose", text: `${last.text}\n\n${text}` };
+      out[out.length - 1] = { kind: "prose", text: `${last.text}\n\n${text}`, truncated: false };
       continue;
     }
-    out.push({ kind: machine ? "machine" : "prose", text, ...(declaredShape ? { declaredShape } : {}) });
+    out.push({
+      kind: machine ? "machine" : "prose",
+      text,
+      truncated: truncatedBlob,
+      ...(declaredShape ? { declaredShape } : {}),
+    });
   }
   return out;
 }
@@ -252,7 +274,7 @@ function AnswerEntry({
               plan={planContent(
                 segment.declaredShape ?? "goal_answer",
                 segment.text,
-                false,
+                segment.truncated,
                 formByShape,
               )}
             />
