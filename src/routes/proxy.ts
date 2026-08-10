@@ -379,25 +379,185 @@ proxyRouter.get("/api/executions/:dispatchId", async (c) => {
 
 // ─── discovery ──────────────────────────────────────────────────────────────
 
-proxyRouter.post("/api/discovery/resolve", async (c) =>
-  passthrough({
-    url: `${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`,
-    method: "POST",
-    rawBody: await rawBodyOf(c),
-    origin: c.req.header("Origin"),
-  }),
-);
+/**
+ * THE SHAPE VOCABULARY IS THE UNION OF TWO REGISTRIES, AND HAS TO BE.
+ *
+ * This route used to forward to the local registry alone, which quietly made
+ * the surface's starter suggestions a list of its own plumbing. Measured on
+ * this spoke: local advertises 16 shapes — `interactorEvent`, `llmQuotaState`,
+ * `renderPolicy` and the like — while the hub advertises 156. The comment in
+ * `ui/src/lib/starters.ts` says starters derive from the live vocabulary
+ * precisely so a fixed list cannot go stale; deriving them from the wrong
+ * registry defeats that just as thoroughly as hardcoding would, and less
+ * visibly, because the list still moves.
+ *
+ * It is a UNION rather than a switch to the hub, and the reason is durability
+ * rather than present necessity. Measured today: the local 16 are a strict
+ * SUBSET of the hub's 156, so a hub-only read would lose nothing right now.
+ * But the subset relation is a fact about the current fleet, not a guarantee —
+ * this vessel registers locally by design, so its own shapes are present on the
+ * hub only for as long as some hub-side peer keeps advertising them. A union
+ * cannot regress when that stops being true, and it degrades the right way when
+ * the hub is unreachable: local shapes still answer, and `registries` records
+ * that the fleet leg went unread.
+ *
+ * Fail-soft per registry, and SAY WHICH ANSWERED. If the hub is unreachable the
+ * reader still gets local shapes rather than an error, but `registries` records
+ * that the fleet leg was not read — otherwise a 16-shape answer is
+ * indistinguishable from a healthy one, which is the same trap as reading an
+ * empty gap list as "no gaps".
+ */
+const SHAPES_TIMEOUT_MS = 10_000;
 
-// /registry/shapes is keyless upstream (discovery's auth middleware exempts it),
-// but the key is injected anyway — harmless there, and one code path is one
-// thing to get right.
-proxyRouter.get("/api/discovery/shapes", async (c) =>
-  passthrough({
-    url: `${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/registry/shapes`,
-    method: "GET",
-    origin: c.req.header("Origin"),
-  }),
-);
+async function readShapesFrom(base: string): Promise<readonly string[] | null> {
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, "")}/registry/shapes`, {
+      headers: upstreamHeaders(false),
+      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => null)) as null | { shapes?: unknown };
+    if (!Array.isArray(body?.shapes)) return null;
+    return body.shapes.filter((s): s is string => typeof s === "string");
+  } catch {
+    return null;
+  }
+}
+
+proxyRouter.get("/api/discovery/shapes", async (c) => {
+  const local = DISCOVERY_ENDPOINT.replace(/\/+$/, "");
+  const fleet = goalShapeResolutionEndpoint();
+
+  // On an unfederated substrate both resolve to the same base; read it once.
+  const legs: Array<{ name: string; base: string }> =
+    fleet === local
+      ? [{ name: "local", base: local }]
+      : [
+          { name: "local", base: local },
+          { name: "fleet", base: fleet },
+        ];
+
+  const answers = await Promise.all(legs.map((leg) => readShapesFrom(leg.base)));
+
+  const union = new Set<string>();
+  const registries = legs.map((leg, i) => {
+    const shapes = answers[i];
+    if (shapes) for (const s of shapes) union.add(s);
+    return { registry: leg.name, ok: shapes !== null, count: shapes?.length ?? 0 };
+  });
+
+  // Registry names only — never the resolved URL, which is upstream detail the
+  // browser has no use for.
+  if (registries.every((r) => !r.ok)) {
+    return new Response(JSON.stringify({ error: "shape vocabulary unavailable", registries }), {
+      status: 502,
+      headers: { "Content-Type": "application/json", ...corsHeaders(c.req.header("Origin")) },
+    });
+  }
+
+  return new Response(JSON.stringify({ shapes: [...union].sort(), registries }), {
+    status: 200,
+    headers: { "Content-Type": "application/json", ...corsHeaders(c.req.header("Origin")) },
+  });
+});
+
+/**
+ * Capability lookups must ask the registry that ADVERTISED the shape.
+ *
+ * This is the other half of the union above, and skipping it would have made
+ * the surface less honest rather than more useful. Chips are derived from the
+ * union but verified here; pointed at the local registry alone, every
+ * hub-derived chip resolves to zero producers, renders dashed, and claims in
+ * its tooltip that "discovery confirmed no live producer" — a confident false
+ * negative on essentially every chip on screen, laundered through the exact
+ * three-state mechanism that exists to keep "unknown" from being reported as
+ * "absent".
+ *
+ * ★ THE POINTER TYPE IS A SAFETY BOUNDARY, NOT A DETAIL. `POST /resolve` with
+ * an ordinary shape EXECUTES that shape. A `vesselCapability` pointer asks who
+ * could serve it and runs nothing. So the fan-out to the hub is allowed ONLY
+ * for `vesselCapability`: anything else stays local, where this surface already
+ * has a relationship, rather than becoming a way for a page to trigger work on
+ * the hub through a route named "resolve".
+ */
+function isCapabilityPointer(rawBody: string): boolean {
+  try {
+    const parsed = JSON.parse(rawBody) as { pointer?: { type?: unknown } };
+    return parsed?.pointer?.type === "vesselCapability";
+  } catch {
+    return false;
+  }
+}
+
+/** A resolve attempt, buffered so the winning upstream's body can be replayed. */
+async function tryResolve(
+  base: string,
+  rawBody: string,
+): Promise<{ status: number; text: string; producers: number } | null> {
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, "")}/resolve`, {
+      method: "POST",
+      headers: upstreamHeaders(true),
+      body: rawBody,
+      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
+    });
+    const text = await res.text();
+    let producers = 0;
+    try {
+      const j = JSON.parse(text) as {
+        content?: { vessels?: unknown };
+        vessels?: unknown;
+        producers?: unknown;
+      };
+      const list = j?.content?.vessels ?? j?.vessels ?? j?.producers;
+      if (Array.isArray(list)) producers = list.length;
+    } catch {
+      /* non-JSON upstream — treat as zero producers, still replayable */
+    }
+    return { status: res.status, text, producers };
+  } catch {
+    return null;
+  }
+}
+
+proxyRouter.post("/api/discovery/resolve", async (c) => {
+  const rawBody = await rawBodyOf(c);
+  const origin = c.req.header("Origin");
+  const local = DISCOVERY_ENDPOINT.replace(/\/+$/, "");
+  const fleet = goalShapeResolutionEndpoint();
+
+  if (!isCapabilityPointer(rawBody) || fleet === local) {
+    return passthrough({ url: `${local}/resolve`, method: "POST", rawBody, origin });
+  }
+
+  // Local first: it answers fastest and owns this vessel's own shapes. Only a
+  // local answer with no producers is worth a second call.
+  const localAnswer = await tryResolve(local, rawBody);
+  if (localAnswer !== null && localAnswer.status === 200 && localAnswer.producers > 0) {
+    return new Response(localAnswer.text, {
+      status: localAnswer.status,
+      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+    });
+  }
+
+  const fleetAnswer = await tryResolve(fleet, rawBody);
+  const winner =
+    fleetAnswer !== null && fleetAnswer.status === 200 && fleetAnswer.producers > 0
+      ? fleetAnswer
+      : (localAnswer ?? fleetAnswer);
+
+  if (winner === null) {
+    return new Response(JSON.stringify({ error: "upstream unreachable" }), {
+      status: 502,
+      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+    });
+  }
+
+  return new Response(winner.text, {
+    status: winner.status,
+    headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+  });
+});
 
 // ─── human verdicts ───────────────────────────────────
 

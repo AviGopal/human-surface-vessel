@@ -123,6 +123,27 @@ export function StarterChips({ onInsert }: { onInsert: (text: string) => void })
 
   const starters = deriveStarters(shapes.data, CHIP_LIMIT);
 
+  // Shapes were read, and none of them can be a human's goal. This is a real
+  // state, not a degraded one: the local registry alone advertises 16 shapes
+  // and all 16 are machine plumbing, so when the fleet leg cannot be read this
+  // is exactly what is left. Saying so beats offering `interactor assertion` as
+  // a suggestion — and beats an unexplained empty row, which reads as breakage.
+  if (starters.length === 0) {
+    return (
+      <>
+        <p className="sf-note sf-muted" style={{ marginTop: "var(--sf-space-3)" }}>
+          The {shapes.data.length} shapes currently visible are all internal plumbing — none of them
+          is something a person would ask for, so there are no suggestions to make. That usually
+          means the wider fleet's vocabulary is not being read right now. Type what you want; the
+          walk does not depend on this list.
+        </p>
+        <div className="sf-chips">
+          <SelfChip onInsert={onInsert} />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="sf-chips">
