@@ -89,6 +89,31 @@ const ACTIVITY_API_ENDPOINT = (
   "http://127.0.0.1:8080"
 ).replace(/\/+$/, "");
 
+/**
+ * This substrate's own federation transport — the ingress that holds the relay
+ * circuit and proxies a shape to the vessel that owns it on a peer substrate.
+ *
+ * It is how a `protocol: "libp2p"` discovery row is actually reached; see
+ * `candidateEndpointsFor`. The transport serves the same
+ * `/v2/impulses/resolve` contract as a local vessel, so nothing else in this
+ * file needs to know whether a shape came from here or over HTTP.
+ *
+ * `??` alone is not enough: these env vars are GENERATED, and a generated file
+ * routinely sets a key to the EMPTY STRING. `??` only replaces null/undefined,
+ * so an empty value would sail through and every libp2p candidate would become
+ * `""` — a fetch that throws instantly and silently drops the p2p path. Treat
+ * blank as unset.
+ */
+function envOr(name: string, fallback: string): string {
+  const raw = process.env[name];
+  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : fallback;
+}
+
+const FEDERATION_INGRESS = envOr(
+  "FEDERATION_TRANSPORT_ENDPOINT",
+  `http://127.0.0.1:${envOr("FED_HEALTH_PORT", "8401")}`,
+).replace(/\/+$/, "");
+
 const GOAL_HOST_CACHE_TTL_MS = 30_000;
 /** Short on purpose: this runs per candidate, so a dead one must not stall the page. */
 const GOAL_HOST_PROBE_TIMEOUT_MS = 5_000;
@@ -221,11 +246,35 @@ async function candidateEndpointsFor(shape: string): Promise<readonly string[]> 
     });
     if (!res.ok) return [];
     const j = (await res.json().catch(() => null)) as null | {
-      content?: { vessels?: Array<{ endpoint?: unknown; public_endpoint?: unknown }> };
+      content?: {
+        vessels?: Array<{ endpoint?: unknown; public_endpoint?: unknown; protocol?: unknown }>;
+      };
     };
     const vessels = Array.isArray(j?.content?.vessels) ? j.content.vessels : [];
-    const out: string[] = [];
+    const p2p: string[] = [];
+    const http: string[] = [];
     for (const v of vessels) {
+      // A libp2p row is NOT an HTTP address, and rewriting it into one invents
+      // an endpoint that cannot exist.
+      //
+      // `reachableFrom` rests on "whatever host answered discovery also
+      // publishes this fleet's mapped ports". That holds for an HTTP vessel and
+      // is false for a federation re-export: measured, `syzygy.host:18401` has
+      // no route while `:18100` on the same host answers 200. So the rewrite
+      // produced an address that HANGS for the caller's full timeout — and
+      // because the lookup "succeeded", the caller burned its whole budget on it
+      // and never reached its own error path. That is the failure this branch
+      // exists to prevent.
+      //
+      // The reachable form of a libp2p row is OUR OWN transport's ingress: it
+      // holds the relay circuit and proxies to the owning vessel on the peer
+      // substrate. Verified on the wire — the same ask that hung for 12s against
+      // the rewritten address returns 200 in ~1.5s here, tagged
+      // "proxied to the owning vessel on the peer substrate over libp2p".
+      if (v?.protocol === "libp2p") {
+        if (FEDERATION_INGRESS) p2p.push(FEDERATION_INGRESS);
+        continue;
+      }
       const candidate = reachableFrom(
         typeof v?.public_endpoint === "string" && v.public_endpoint.length > 0
           ? v.public_endpoint
@@ -235,10 +284,13 @@ async function candidateEndpointsFor(shape: string): Promise<readonly string[]> 
         resolvedAt,
       );
       if (typeof candidate === "string" && candidate.length > 0) {
-        out.push(candidate.replace(/\/+$/, ""));
+        http.push(candidate.replace(/\/+$/, ""));
       }
     }
-    return out;
+    // p2p FIRST, http as the fallback. One ingress entry however many libp2p
+    // rows advertise the shape: they all reach the same local transport, so
+    // repeating it only multiplies the timeout when the circuit is down.
+    return [...new Set([...p2p, ...http])];
   } catch (err) {
     console.warn(
       `[human-surface] discovery lookup for ${shape} failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -627,11 +679,29 @@ proxyRouter.get("/api/gaps", async (c) => {
         method: "POST",
         headers: upstreamHeaders(true),
         body,
-        signal: AbortSignal.timeout(12_000),
+        // 4s, not 12s, and the number is load-bearing. This route tries every
+        // candidate SEQUENTIALLY and then a pinned fallback, so its worst case is
+        // the sum of these — which at 12s each exceeded the server's own
+        // response tolerance. The connection was closed before the handler
+        // returned, so the honest 502 below was UNREACHABLE and a browser saw a
+        // network error instead of "no vessel serving substrateGap answered".
+        // An error path that cannot execute is not a fallback. Keep the total
+        // (candidates + pin) safely under `SERVER_IDLE_TIMEOUT_S`.
+        signal: AbortSignal.timeout(4_000),
       });
       if (!upstream.ok) return null;
-      const j = (await upstream.json()) as { body?: { gaps?: unknown[] } };
-      return Array.isArray(j?.body?.gaps) ? j.body.gaps : null;
+      const j = (await upstream.json()) as {
+        body?: { gaps?: unknown[] };
+        content?: { body?: { gaps?: unknown[] }; error?: unknown };
+      };
+      // The federation transport wraps the owning vessel's answer in `content`
+      // and reports a dead circuit as `content.error` with HTTP 200 — so
+      // `upstream.ok` says nothing about whether we got gaps. Unwrap both
+      // shapes; anything else is "this candidate did not answer".
+      const direct = j?.body?.gaps;
+      if (Array.isArray(direct)) return direct;
+      const proxied = j?.content?.body?.gaps;
+      return Array.isArray(proxied) ? proxied : null;
     } catch {
       return null;
     }

@@ -246,9 +246,24 @@ app.post("/resolve", async (c) => {
   return c.json({ error: `unsupported pointer '${String(type)}' on /resolve` }, 400);
 });
 
+/**
+ * Stated explicitly rather than left to Bun's ~10s default, because a route's
+ * error path is only reachable if the handler outlives its own upstream budget.
+ *
+ * Measured: `/api/gaps` fans out sequentially with a per-candidate timeout. When
+ * those summed past the default, the connection was closed mid-handler and the
+ * caller got an EMPTY REPLY — never the route's honest 502. The bug read as
+ * "the gaps panel is broken" when the panel was correct and unable to speak.
+ *
+ * This is the ceiling; the per-route budgets are what keep handlers under it.
+ * Raising this to paper over a slow route would re-hide exactly that failure.
+ */
+const SERVER_IDLE_TIMEOUT_S = 30;
+
 const server = Bun.serve({
   port: PORT,
   hostname: HOST,
+  idleTimeout: SERVER_IDLE_TIMEOUT_S,
   fetch: app.fetch,
 });
 
