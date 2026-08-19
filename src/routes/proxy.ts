@@ -161,11 +161,10 @@ function reachableFrom(raw: string | undefined, resolvedAt: string): string | un
   let disc: URL;
   try {
     target = new URL(raw);
-    // The rewrite host is whichever registry ANSWERED, not whichever registry
-    // this vessel registers with. On a federated spoke those are two different
-    // machines: goal shapes are resolved on the hub while registration stays
-    // local, so rewriting a hub record's loopback to the local discovery host
-    // would produce an address on the wrong machine entirely.
+    // The rewrite host is whichever registry ANSWERED. That is now always this
+    // vessel's own discovery, so on a spoke it is loopback and the guard below
+    // returns the record untouched — correct, because a row this registry hands
+    // back is either genuinely in-container or already a transport address.
     disc = new URL(resolvedAt);
   } catch {
     return raw;
@@ -177,23 +176,35 @@ function reachableFrom(raw: string | undefined, resolvedAt: string): string | un
 }
 
 /**
- * Where goal shapes are RESOLVED, which is not necessarily where this vessel
- * REGISTERS.
+ * Where goal shapes are RESOLVED: this vessel's own discovery, always.
  *
- * On a federated spoke those must differ. The spoke's own registry does import
- * the hub's vessels, but it hands back their federation-transport addresses; the
- * hub's registry hands back the hub's own goal-host as well, which is the one a
- * spoke can actually reach over HTTP. Registration has to stay local either way,
+ * This vessel is configured the way every vessel is — a discovery endpoint and a
+ * credential — and it resolves every shape through that discovery. Discovery is
+ * the fixed point; reaching past it to a second registry is a second routing
+ * policy compiled into a consumer, which is exactly what the registry exists to
+ * make unnecessary.
+ *
+ * This used to prefer `HUB_DISCOVERY_URL` when set, on the reasoning that "the
+ * spoke's own registry hands back federation-transport addresses, while the hub's
+ * registry hands back the hub's own goal-host, which is the one a spoke can
+ * actually reach over HTTP." The second half of that is false, and measurably so:
+ * the hub serves goal-host over libp2p ONLY — `syzygy.host:18210` answers HTTP 000
+ * from the host and from inside the container alike. So the preferred path
+ * resolved a row that cannot be dialled, `reachableFrom` rewrote its host while
+ * keeping the in-container port, and the browser got a 502 from an address that
+ * never existed. The address the local registry hands back — the federation
+ * transport's ingress, which holds the relay circuit — is the one that works:
+ * verified 200, tagged "proxied to the owning vessel on the peer substrate over
+ * libp2p", both through the transport directly and through local discovery.
+ *
+ * Registration was never the thing in question and is unchanged: it stays local,
  * because registering on the hub publishes this container's private :8310 as a
  * network-wide record nobody outside the container can dial — measured: doing it
  * put exactly that record second in line for every hub-side consumer of
  * `surfaceIntent`.
  */
 function goalShapeResolutionEndpoint(): string {
-  const hub = process.env["HUB_DISCOVERY_URL"];
-  return typeof hub === "string" && hub.trim().length > 0
-    ? hub.trim().replace(/\/+$/, "")
-    : DISCOVERY_ENDPOINT;
+  return DISCOVERY_ENDPOINT.replace(/\/+$/, "");
 }
 
 /**
