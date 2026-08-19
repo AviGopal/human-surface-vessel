@@ -237,13 +237,6 @@ interface GoalHostCandidate {
   readonly base: string;
   /** This row's advertised resolve path — `/resolve` for an ordinary vessel. */
   readonly resolvePath: string;
-  /**
-   * True when this is our own federation ingress standing in for a libp2p row.
-   * That ingress serves shape RESOLUTION only — measured, its router matches
-   * exactly `/health`, `/egress/resolve` and `/v2/impulses/resolve` — so it can
-   * answer the board's reads and cannot accept `/run-goal` or `/executions/:id`.
-   */
-  readonly resolveOnly: boolean;
 }
 
 /** The path an ordinary HTTP vessel serves when its row says nothing. */
@@ -377,7 +370,6 @@ async function candidateEndpointsFor(shape: string): Promise<readonly GoalHostCa
                 ? v.resolve_endpoint
                 : "/v2/impulses/resolve",
             ),
-            resolveOnly: true,
           });
         }
         continue;
@@ -394,7 +386,6 @@ async function candidateEndpointsFor(shape: string): Promise<readonly GoalHostCa
         http.push({
           base: candidate.replace(/\/+$/, ""),
           resolvePath: pathOf(v?.resolve_endpoint),
-          resolveOnly: false,
         });
       }
     }
@@ -430,7 +421,6 @@ async function resolveGoalHostEndpoint(): Promise<GoalHostCandidate> {
     const pinned: GoalHostCandidate = {
       base: process.env["GOAL_HOST_ENDPOINT"].replace(/\/+$/, ""),
       resolvePath: DEFAULT_RESOLVE_PATH,
-      resolveOnly: false,
     };
     cachedGoalHost = { endpoint: pinned, at: now };
     return pinned;
@@ -457,49 +447,82 @@ async function resolveGoalHostEndpoint(): Promise<GoalHostCandidate> {
   return {
     base: GOAL_HOST_ENDPOINT.replace(/\/+$/, ""),
     resolvePath: DEFAULT_RESOLVE_PATH,
-    resolveOnly: false,
   };
 }
 
 /**
- * A goal host that can accept a DISPATCH, not merely answer a resolve.
+ * Make a federated answer indistinguishable from a local one.
  *
- * These are not the same capability and conflating them is how a clear failure
- * becomes a mystery. The federation ingress proxies shape resolution over the
- * relay circuit and serves nothing else — no `/run-goal`, no `/executions/:id`
- * — so a spoke whose only `goal_execution` producer is a federated row can read
- * the board perfectly and still have nowhere to send a goal. Measured on
- * substrate-ui: its local registry's one producer is a libp2p row for a peer
- * spoke, and the hub's own goal-host has no HTTP plane from here at all
- * (`syzygy.host:18210`, `connect=0.000000` — the connection was never made).
+ * EVERYTHING IS AVAILABLE OVER THE P2P CONNECTION, and this is the function
+ * that makes that true for the browser. The relay carries shaped impulses, so a
+ * peer's answer comes back wrapped: `{content: {shape, produced_by, body},
+ * metadata}`. A local vessel answers `{resolved, shape, body}` directly. The UI
+ * checks `resolved === true` and reads `body`, so an unwrapped federated answer
+ * throws in `resolveShape` and the board renders its failure banner — with a
+ * perfectly good answer sitting inside the response it just rejected.
  *
- * So: prefer the resolved candidate when it can actually take a dispatch, else
- * the first HTTP candidate, else say so. Returning the resolve-only ingress
- * here would produce a 404 from an address that is working correctly, which
- * reads as a broken transport and is not one.
+ * That is the second half of "the surface never shows data": fixing the resolve
+ * PATH got the transport to answer, and the answer was still unreadable. The
+ * `/api/gaps` route already unwrapped both envelopes; this route did not, and a
+ * per-route unwrap is how one of them gets forgotten.
+ *
+ * Tolerant on purpose — the wrapper is not uniform. When the owner succeeded,
+ * `content.body` is the payload; when it failed, `content.body` is the owner's
+ * whole `{resolved:false, error}` envelope. Detect which by looking for
+ * `resolved`, and never throw: an unrecognised shape passes through untouched
+ * so a future envelope degrades to today's behaviour instead of a hard failure.
  */
-async function resolveGoalDispatchEndpoint(): Promise<GoalHostCandidate | null> {
-  const primary = await resolveGoalHostEndpoint();
-  if (!primary.resolveOnly) return primary;
-  for (const cand of await candidateEndpointsFor("goal_execution")) {
-    if (!cand.resolveOnly) return cand;
+function unwrapFederated(text: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return text;
   }
-  return null;
+  if (typeof parsed !== "object" || parsed === null) return text;
+  const outer = parsed as Record<string, unknown>;
+  const content = outer["content"];
+  if (typeof content !== "object" || content === null) return text;
+  const c = content as Record<string, unknown>;
+
+  // A peer that reports its failure inside `content` must stay a failure.
+  if (c["error"] !== undefined && c["body"] === undefined) {
+    return JSON.stringify({ resolved: false, shape: c["shape"], error: c["error"] });
+  }
+  const body = c["body"];
+  if (typeof body === "object" && body !== null && "resolved" in (body as object)) {
+    return JSON.stringify(body);
+  }
+  if (body === undefined) return text;
+  return JSON.stringify({ resolved: true, shape: c["shape"], body });
 }
 
-/** The 502 a dispatch gets when nothing reachable can accept one. */
-function noDispatchHost(origin: string | undefined): Response {
-  return new Response(
-    JSON.stringify({
-      error: "no goal host can accept a dispatch",
-      detail:
-        "Shape resolution works — the board can be read. Every producer of " +
-        "goal_execution reachable from here is a federated row, and the " +
-        "federation ingress proxies resolve calls only; it serves no /run-goal. " +
-        "This substrate needs a goal host reachable over HTTP.",
-    }),
-    { status: 502, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } },
-  );
+/**
+ * The dispatch answer the browser expects, from wherever it came.
+ *
+ * Local goal-host answers a `goalDispatchAsync` resolve with the run-goal body
+ * at the top level (`dispatchId`, and the `refused` / `draining` / `coalesced`
+ * flags the UI branches on). Over the relay the same body arrives one level
+ * down, in `content.body`. Lift it so one client code path serves both.
+ */
+function unwrapDispatch(text: string): string {
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    if (typeof parsed !== "object" || parsed === null) return text;
+    if (parsed["dispatchId"] !== undefined) return text;
+    const c = parsed["content"];
+    if (typeof c === "object" && c !== null) {
+      const inner = (c as Record<string, unknown>)["body"];
+      if (typeof inner === "object" && inner !== null && "dispatchId" in (inner as object)) {
+        return JSON.stringify(inner);
+      }
+      const err = (c as Record<string, unknown>)["error"];
+      if (err !== undefined) return JSON.stringify({ error: err });
+    }
+    return text;
+  } catch {
+    return text;
+  }
 }
 
 // ─── passthrough ────────────────────────────────────────────────────────────
@@ -570,37 +593,101 @@ proxyRouter.options("/api/*", (c) =>
 
 // ─── goal-host ──────────────────────────────────────────────────────────────
 
-proxyRouter.post("/api/run-goal", async (c) => {
-  const cand = await resolveGoalDispatchEndpoint();
-  if (!cand) return noDispatchHost(c.req.header("Origin"));
-  return passthrough({
-    url: `${cand.base}/run-goal`,
-    method: "POST",
-    rawBody: await rawBodyOf(c),
-    origin: c.req.header("Origin"),
+/**
+ * One resolve call, buffered so the federated envelope can be unwrapped.
+ *
+ * `passthrough` streams the upstream body, which is right everywhere else and
+ * wrong here: the body is exactly what needs rewriting.
+ */
+async function resolveThrough(
+  cand: GoalHostCandidate,
+  rawBody: string,
+  origin: string | undefined,
+  unwrap: (text: string) => string,
+): Promise<Response> {
+  let upstream: Response;
+  try {
+    upstream = await fetch(resolveUrl(cand), {
+      method: "POST",
+      headers: upstreamHeaders(true),
+      body: rawBody,
+      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
+    });
+  } catch (err) {
+    return new Response(
+      JSON.stringify({
+        error: "upstream unreachable",
+        detail: err instanceof Error ? err.message : String(err),
+      }),
+      { status: 502, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } },
+    );
+  }
+  const text = await upstream.text();
+  return new Response(unwrap(text), {
+    status: upstream.status,
+    headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
   });
+}
+
+/**
+ * DISPATCH IS A SHAPE, which is what makes it work over the relay.
+ *
+ * This used to POST `/run-goal` as plain HTTP, so a spoke whose only
+ * `goal_execution` producer was a federated row had nowhere to send a goal —
+ * the federation ingress carries shaped impulse resolutions and serves no
+ * `/run-goal`. goal-host already advertises `goalDispatchAsync` for exactly
+ * this ("lets a remote vault dispatch a goal over the relay"), and resolving it
+ * travels the same path every other shape travels.
+ *
+ * Verified end to end on a UI-only spoke with no local goal host: resolving
+ * `goalDispatchAsync` through the ingress returned a dispatchId `produced_by
+ * goal-host-vessel@federation-transport-vessel@spoke-cfda39e7`, tagged
+ * "proxied to the owning vessel on the peer substrate over libp2p", and the
+ * walk was then readable back over the same path with `goalWalkState`.
+ *
+ * ★ The shape is advertised as `goalDispatchAsync`. goal-host's handler also
+ * accepts the snake_case `goal_dispatch_async`, but discovery indexes only the
+ * name in its registration — resolving the alias returns "unknown shape: no
+ * local or remote producer", which reads as a missing capability and is a
+ * missing INDEX ENTRY. Use the advertised spelling.
+ */
+proxyRouter.post("/api/run-goal", async (c) => {
+  const cand = await resolveGoalHostEndpoint();
+  const raw = await rawBodyOf(c);
+  let req: Record<string, unknown>;
+  try {
+    req = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    req = {};
+  }
+  return resolveThrough(
+    cand,
+    JSON.stringify({ ...req, type: "goalDispatchAsync" }),
+    c.req.header("Origin"),
+    unwrapDispatch,
+  );
 });
 
 proxyRouter.post("/api/resolve", async (c) => {
-  // The candidate's OWN path. This is the line that was `${base}/resolve`.
+  // The candidate's OWN path, and the answer unwrapped. This is the line that
+  // was `${base}/resolve` with a streamed body.
   const cand = await resolveGoalHostEndpoint();
-  return passthrough({
-    url: resolveUrl(cand),
-    method: "POST",
-    rawBody: await rawBodyOf(c),
-    origin: c.req.header("Origin"),
-  });
+  return resolveThrough(cand, await rawBodyOf(c), c.req.header("Origin"), unwrapFederated);
 });
 
 proxyRouter.get("/api/executions/:dispatchId", async (c) => {
-  const dispatchId = c.req.param("dispatchId");
-  const cand = await resolveGoalDispatchEndpoint();
-  if (!cand) return noDispatchHost(c.req.header("Origin"));
-  return passthrough({
-    url: `${cand.base}/executions/${encodeURIComponent(dispatchId)}`,
-    method: "GET",
-    origin: c.req.header("Origin"),
-  });
+  // `goalWalkState` rather than `GET /executions/:id`, for the same reason
+  // dispatch is a shape: the HTTP route exists only on a directly-reachable
+  // goal host, the shape exists everywhere the relay reaches. (The UI already
+  // reads walk state this way through /api/resolve; this route is kept for
+  // non-browser callers and now behaves identically.)
+  const cand = await resolveGoalHostEndpoint();
+  return resolveThrough(
+    cand,
+    JSON.stringify({ type: "goalWalkState", dispatchId: c.req.param("dispatchId") }),
+    c.req.header("Origin"),
+    unwrapFederated,
+  );
 });
 
 // ─── discovery ──────────────────────────────────────────────────────────────
