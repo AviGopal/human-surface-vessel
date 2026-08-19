@@ -197,6 +197,13 @@ function reachableFrom(raw: string | undefined, resolvedAt: string): string | un
  * verified 200, tagged "proxied to the owning vessel on the peer substrate over
  * libp2p", both through the transport directly and through local discovery.
  *
+ * What the local registry hands back is NOT fixed, and both answers are correct.
+ * On a UI-only spoke it is the federation transport's ingress (a libp2p row). On
+ * a compute spoke it is that substrate's OWN goal-host, registered locally —
+ * measured on substrate-live: `goal-host-vessel`, protocol null,
+ * http://127.0.0.1:8210, healthy. Resolving through discovery is what makes both
+ * cases work without the caller knowing which one it is in, which is the point.
+ *
  * Registration was never the thing in question and is unchanged: it stays local,
  * because registering on the hub publishes this container's private :8310 as a
  * network-wide record nobody outside the container can dial — measured: doing it
