@@ -69,9 +69,28 @@ export async function registerWithDiscovery(): Promise<void> {
       lastStatus = "ok";
       lastError = null;
     } else {
+      // Carry discovery's REASON, not just its status. Re-registration is the
+      // heartbeat and the registry TTL is 5 minutes, so a sustained failure
+      // here drops this vessel out of the registry entirely — measured
+      // 2026-08-19, 37 minutes of bare `discovery register failed: 401` that
+      // said nothing about whether the key was revoked or identity was
+      // unreachable. Discovery now answers with `error.reason` /
+      // `error.detail`; surface them or the operator is back to guessing.
+      //
+      // Tolerant by construction: an older discovery that returns no body, a
+      // non-JSON error page, or a proxy's own 502 all degrade to the bare
+      // status line this replaced, never to a throw inside the heartbeat.
+      const reason = await res
+        .json()
+        .then((b: unknown) => {
+          const e = (b as { error?: { reason?: unknown; detail?: unknown } } | null)?.error;
+          const parts = [e?.reason, e?.detail].filter((p): p is string => typeof p === "string");
+          return parts.length > 0 ? ` (${parts.join(": ")})` : "";
+        })
+        .catch(() => "");
       lastStatus = "failed";
-      lastError = `register returned ${res.status}`;
-      console.warn(`[human-surface] discovery register failed: ${res.status}`);
+      lastError = `register returned ${res.status}${reason}`;
+      console.warn(`[human-surface] discovery register failed: ${res.status}${reason}`);
     }
   } catch (err) {
     lastStatus = "failed";
