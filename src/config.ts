@@ -58,6 +58,10 @@ export const METABOB_API_KEY =
 export const DISCOVERY_SHAPES = [
   "uiPanel_write",
   "uiQuestion_write",
+  // READ side of the escalation channel. uiQuestion_write created panels that
+  // nothing could enumerate, so a gap could ask a human a question and never
+  // learn whether it was answered.
+  "uiQuestion",
   "uiFeedback",
   "interactorObservation",
   "interactorEvent",

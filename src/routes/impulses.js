@@ -1,0 +1,355 @@
+/**
+ * POST /v2/impulses/resolve — the shaped resolver surface.
+ *
+ * HARD INVARIANT: the `switch (pointer.type)` below and `DISCOVERY_SHAPES` in
+ * `../config.ts` must agree EXACTLY. The invariant is made structural rather
+ * than documentary two ways:
+ *   1. every case label is typed as `DiscoveryShape`, so a case naming a shape
+ *      that is not advertised fails to typecheck;
+ *   2. `assertExhaustive` in the default branch fails to typecheck if any
+ *      advertised shape lacks a case.
+ * The 400 body reports `supported_shapes: DISCOVERY_SHAPES` verbatim, so a
+ * caller sees the advertised vocabulary, never a hand-copied list.
+ */
+import { Hono } from "hono";
+import { DISCOVERY_SHAPES, METABOB_API_KEY } from "../config.js";
+import { asVisibility, recordAssertion, recordAttachment, recordEvent, recordFeedback, recordObservation, upsertPanel, getRenderPolicy, writeRenderPolicy, recordSurfaceIntent, } from "../store.js";
+import { GRAMMAR, readSurfaceIntent } from "../surface-intent.js";
+const SHAPE_SET = new Set(DISCOVERY_SHAPES);
+function isDiscoveryShape(t) {
+    return typeof t === "string" && SHAPE_SET.has(t);
+}
+/** Compile-time proof that the switch covers every advertised shape. */
+function assertExhaustive(_never) {
+    /* unreachable at runtime */
+}
+function str(p, key, fallback) {
+    const v = p[key];
+    return typeof v === "string" ? v : fallback;
+}
+function optStr(p, key) {
+    const v = p[key];
+    return typeof v === "string" ? v : undefined;
+}
+function optNum(p, key) {
+    const v = p[key];
+    return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+function optBody(p, key) {
+    const v = p[key];
+    return typeof v === "object" && v !== null && !Array.isArray(v)
+        ? v
+        : undefined;
+}
+function optPosition(p) {
+    const v = optBody(p, "position");
+    if (!v)
+        return undefined;
+    const x = v["x"];
+    const y = v["y"];
+    return typeof x === "number" && typeof y === "number" ? { x, y } : undefined;
+}
+const OBSERVATION_TYPES = ["click", "dwell", "scroll", "focus"];
+const EVENT_TYPES = ["click", "dismiss", "expand", "collapse", "focus", "fetch"];
+const FEEDBACK_KINDS = ["answer", "reaction", "dismiss"];
+function observationType(p) {
+    const v = p["obs_type"] ?? p["observation_type"] ?? p["event_type"] ?? p["kind"];
+    return OBSERVATION_TYPES.includes(String(v))
+        ? v
+        : undefined;
+}
+function eventType(p) {
+    const v = p["event_type"] ?? p["kind"] ?? p["action"];
+    return EVENT_TYPES.includes(String(v))
+        ? v
+        : undefined;
+}
+function feedbackKind(p) {
+    const v = p["kind"] ?? p["feedback_kind"];
+    return FEEDBACK_KINDS.includes(String(v))
+        ? v
+        : "answer";
+}
+function asks(p) {
+    const v = p["asks"];
+    return Array.isArray(v) ? v : undefined;
+}
+const DEV_VESSEL_ENDPOINT = (process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090").replace(/\/+$/, "");
+/**
+ * File a human complaint as a substrateGap, keyed exactly as the substrate's own
+ * legibility detector keys its findings.
+ *
+ * `source: "human_reported"` is the only field that distinguishes it, and it is
+ * load-bearing: the detector is permitted to CLOSE its own findings on
+ * re-observation, and must never close a human's, because the human saw
+ * something the detector's rules cannot express.
+ */
+async function fileFeedbackGap(entry) {
+    const slug = String(entry.panelId)
+        .replace(/[^a-zA-Z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60);
+    const text = typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value);
+    await fetch(`${DEV_VESSEL_ENDPOINT}/v2/impulses/resolve`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(METABOB_API_KEY ? { Authorization: `ApiKey ${METABOB_API_KEY}` } : {}),
+        },
+        body: JSON.stringify({
+            impulse: {
+                pointer: {
+                    type: "substrateGap_write",
+                    gap: {
+                        id: `ui-feedback-${slug}-${entry.complaintKind}`,
+                        category: "ui_legibility",
+                        source: "human_reported",
+                        status: "open",
+                        summary: `UI feedback (${entry.complaintKind}) on ${entry.panelId}: ${text}`,
+                        detected_at: new Date().toISOString(),
+                        classification_metadata: {
+                            surface: "human-surface-vessel",
+                            region: entry.panelId,
+                            kind: entry.complaintKind,
+                            interaction: entry.kind,
+                        },
+                    },
+                },
+            },
+        }),
+        signal: AbortSignal.timeout(8_000),
+    });
+}
+export const impulsesRouter = new Hono();
+impulsesRouter.post("/v2/impulses/resolve", async (c) => {
+    const body = (await c.req.json().catch(() => null));
+    // Accept both envelopes the fleet uses.
+    const pointer = body?.impulse?.pointer ?? body?.pointer ?? {};
+    const type = pointer["type"];
+    if (!isDiscoveryShape(type)) {
+        return c.json({
+            resolved: false,
+            success: false,
+            error: `unknown shape '${type === undefined ? "undefined" : String(type)}'`,
+            supported_shapes: DISCOVERY_SHAPES,
+        }, 400);
+    }
+    switch (type) {
+        case "uiPanel_write":
+        case "uiQuestion_write": {
+            const panel = upsertPanel({
+                id: str(pointer, "id", `panel-${Date.now()}`),
+                title: str(pointer, "title", "Untitled"),
+                body: str(pointer, "body", ""),
+                kind: str(pointer, "kind", type === "uiQuestion_write" ? "question" : "info"),
+                importance: str(pointer, "importance", "medium"),
+                asks: asks(pointer),
+                visibility: asVisibility(pointer["visibility"], "public"),
+            });
+            return c.json({ resolved: true, success: true, shape: type, body: panel });
+        }
+        case "uiFeedback": {
+            const panelId = optStr(pointer, "panel_id") ?? optStr(pointer, "panelId");
+            if (!panelId) {
+                return c.json({ resolved: false, success: false, shape: type, error: "panel_id required" }, 400);
+            }
+            const entry = recordFeedback({
+                panelId,
+                askId: optStr(pointer, "ask_id") ?? optStr(pointer, "askId"),
+                value: pointer["value"],
+                kind: feedbackKind(pointer),
+                visibility: asVisibility(pointer["visibility"], "public"),
+            });
+            // ONE FUNNEL. A human complaint about this surface is filed into the SAME
+            // keyspace the substrate's own `ui_legibility_scan` files into —
+            // `ui-feedback-<region>-<kind>` — differing only in `source`. That is the
+            // whole point of the shared key: a detector that files into its own
+            // private list can never be compared against what humans actually notice,
+            // and agreement or disagreement between the two is the only signal that
+            // says whether the detector's rules match the thing people complain about.
+            //
+            // Fire-and-forget: a gap-store outage must not lose the complaint, and the
+            // in-memory record above has already succeeded.
+            // The complaint CATEGORY is distinct from the store's interaction enum.
+            // `Feedback.kind` is answer|reaction|dismiss — what the human DID with an
+            // ask. A complaint category is hard_to_see|hard_to_understand|wrong — what
+            // is WRONG. Collapsing them keyed every complaint about a region as
+            // `...-answer`, so two different problems with the same region collided on
+            // one gap id and the second silently overwrote the first.
+            const complaintKind = optStr(pointer, "complaint_kind") ?? entry.kind;
+            void fileFeedbackGap({ ...entry, complaintKind }).catch(() => { });
+            return c.json({ resolved: true, success: true, shape: type, body: entry });
+        }
+        case "interactorObservation": {
+            const obsType = observationType(pointer);
+            if (!obsType) {
+                return c.json({
+                    resolved: false,
+                    success: false,
+                    shape: type,
+                    error: `obs_type required, one of ${OBSERVATION_TYPES.join(", ")}`,
+                }, 400);
+            }
+            const entry = recordObservation({
+                type: obsType,
+                panelId: optStr(pointer, "panel_id") ?? optStr(pointer, "panelId"),
+                askId: optStr(pointer, "ask_id") ?? optStr(pointer, "askId"),
+                durationMs: optNum(pointer, "duration_ms") ?? optNum(pointer, "durationMs"),
+                position: optPosition(pointer),
+                visibility: asVisibility(pointer["visibility"], "operator_only"),
+            });
+            return c.json({ resolved: true, success: true, shape: type, body: entry });
+        }
+        case "interactorEvent": {
+            const evtType = eventType(pointer);
+            if (!evtType) {
+                return c.json({
+                    resolved: false,
+                    success: false,
+                    shape: type,
+                    error: `event_type required, one of ${EVENT_TYPES.join(", ")}`,
+                }, 400);
+            }
+            const entry = recordEvent({
+                id: optStr(pointer, "id"),
+                type: evtType,
+                target: optStr(pointer, "target"),
+                panelId: optStr(pointer, "panel_id") ?? optStr(pointer, "panelId"),
+                body: optBody(pointer, "body"),
+                visibility: asVisibility(pointer["visibility"], "public"),
+            });
+            return c.json({ resolved: true, success: true, shape: type, body: entry });
+        }
+        case "interactorAssertion": {
+            const assertionBody = optStr(pointer, "body");
+            if (!assertionBody || assertionBody.trim() === "") {
+                return c.json({ resolved: false, success: false, shape: type, error: "body required" }, 400);
+            }
+            const entry = recordAssertion({
+                id: optStr(pointer, "id"),
+                kind: str(pointer, "kind", "context"),
+                body: assertionBody,
+                visibility: asVisibility(pointer["visibility"], "operator_only"),
+            });
+            return c.json({ resolved: true, success: true, shape: type, body: entry });
+        }
+        case "interactorAttachment": {
+            const ptr = optBody(pointer, "pointer");
+            if (!ptr) {
+                return c.json({ resolved: false, success: false, shape: type, error: "pointer object required" }, 400);
+            }
+            const entry = recordAttachment({
+                id: optStr(pointer, "id"),
+                pointer: ptr,
+                note: optStr(pointer, "note"),
+                visibility: asVisibility(pointer["visibility"], "operator_only"),
+            });
+            return c.json({ resolved: true, success: true, shape: type, body: entry });
+        }
+        case "renderPolicy": {
+            // A READ of the behaviour impulse. The surface fetches this every poll,
+            // which is what makes the render decision a use-time lookup rather than a
+            // build-time constant.
+            return c.json({ resolved: true, success: true, shape: type, body: getRenderPolicy() });
+        }
+        case "renderPolicy_write": {
+            // A WRITE. Anything that can author an impulse — the substrate, a human,
+            // a future selection activity choosing between renderer arms — can change
+            // how the surface renders, without a rebuild and without a deploy.
+            const rawForms = optBody(pointer, "formByShape");
+            const formByShape = rawForms
+                ? Object.fromEntries(Object.entries(rawForms).filter((e) => typeof e[1] === "string"))
+                : undefined;
+            const maxPreview = pointer["maxPreviewChars"];
+            const expanded = pointer["ledgerDefaultExpanded"];
+            const rawTokens = optBody(pointer, "tokenOverrides");
+            const tokenOverrides = rawTokens
+                ? Object.fromEntries(Object.entries(rawTokens).filter((e) => typeof e[1] === "string"))
+                : undefined;
+            const next = writeRenderPolicy({
+                ...(tokenOverrides ? { tokenOverrides } : {}),
+                ...(formByShape ? { formByShape } : {}),
+                ...(typeof maxPreview === "number" || maxPreview === null
+                    ? { maxPreviewChars: maxPreview }
+                    : {}),
+                ...(typeof expanded === "boolean" ? { ledgerDefaultExpanded: expanded } : {}),
+                ...(typeof pointer["note"] === "string" ? { note: pointer["note"] } : {}),
+            });
+            return c.json({ resolved: true, success: true, shape: type, body: next });
+        }
+        case "surfaceIntent": {
+            // Prose in, interface change out. Deterministic parse FIRST: the LLM is
+            // one resolver among many and never the controller, and "make the text
+            // bigger" is a parse, not a reasoning problem.
+            const text = optStr(pointer, "text") ?? optStr(pointer, "instruction") ?? optStr(pointer, "body");
+            if (!text || text.trim() === "") {
+                return c.json({
+                    resolved: false,
+                    success: false,
+                    shape: type,
+                    error: "text required — the instruction to read",
+                    grammar: GRAMMAR,
+                }, 400);
+            }
+            const reading = readSurfaceIntent(text, getRenderPolicy());
+            if (!reading.understood) {
+                // NOT a no-op reported as success. Nothing moved, so nothing is
+                // written, the revision does not advance, and the caller is told
+                // exactly which words were not read and what this parser does read.
+                recordSurfaceIntent({
+                    text,
+                    changedFields: [],
+                    unparsed: reading.unparsed.map((u) => u.text),
+                    appliedRevision: null,
+                });
+                return c.json({
+                    resolved: false,
+                    success: false,
+                    shape: type,
+                    understood: false,
+                    applied: false,
+                    error: "no part of this instruction could be read",
+                    changes: [],
+                    unparsed: reading.unparsed,
+                    grammar: reading.grammar,
+                    policy_revision: getRenderPolicy().revision,
+                }, 422);
+            }
+            // Writes through the SAME shaped impulse every other author uses, so the
+            // surface picks it up on its next read with no rebuild and no deploy.
+            const next = writeRenderPolicy(reading.patch);
+            recordSurfaceIntent({
+                text,
+                changedFields: reading.changes.map((ch) => ch.field),
+                unparsed: reading.unparsed.map((u) => u.text),
+                appliedRevision: next.revision,
+            });
+            return c.json({
+                resolved: true,
+                success: true,
+                shape: type,
+                understood: true,
+                applied: true,
+                // A partial read is stated as partial. Some of what was asked for did
+                // not happen, and that must not be invisible under a green result.
+                partial: reading.unparsed.length > 0,
+                changes: reading.changes,
+                unparsed: reading.unparsed,
+                ...(reading.unparsed.length > 0 ? { grammar: reading.grammar } : {}),
+                body: next,
+            });
+        }
+        default:
+            // If this line stops compiling, DISCOVERY_SHAPES gained a shape with no
+            // case above — the invariant, enforced by the typechecker.
+            assertExhaustive(type);
+            return c.json({
+                resolved: false,
+                success: false,
+                error: `unhandled shape '${String(type)}'`,
+                supported_shapes: DISCOVERY_SHAPES,
+            }, 400);
+    }
+});
+export default impulsesRouter;
+//# sourceMappingURL=impulses.js.map

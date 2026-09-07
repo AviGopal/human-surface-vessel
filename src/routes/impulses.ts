@@ -22,6 +22,8 @@ import {
   recordFeedback,
   recordObservation,
   upsertPanel,
+  listPanels,
+  recentFeedback,
   type Ask,
   type InteractorEvent,
   type Observation,
@@ -197,6 +199,30 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         visibility: asVisibility(pointer["visibility"], "public"),
       });
       return c.json({ resolved: true, success: true, shape: type, body: panel });
+    }
+
+    case "uiQuestion": {
+      // Join each question panel to the answers recorded against it, so a caller
+      // can distinguish an UNANSWERED escalation from an answered one.
+      const answered = recentFeedback(500).filter((f) => f.kind === "answer");
+      const wanted = optStr(pointer, "id") ?? optStr(pointer, "panel_id");
+      const questions = listPanels()
+        .filter((pn) => pn.kind === "question")
+        .filter((pn) => (wanted ? pn.id === wanted : true))
+        .map((pn) => {
+          const mine = answered.filter((f) => f.panelId === pn.id);
+          return { ...pn, answers: mine, answered: mine.length > 0 };
+        });
+      return c.json({
+        resolved: true,
+        success: true,
+        shape: type,
+        body: {
+          questions,
+          total: questions.length,
+          unanswered: questions.filter((q) => !q.answered).length,
+        },
+      });
     }
 
     case "uiFeedback": {
