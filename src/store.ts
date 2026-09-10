@@ -17,6 +17,8 @@
  * No persistence — a restart clears every store.
  */
 
+import { readFileSync } from "fs";
+
 export type AskType = "text" | "choice" | "number";
 export type Visibility = "public" | "operator_only";
 
@@ -159,11 +161,36 @@ export function recordFeedback(
   return entry;
 }
 
-import { readFileSync } from 'fs';
-
 const hydratedFeedbackIds = new Set<string>(); // Keep track of hydrated feedback IDs
 
 function hydrateFeedbackFromLog(): void {
+    const hydratedFeedbackIds = new Set<string>(); // Keep track of hydrated feedback IDs
+    try {
+        const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
+        const data = readFileSync(filePath, 'utf8');
+        for (const line of data.trim().split('\n')) {
+            const feedbackEntry: Feedback = JSON.parse(line);
+            if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
+                feedback.push(feedbackEntry);
+                hydratedFeedbackIds.add(feedbackEntry.id);
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to hydrate feedback from log:', error);
+    }
+    try {
+        const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
+        const data = readFileSync(filePath, 'utf8');
+        for (const line of data.trim().split('\n')) {
+            const feedbackEntry: Feedback = JSON.parse(line);
+            if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
+                feedback.push(feedbackEntry);
+                hydratedFeedbackIds.add(feedbackEntry.id);
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to hydrate feedback from log:', error);
+    }
   try {
     const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
     const data = readFileSync(filePath, 'utf8');
@@ -180,7 +207,28 @@ function hydrateFeedbackFromLog(): void {
 }
 // Hydrate feedback only once on startup.
 hydrateFeedbackFromLog();
+hydrateFeedbackFromLog();
+function hydrateFeedbackFromLog(): void {
+    const hydratedFeedbackIds = new Set<string>();
+    try {
+        const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
+        const data = readFileSync(filePath, 'utf8');
+        for (const line of data.trim().split('\n')) {
+            const feedbackEntry: Feedback = JSON.parse(line);
+            if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
+                feedback.push(feedbackEntry);
+                hydratedFeedbackIds.add(feedbackEntry.id);
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to hydrate feedback from log:', error);
+    }
+}
+hydrateFeedbackFromLog();
+
 export function recentFeedback(limit = 50): Feedback[] {
+  // Hydrate feedback only once on startup.
+  hydrateFeedbackFromLog();
   return feedback.slice(-limit).reverse();
 }
 
