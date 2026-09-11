@@ -164,49 +164,34 @@ export function recordFeedback(
 const hydratedFeedbackIds = new Set<string>(); // Keep track of hydrated feedback IDs
 
 function hydrateFeedbackFromLog(): void {
-    const hydratedFeedbackIds = new Set<string>(); // Keep track of hydrated feedback IDs
-    try {
-        const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
-        const data = readFileSync(filePath, 'utf8');
-        for (const line of data.trim().split('\n')) {
-            const feedbackEntry: Feedback = JSON.parse(line);
-            if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
-                feedback.push(feedbackEntry);
-                hydratedFeedbackIds.add(feedbackEntry.id);
-            }
-        }
-    } catch (error) {
-        console.warn('Failed to hydrate feedback from log:', error);
-    }
-    try {
-        const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
-        const data = readFileSync(filePath, 'utf8');
-        for (const line of data.trim().split('\n')) {
-            const feedbackEntry: Feedback = JSON.parse(line);
-            if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
-                feedback.push(feedbackEntry);
-                hydratedFeedbackIds.add(feedbackEntry.id);
-            }
-        }
-    } catch (error) {
-        console.warn('Failed to hydrate feedback from log:', error);
-    }
   try {
     const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
     const data = readFileSync(filePath, 'utf8');
     for (const line of data.trim().split('\n')) {
-      const feedbackEntry: Feedback = JSON.parse(line);
-      if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
-        feedback.push(feedbackEntry);
-        hydratedFeedbackIds.add(feedbackEntry.id);
+      if (line.length === 0) continue; // Skip empty lines
+      try {
+        const feedbackEntry: Feedback = JSON.parse(line);
+        // Only add if not already present to avoid duplicates from previous runs
+        if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
+          feedback.push(feedbackEntry);
+          hydratedFeedbackIds.add(feedbackEntry.id);
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse feedback log line:', line, parseError);
       }
     }
   } catch (error) {
-    console.warn('Failed to hydrate feedback from log:', error);
+    // It's okay if the file doesn't exist or is unreadable initially
+    // as it might be created later. Only warn for other errors.
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      console.info('Feedback log file not found, starting fresh.');
+    } else {
+      console.warn('Failed to hydrate feedback from log:', error);
+    }
   }
 }
-// Hydrate feedback only once on startup.
-hydrateFeedbackFromLog();
+
+// Invoke at module scope to hydrate feedback on startup.
 hydrateFeedbackFromLog();
 function hydrateFeedbackFromLog(): void {
     const hydratedFeedbackIds = new Set<string>();
@@ -227,6 +212,9 @@ function hydrateFeedbackFromLog(): void {
 hydrateFeedbackFromLog();
 
 export function recentFeedback(limit = 50): Feedback[] {
+  // Ensure feedback is sorted by receivedAt descending, then slice for recent.
+  return [...feedback].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, limit);
+}
   // Hydrate feedback only once on startup.
   hydrateFeedbackFromLog();
   return feedback.slice(-limit).reverse();
