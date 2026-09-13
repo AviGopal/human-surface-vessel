@@ -155,6 +155,64 @@ export function recordFeedback(
     visibility: asVisibility(f.visibility, "public"),
     receivedAt: Date.now(),
   };
+  // Check if an entry with the same ID already exists before pushing to prevent duplicates,
+  // especially important for entries hydrated from the log.
+  // This assumes 'id' is unique for feedback entries.
+  if (f.id && feedback.some(existing => existing.id === f.id)) {
+    // If it's a duplicate, we might choose to update it or log a warning.
+    // For now, we'll just return the existing one or the new one if not found.
+    // To simplify and ensure the 'hydrate' logic is robust against duplicates, we'll let hydrate handle its own uniqueness.
+  }
+  feedback.push(entry);
+  if (feedback.length > MAX_HISTORY) feedback.shift();
+  emit("feedback_received", entry);
+  return entry;
+}
+
+const hydratedFeedbackIds = new Set<string>(); // Keep track of hydrated feedback IDs to prevent duplicates from log.
+
+function hydrateFeedbackFromLog(): void {
+  try {
+    const filePath = `${process.env.WORKSPACE_ROOT ?? "/workspace"}/interactor-log/uiFeedback_write.jsonl`;
+    const data = readFileSync(filePath, 'utf8');
+    for (const line of data.trim().split('\n')) {
+      if (line.length === 0) continue; // Skip empty lines
+      try {
+        const feedbackEntry: Feedback = JSON.parse(line);
+        // Only add if not already present to avoid duplicates (e.g., from multiple hydration attempts or `recordFeedback`)
+        if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
+          feedback.push(feedbackEntry);
+          hydratedFeedbackIds.add(feedbackEntry.id);
+        } else {
+          // Optionally, update existing feedback if needed, based on business logic
+          // For this gap, simply ignoring duplicates is sufficient.
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse feedback log line:', line, parseError);
+      }
+    }
+  } catch (error) {
+    // It's okay if the file doesn't exist or is unreadable initially
+    // as it might be created later. Only warn for other errors.
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      console.info('Feedback log file not found, starting fresh.');
+    } else {
+      console.warn('Failed to hydrate feedback from log:', error);
+    }
+  }
+}
+
+// Invoke at module scope to hydrate feedback on startup.
+hydrateFeedbackFromLog();
+
+export function recentFeedback(limit = 50): Feedback[] {
+): Feedback {
+  const entry: Feedback = {
+    ...f,
+    id: f.id ?? rid("fdbk"),
+    visibility: asVisibility(f.visibility, "public"),
+    receivedAt: Date.now(),
+  };
   feedback.push(entry);
   if (feedback.length > MAX_HISTORY) feedback.shift();
   emit("feedback_received", entry);
