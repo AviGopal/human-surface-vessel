@@ -16,6 +16,7 @@
  *
  * No persistence — a restart clears every store.
  */
+import { readFileSync } from "fs";
 const panels = new Map();
 const feedback = [];
 const observations = [];
@@ -65,16 +66,135 @@ export function listPanels() {
 export function recordFeedback(f) {
     const entry = {
         ...f,
+        id: f.id ?? rid("fdbk"),
         visibility: asVisibility(f.visibility, "public"),
         receivedAt: Date.now(),
     };
+    // Check if an entry with the same ID already exists before pushing to prevent duplicates,
+    // especially important for entries hydrated from the log.
+    // This assumes 'id' is unique for feedback entries.
+    if (f.id && feedback.some(existing => existing.id === f.id)) {
+        // If it's a duplicate, we might choose to update it or log a warning.
+        // For now, we'll just return the existing one or the new one if not found.
+        // To simplify and ensure the 'hydrate' logic is robust against duplicates, we'll let hydrate handle its own uniqueness.
+    }
     feedback.push(entry);
     if (feedback.length > MAX_HISTORY)
         feedback.shift();
     emit("feedback_received", entry);
     return entry;
 }
+const hydratedFeedbackIds = new Set(); // Keep track of hydrated feedback IDs to prevent duplicates from log.
+function hydrateFeedbackFromLog() {
+    try {
+        const filePath = `${process.env.WORKSPACE_ROOT ?? "/workspace"}/interactor-log/uiFeedback_write.jsonl`;
+        const data = readFileSync(filePath, 'utf8');
+        for (const line of data.trim().split('\n')) {
+            if (line.length === 0)
+                continue; // Skip empty lines
+            try {
+                const feedbackEntry = JSON.parse(line);
+                // Only add if not already present to avoid duplicates (e.g., from multiple hydration attempts or `recordFeedback`)
+                if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
+                    feedback.push(feedbackEntry);
+                    hydratedFeedbackIds.add(feedbackEntry.id);
+                }
+                else {
+                    // Optionally, update existing feedback if needed, based on business logic
+                    // For this gap, simply ignoring duplicates is sufficient.
+                }
+            }
+            catch (parseError) {
+                console.warn('Failed to parse feedback log line:', line, parseError);
+            }
+        }
+    }
+    catch (error) {
+        // It's okay if the file doesn't exist or is unreadable initially
+        // as it might be created later. Only warn for other errors.
+        if (error instanceof Error && error.code === 'ENOENT') {
+            console.info('Feedback log file not found, starting fresh.');
+        }
+        else {
+            console.warn('Failed to hydrate feedback from log:', error);
+        }
+    }
+}
+// Invoke at module scope to hydrate feedback on startup.
+hydrateFeedbackFromLog();
 export function recentFeedback(limit = 50) {
+    Feedback;
+    {
+        const entry = {
+            ...f,
+            id: f.id ?? rid("fdbk"),
+            visibility: asVisibility(f.visibility, "public"),
+            receivedAt: Date.now(),
+        };
+        feedback.push(entry);
+        if (feedback.length > MAX_HISTORY)
+            feedback.shift();
+        emit("feedback_received", entry);
+        return entry;
+    }
+    const hydratedFeedbackIds = new Set(); // Keep track of hydrated feedback IDs
+    function hydrateFeedbackFromLog() {
+        try {
+            const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
+            const data = readFileSync(filePath, 'utf8');
+            for (const line of data.trim().split('\n')) {
+                if (line.length === 0)
+                    continue; // Skip empty lines
+                try {
+                    const feedbackEntry = JSON.parse(line);
+                    // Only add if not already present to avoid duplicates from previous runs
+                    if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
+                        feedback.push(feedbackEntry);
+                        hydratedFeedbackIds.add(feedbackEntry.id);
+                    }
+                }
+                catch (parseError) {
+                    console.warn('Failed to parse feedback log line:', line, parseError);
+                }
+            }
+        }
+        catch (error) {
+            // It's okay if the file doesn't exist or is unreadable initially
+            // as it might be created later. Only warn for other errors.
+            if (error instanceof Error && error.code === 'ENOENT') {
+                console.info('Feedback log file not found, starting fresh.');
+            }
+            else {
+                console.warn('Failed to hydrate feedback from log:', error);
+            }
+        }
+    }
+    // Invoke at module scope to hydrate feedback on startup.
+    hydrateFeedbackFromLog();
+    function hydrateFeedbackFromLog() {
+        const hydratedFeedbackIds = new Set();
+        try {
+            const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
+            const data = readFileSync(filePath, 'utf8');
+            for (const line of data.trim().split('\n')) {
+                const feedbackEntry = JSON.parse(line);
+                if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
+                    feedback.push(feedbackEntry);
+                    hydratedFeedbackIds.add(feedbackEntry.id);
+                }
+            }
+        }
+        catch (error) {
+            console.warn('Failed to hydrate feedback from log:', error);
+        }
+    }
+    hydrateFeedbackFromLog();
+    export function recentFeedback(limit = 50) {
+        // Ensure feedback is sorted by receivedAt descending, then slice for recent.
+        return [...feedback].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, limit);
+    }
+    // Hydrate feedback only once on startup.
+    hydrateFeedbackFromLog();
     return feedback.slice(-limit).reverse();
 }
 export function recordObservation(o) {

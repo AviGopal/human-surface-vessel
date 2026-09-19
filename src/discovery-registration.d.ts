@@ -22,7 +22,7 @@ export declare const REGISTRATION_PAYLOAD: {
     readonly vesselId: string;
     readonly name: "human-surface-vessel";
     readonly endpoint: string;
-    readonly shapes: readonly ["uiPanel_write", "uiQuestion_write", "uiFeedback", "interactorObservation", "interactorEvent", "interactorAssertion", "interactorAttachment", "renderPolicy", "renderPolicy_write", "surfaceIntent"];
+    readonly shapes: readonly ["uiPanel_write", "uiQuestion_write", "uiQuestion", "uiFeedback", "interactorObservation", "interactorEvent", "interactorAssertion", "interactorAttachment", "renderPolicy", "renderPolicy_write", "surfaceIntent"];
     readonly resolve_endpoint: `${string}/v2/impulses/resolve`;
     readonly resolve_request_format: "pointer";
     readonly auth_scheme: "ApiKey";

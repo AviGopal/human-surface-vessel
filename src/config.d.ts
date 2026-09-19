@@ -36,7 +36,7 @@ export declare const METABOB_API_KEY: string;
  * `src/routes/impulses.ts` must agree exactly. The switch imports this array
  * and reports it verbatim in its 400 body, so the two cannot drift silently.
  */
-export declare const DISCOVERY_SHAPES: readonly ["uiPanel_write", "uiQuestion_write", "uiFeedback", "interactorObservation", "interactorEvent", "interactorAssertion", "interactorAttachment", "renderPolicy", "renderPolicy_write", "surfaceIntent"];
+export declare const DISCOVERY_SHAPES: readonly ["uiPanel_write", "uiQuestion_write", "uiQuestion", "uiFeedback", "interactorObservation", "interactorEvent", "interactorAssertion", "interactorAttachment", "renderPolicy", "renderPolicy_write", "surfaceIntent"];
 export type DiscoveryShape = (typeof DISCOVERY_SHAPES)[number];
 /** Loopback-safe self endpoint used in the registration payload. */
 export declare const SELF_ENDPOINT: string;
@@ -50,7 +50,7 @@ export declare const config: Readonly<{
     GOAL_HOST_ENDPOINT: string;
     SELF_ENDPOINT: string;
     RESOLVE_PATH: "/v2/impulses/resolve";
-    DISCOVERY_SHAPES: readonly ["uiPanel_write", "uiQuestion_write", "uiFeedback", "interactorObservation", "interactorEvent", "interactorAssertion", "interactorAttachment", "renderPolicy", "renderPolicy_write", "surfaceIntent"];
+    DISCOVERY_SHAPES: readonly ["uiPanel_write", "uiQuestion_write", "uiQuestion", "uiFeedback", "interactorObservation", "interactorEvent", "interactorAssertion", "interactorAttachment", "renderPolicy", "renderPolicy_write", "surfaceIntent"];
 }>;
 export default config;
 //# sourceMappingURL=config.d.ts.map

@@ -13,7 +13,7 @@
  */
 import { Hono } from "hono";
 import { DISCOVERY_SHAPES, METABOB_API_KEY } from "../config.js";
-import { asVisibility, recordAssertion, recordAttachment, recordEvent, recordFeedback, recordObservation, upsertPanel, getRenderPolicy, writeRenderPolicy, recordSurfaceIntent, } from "../store.js";
+import { asVisibility, recordAssertion, recordAttachment, recordEvent, recordFeedback, recordObservation, upsertPanel, listPanels, recentFeedback, getRenderPolicy, writeRenderPolicy, recordSurfaceIntent, } from "../store.js";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.js";
 const SHAPE_SET = new Set(DISCOVERY_SHAPES);
 function isDiscoveryShape(t) {
@@ -147,6 +147,29 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
                 visibility: asVisibility(pointer["visibility"], "public"),
             });
             return c.json({ resolved: true, success: true, shape: type, body: panel });
+        }
+        case "uiQuestion": {
+            // Join each question panel to the answers recorded against it, so a caller
+            // can distinguish an UNANSWERED escalation from an answered one.
+            const answered = recentFeedback(500).filter((f) => f.kind === "answer");
+            const wanted = optStr(pointer, "id") ?? optStr(pointer, "panel_id");
+            const questions = listPanels()
+                .filter((pn) => pn.kind === "question")
+                .filter((pn) => (wanted ? pn.id === wanted : true))
+                .map((pn) => {
+                const mine = answered.filter((f) => f.panelId === pn.id);
+                return { ...pn, answers: mine, answered: mine.length > 0 };
+            });
+            return c.json({
+                resolved: true,
+                success: true,
+                shape: type,
+                body: {
+                    questions,
+                    total: questions.length,
+                    unanswered: questions.filter((q) => !q.answered).length,
+                },
+            });
         }
         case "uiFeedback": {
             const panelId = optStr(pointer, "panel_id") ?? optStr(pointer, "panelId");

@@ -11,6 +11,7 @@
  * The 400 body reports `supported_shapes: DISCOVERY_SHAPES` verbatim, so a
  * caller sees the advertised vocabulary, never a hand-copied list.
  */
-export declare const impulsesRouter: any;
+import { Hono } from "hono";
+export declare const impulsesRouter: Hono<import("hono/types").BlankEnv, import("hono/types").BlankSchema, "/">;
 export default impulsesRouter;
 //# sourceMappingURL=impulses.d.ts.map

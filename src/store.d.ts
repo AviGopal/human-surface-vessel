@@ -36,6 +36,7 @@ export interface Panel {
     updatedAt: number;
 }
 export interface Feedback {
+    id: string;
     panelId: string;
     askId?: string;
     value: unknown;
@@ -90,7 +91,8 @@ export declare function upsertPanel(p: Omit<Panel, "createdAt" | "updatedAt" | "
     visibility?: Visibility;
 }): Panel;
 export declare function listPanels(): Panel[];
-export declare function recordFeedback(f: Omit<Feedback, "receivedAt" | "visibility"> & {
+export declare function recordFeedback(f: Omit<Feedback, "id" | "receivedAt" | "visibility"> & {
+    id?: string;
     visibility?: Visibility;
 }): Feedback;
 export declare function recentFeedback(limit?: number): Feedback[];
