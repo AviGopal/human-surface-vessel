@@ -26,7 +26,7 @@
  * instruction cannot silently delete another's override.
  */
 
-import type { RenderPolicy } from "./store.js";
+import type { RenderPolicy } from "./store.ts";
 
 /* ── the closed form vocabulary ─────────────────────────────────────────────
  * Mirrors `CONTENT_FORMS` in `packages/design-tokens`. The surface dispatches

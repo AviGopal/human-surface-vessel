@@ -26,15 +26,15 @@
  */
 
 import { Hono } from "hono";
-import { getRenderPolicy, recentSurfaceIntents, recordSurfaceIntent, writeRenderPolicy } from "../store.js";
-import { GRAMMAR, readSurfaceIntent } from "../surface-intent.js";
+import { getRenderPolicy, recentSurfaceIntents, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
+import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import {
   DISCOVERY_ENDPOINT,
   GOAL_HOST_ENDPOINT,
   METABOB_API_KEY,
   PORT,
   RESOLVE_PATH,
-} from "../config.js";
+} from "../config.ts";
 
 /** The host maps container ports by convention 8xxx → 18xxx. */
 const HOST_PORT_OFFSET = 10_000;

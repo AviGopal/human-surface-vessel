@@ -21,6 +21,8 @@ const PACKAGES_ROOT = fileURLToPath(new URL("../../../packages", import.meta.url
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
+    // Source wins over legacy checked-in JS siblings.
+    extensions: [".tsx", ".ts", ".mjs", ".js", ".jsx", ".json"],
     alias: {
       "@avigopal/design-tokens": DESIGN_TOKENS,
     },

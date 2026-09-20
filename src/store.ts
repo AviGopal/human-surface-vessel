@@ -14,10 +14,10 @@
  * may flow into the substrate's LLM context; operator_only records stay in the
  * pool and downstream filters must redact them.
  *
- * No persistence — a restart clears every store.
+ * Panels and feedback are journaled before acknowledgement; other records remain ephemeral.
  */
 
-import { readFileSync } from "fs";
+import { appendParticipation, readParticipation } from "./participation-journal.ts";
 
 export type AskType = "text" | "choice" | "number";
 export type Visibility = "public" | "operator_only";
@@ -32,7 +32,8 @@ export interface Ask {
 export interface Panel {
   id: string;
   title: string;
-  body: string;
+  body: unknown;
+  revision: number;
   kind: string;
   importance: string;
   asks?: Ask[];
@@ -44,6 +45,7 @@ export interface Panel {
 export interface Feedback {
   id: string; // Added to uniquely identify feedback entries
   panelId: string;
+  panelRevision?: number;
   askId?: string;
   value: unknown;
   kind: "answer" | "reaction" | "dismiss";
@@ -89,6 +91,8 @@ export interface InteractorAttachment {
 
 const panels = new Map<string, Panel>();
 const feedback: Feedback[] = [];
+// Recent telemetry is bounded; durable response identity and question state must not expire with it.
+const feedbackRecords = new Map<string, Feedback>();
 const observations: Observation[] = [];
 const events: InteractorEvent[] = [];
 const asserts: InteractorAssertion[] = [];
@@ -124,7 +128,7 @@ export function asVisibility(v: unknown, fallback: Visibility): Visibility {
 }
 
 export function upsertPanel(
-  p: Omit<Panel, "createdAt" | "updatedAt" | "visibility"> & {
+  p: Omit<Panel, "createdAt" | "updatedAt" | "visibility" | "revision"> & {
     createdAt?: number;
     visibility?: Visibility;
   },
@@ -133,10 +137,14 @@ export function upsertPanel(
   const existing = panels.get(p.id);
   const stored: Panel = {
     ...p,
+    revision: (existing?.revision ?? 0) + 1,
     visibility: asVisibility(p.visibility, "public"),
     createdAt: existing?.createdAt ?? p.createdAt ?? now,
     updatedAt: now,
   };
+  if (existing && ["title", "body", "kind", "importance", "asks", "visibility"].every(key =>
+    JSON.stringify(existing[key as keyof Panel]) === JSON.stringify(stored[key as keyof Panel]))) return existing;
+  appendParticipation("uiPanel_write", stored);
   panels.set(p.id, stored);
   emit(existing ? "panel_updated" : "panel_added", stored);
   return stored;
@@ -146,136 +154,71 @@ export function listPanels(): Panel[] {
   return Array.from(panels.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+export class ParticipationConflict extends Error {}
+
 export function recordFeedback(
   f: Omit<Feedback, "id" | "receivedAt" | "visibility"> & { id?: string; visibility?: Visibility },
 ): Feedback {
-  const entry: Feedback = {
-    ...f,
-    id: f.id ?? rid("fdbk"),
-    visibility: asVisibility(f.visibility, "public"),
-    receivedAt: Date.now(),
-  };
-  // Check if an entry with the same ID already exists before pushing to prevent duplicates,
-  // especially important for entries hydrated from the log.
-  // This assumes 'id' is unique for feedback entries.
-  if (f.id && feedback.some(existing => existing.id === f.id)) {
-    // If it's a duplicate, we might choose to update it or log a warning.
-    // For now, we'll just return the existing one or the new one if not found.
-    // To simplify and ensure the 'hydrate' logic is robust against duplicates, we'll let hydrate handle its own uniqueness.
+  const visibility = asVisibility(f.visibility, "public");
+  const previous = f.id ? feedbackRecords.get(f.id) : undefined;
+  if (previous) {
+    if (previous.panelId !== f.panelId || previous.panelRevision !== f.panelRevision ||
+        previous.askId !== f.askId || previous.kind !== f.kind || previous.visibility !== visibility ||
+        JSON.stringify(previous.value) !== JSON.stringify(f.value)) {
+      throw new ParticipationConflict("This response id already belongs to a different contribution.");
+    }
+    return previous;
   }
+  if (f.panelRevision !== undefined) {
+    const panel = panels.get(f.panelId);
+    if (!panel || panel.kind !== "question" || panel.revision !== f.panelRevision) {
+      throw new ParticipationConflict("The question changed or is unavailable. Review it before responding; your draft has not been applied.");
+    }
+    if (f.askId !== undefined && !panel.asks?.some(ask => ask.id === f.askId)) {
+      throw new ParticipationConflict("This question no longer contains the requested part.");
+    }
+  }
+  const entry: Feedback = { ...f, id: f.id ?? rid("fdbk"), visibility, receivedAt: Date.now() };
+  appendParticipation("uiFeedback_write", entry);
+  feedbackRecords.set(entry.id, entry);
   feedback.push(entry);
   if (feedback.length > MAX_HISTORY) feedback.shift();
   emit("feedback_received", entry);
   return entry;
 }
 
-const hydratedFeedbackIds = new Set<string>(); // Keep track of hydrated feedback IDs to prevent duplicates from log.
-
-function hydrateFeedbackFromLog(): void {
-  try {
-    const filePath = `${process.env.WORKSPACE_ROOT ?? "/workspace"}/interactor-log/uiFeedback_write.jsonl`;
-    const data = readFileSync(filePath, 'utf8');
-    for (const line of data.trim().split('\n')) {
-      if (line.length === 0) continue; // Skip empty lines
-      try {
-        const feedbackEntry: Feedback = JSON.parse(line);
-        // Only add if not already present to avoid duplicates (e.g., from multiple hydration attempts or `recordFeedback`)
-        if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
-          feedback.push(feedbackEntry);
-          hydratedFeedbackIds.add(feedbackEntry.id);
-        } else {
-          // Optionally, update existing feedback if needed, based on business logic
-          // For this gap, simply ignoring duplicates is sufficient.
-        }
-      } catch (parseError) {
-        console.warn('Failed to parse feedback log line:', line, parseError);
-      }
-    }
-  } catch (error) {
-    // It's okay if the file doesn't exist or is unreadable initially
-    // as it might be created later. Only warn for other errors.
-    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-      console.info('Feedback log file not found, starting fresh.');
-    } else {
-      console.warn('Failed to hydrate feedback from log:', error);
-    }
+// Replay preserves original ids/times and never emits a new interaction.
+// Legacy feedback without a revision remains evidence for the first panel version only.
+for (const raw of readParticipation("uiPanel_write")) {
+  const p = raw as Panel | null;
+  if (p && typeof p.id === "string" && typeof p.title === "string" &&
+      typeof p.kind === "string" && typeof p.createdAt === "number" && typeof p.updatedAt === "number") {
+    panels.set(p.id, { ...p, revision: Number.isInteger(p.revision) && p.revision > 0 ? p.revision : 1 });
+  }
+}
+for (const raw of readParticipation("uiFeedback_write")) {
+  const f = raw as Feedback | null;
+  if (f && typeof f.id === "string" && typeof f.panelId === "string" &&
+      typeof f.receivedAt === "number" && ["answer", "reaction", "dismiss"].includes(f.kind) &&
+      !feedbackRecords.has(f.id)) {
+    feedbackRecords.set(f.id, f);
+    feedback.push(f);
+    if (feedback.length > MAX_HISTORY) feedback.shift();
   }
 }
 
-// Invoke at module scope to hydrate feedback on startup.
-hydrateFeedbackFromLog();
-
 export function recentFeedback(limit = 50): Feedback[] {
-): Feedback {
-  const entry: Feedback = {
-    ...f,
-    id: f.id ?? rid("fdbk"),
-    visibility: asVisibility(f.visibility, "public"),
-    receivedAt: Date.now(),
-  };
-  feedback.push(entry);
-  if (feedback.length > MAX_HISTORY) feedback.shift();
-  emit("feedback_received", entry);
-  return entry;
+  return [...feedback].sort((a, b) => b.receivedAt - a.receivedAt || a.id.localeCompare(b.id)).slice(0, limit);
 }
 
-const hydratedFeedbackIds = new Set<string>(); // Keep track of hydrated feedback IDs
-
-function hydrateFeedbackFromLog(): void {
-  try {
-    const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
-    const data = readFileSync(filePath, 'utf8');
-    for (const line of data.trim().split('\n')) {
-      if (line.length === 0) continue; // Skip empty lines
-      try {
-        const feedbackEntry: Feedback = JSON.parse(line);
-        // Only add if not already present to avoid duplicates from previous runs
-        if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
-          feedback.push(feedbackEntry);
-          hydratedFeedbackIds.add(feedbackEntry.id);
-        }
-      } catch (parseError) {
-        console.warn('Failed to parse feedback log line:', line, parseError);
-      }
-    }
-  } catch (error) {
-    // It's okay if the file doesn't exist or is unreadable initially
-    // as it might be created later. Only warn for other errors.
-    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-      console.info('Feedback log file not found, starting fresh.');
-    } else {
-      console.warn('Failed to hydrate feedback from log:', error);
-    }
-  }
-}
-
-// Invoke at module scope to hydrate feedback on startup.
-hydrateFeedbackFromLog();
-function hydrateFeedbackFromLog(): void {
-    const hydratedFeedbackIds = new Set<string>();
-    try {
-        const filePath = `${process.env.WORKSPACE_ROOT ?? '/workspace'}/interactor-log/uiFeedback_write.jsonl`;
-        const data = readFileSync(filePath, 'utf8');
-        for (const line of data.trim().split('\n')) {
-            const feedbackEntry: Feedback = JSON.parse(line);
-            if (!hydratedFeedbackIds.has(feedbackEntry.id)) {
-                feedback.push(feedbackEntry);
-                hydratedFeedbackIds.add(feedbackEntry.id);
-            }
-        }
-    } catch (error) {
-        console.warn('Failed to hydrate feedback from log:', error);
-    }
-}
-hydrateFeedbackFromLog();
-
-export function recentFeedback(limit = 50): Feedback[] {
-  // Ensure feedback is sorted by receivedAt descending, then slice for recent.
-  return [...feedback].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, limit);
-}
-  // Hydrate feedback only once on startup.
-  hydrateFeedbackFromLog();
-  return feedback.slice(-limit).reverse();
+export function questionView(panel: Panel) {
+  const responses = [...feedbackRecords.values()].filter(f => f.panelId === panel.id);
+  const current = responses.filter(f => (f.panelRevision ?? 1) === panel.revision);
+  const answers = current.filter(f => f.kind === "answer");
+  const wholeAnswer = answers.some(f => !f.askId);
+  const answered = wholeAnswer || Boolean(panel.asks?.length && panel.asks.every(ask => answers.some(f => f.askId === ask.id)));
+  const declined = current.some(f => f.kind === "dismiss" && !f.askId);
+  return { ...panel, responses, answers, answered, declined };
 }
 
 export function recordObservation(
@@ -391,20 +334,14 @@ export function signatureInputs(): SignatureInputs {
     0,
   );
 
-  const answeredPanels = new Set<string>();
-  const dismissedPanels = new Set<string>();
-  for (const f of feedback) {
-    if (f.kind === "answer") answeredPanels.add(f.panelId);
-    if (f.kind === "dismiss") dismissedPanels.add(f.panelId);
-  }
-
   const ages: number[] = [];
   let panelsOpen = 0;
   for (const p of panels.values()) {
-    const isOpen = !dismissedPanels.has(p.id) && !answeredPanels.has(p.id);
+    const view = questionView(p);
+    const isOpen = !view.declined && !view.answered;
     if (isOpen) panelsOpen += 1;
-    if ((p.asks?.length ?? 0) > 0 && !answeredPanels.has(p.id)) {
-      ages.push(now - p.createdAt);
+    if (isOpen && (p.kind === "question" || (p.asks?.length ?? 0) > 0)) {
+      ages.push(now - p.updatedAt);
     }
   }
   ages.sort((a, b) => a - b);

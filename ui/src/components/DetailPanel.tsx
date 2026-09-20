@@ -127,9 +127,7 @@ export function DetailPanel({ dispatchId }: { dispatchId: string | null }): Reac
         <div className="sf-region-body">
           <p className="sf-empty">
             <strong>No run is open.</strong>
-            Pick a row on the board above and this shows four things, in this order: what was
-            asked, what actually happened, every impulse the run produced, and what you can do
-            next. A run's URL is shareable and survives a reload.
+            Select a run to inspect its outcome, supporting evidence, and next steps.
           </p>
         </div>
       </section>

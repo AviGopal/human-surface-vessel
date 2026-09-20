@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "bun src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --preload ./test/setup.ts ./test/*.test.ts",
+    "test:browser": "bun test/browser-participation.ts"
   },
   "dependencies": {
     "hono": "^4.6.0"

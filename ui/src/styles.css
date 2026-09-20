@@ -13,6 +13,8 @@
  */
 @import "../../../../packages/design-tokens/tokens.css";
 
+.sf-participation-actions { display: flex; flex-wrap: wrap; gap: var(--sf-space-2); }
+
 /* ── token overrides ───────────────────────────────────────────────────────
  *
  * THESE VALUES BELONG IN `packages/design-tokens/tokens.css`. They are
@@ -1366,3 +1368,40 @@ summary {
 .sf-complain-actions { display: flex; align-items: center; gap: var(--sf-space-3); flex-wrap: wrap; }
 .sf-complain-note { font-size: var(--sf-text-sm); color: var(--sf-ink-2); max-width: 60ch; }
 .sf-complain-failed { color: var(--sf-not-reached); }
+
+/* Human participation: invitations stay visible while the current exchange holds still. */
+.sf-participation-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-3); }
+.sf-participation-count { color: var(--sf-ink-2); font-size: var(--sf-text-sm); }
+.sf-participation-updates { font-size: var(--sf-text-sm); }
+.sf-participation-updates .sf-live-controls { margin-top: var(--sf-space-3); }
+.sf-participation-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sf-space-4); padding: var(--sf-space-4) var(--sf-space-6); border-bottom: 1px solid var(--sf-rule); }
+.sf-participation-toolbar p { margin: 0; }
+.sf-participation-empty { padding: var(--sf-space-6); }
+.sf-participation-workspace { display: grid; grid-template-columns: minmax(190px, 25%) minmax(0, 1fr); }
+.sf-question-list { padding: var(--sf-space-3); background: var(--sf-panel-alt); border-right: 1px solid var(--sf-rule); }
+.sf-question-link { display: block; width: 100%; padding: var(--sf-space-4); border: 1px solid transparent; border-radius: var(--sf-radius-md); text-align: left; color: var(--sf-ink-2); background: transparent; cursor: pointer; overflow-wrap: anywhere; }
+.sf-question-link + .sf-question-link { margin-top: var(--sf-space-2); }
+.sf-question-link[aria-current] { background: var(--sf-panel); border-color: var(--sf-rule-strong); color: var(--sf-ink); }
+.sf-question-link:hover { background: var(--sf-accent-soft); }
+.sf-question-link span { display: block; font-weight: 600; line-height: var(--sf-leading-normal); }
+.sf-question-link small { display: block; margin-top: var(--sf-space-2); color: var(--sf-ink-2); }
+.sf-participation-detail { min-width: 0; padding: var(--sf-space-6); }
+.sf-question-card { max-width: 76ch; margin-inline: auto; overflow-wrap: anywhere; }
+.sf-question-eyebrow { font-size: var(--sf-text-xs); color: var(--sf-ink-2); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; margin: 0 0 var(--sf-space-2); }
+.sf-question-card h3 { font-size: var(--sf-text-xl); line-height: var(--sf-leading-tight); font-weight: 600; margin: 0 0 var(--sf-space-5); }
+.sf-question-content { padding-bottom: var(--sf-space-5); margin-bottom: var(--sf-space-5); border-bottom: 1px solid var(--sf-rule); }
+.sf-question-card .sf-label { display: block; margin: var(--sf-space-3) 0 var(--sf-space-2); }
+.sf-question-card .sf-textarea { min-height: 125px; font-size: var(--sf-text-base); line-height: var(--sf-leading-prose); }
+.sf-contribution-options { margin: var(--sf-space-3) 0; font-size: var(--sf-text-sm); }
+.sf-contribution-options summary, .sf-question-history summary { color: var(--sf-ink-2); cursor: pointer; }
+.sf-question-receipt { padding: var(--sf-space-4); margin: var(--sf-space-4) 0; background: var(--sf-panel-alt); border-left: 3px solid var(--sf-accent); font-size: var(--sf-text-sm); }
+.sf-question-receipt p { margin: var(--sf-space-2) 0; }
+.sf-question-history { margin-top: var(--sf-space-6); padding-top: var(--sf-space-4); border-top: 1px solid var(--sf-rule); font-size: var(--sf-text-sm); }
+.sf-question-card :focus-visible, .sf-question-link:focus-visible { outline: 2px solid var(--sf-accent); outline-offset: 3px; }
+@media (max-width: 700px) {
+  .sf-participation-workspace { grid-template-columns: minmax(0, 1fr); }
+  .sf-question-list { border-right: 0; border-bottom: 1px solid var(--sf-rule); }
+  .sf-participation-toolbar { align-items: flex-start; flex-direction: column; padding: var(--sf-space-4); }
+  .sf-participation-detail { padding: var(--sf-space-4); }
+  .sf-question-card .sf-select { max-width: 100%; }
+}

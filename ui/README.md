@@ -1,7 +1,8 @@
 # The do-anything surface
 
-One page, three regions, fixed geometry: **ASK**, **RUNS**, **DETAIL**. None of
-them resizes around its contents.
+One page with **ASK**, **QUESTIONS FOR YOU**, **RUNS**, and **DETAIL**. Questions
+use the vessel's existing shaped participation channel. Arrivals are buffered, and
+a question being answered holds its version until the person reviews an update.
 
 The premise is that a do-anything box adds no capability — it only changes what a
 person can find and what they can trust. So the design work is not in the box; it
@@ -23,8 +24,27 @@ docker run --rm -u "$(id -u):$(id -g)" \
   oven/bun:1 sh -c "bun install && bun run build"
 ```
 
-`bun run build` is `tsc --noEmit && vite build`: the typecheck is part of the
+`bun run build` is `tsc --noEmit && vite build --config vite.config.ts`: the typecheck is part of the
 build, so a type error fails the build rather than shipping.
+
+The explicit config and TypeScript-first resolution prevent legacy checked-in `.js`
+siblings from shadowing the edited source. Host builds also work when Bun and the
+dependencies are available: `bun run build` from this directory.
+
+## Human participation
+
+An activity authors `uiQuestion_write`; the browser reads `GET /api/questions`, which
+resolves `uiQuestion`. Responses go through `POST /api/participation` to `uiFeedback`.
+Questions and responses are journaled before acknowledgement. See the
+[participation contract](../../../docs/architecture/HUMAN_PARTICIPATION.md) for scope,
+retention limits and the distinction between receipt and learning.
+
+From the vessel directory run `bun run test` and `bun run typecheck`. The tests isolate
+their journal directory automatically. Build the UI before running `bun run test:browser`
+from the vessel directory. The optional browser probe uses an installed `playwright`
+module; `PLAYWRIGHT_MODULE` can instead name an existing playwright-core module and
+`CHROMIUM_EXECUTABLE` an existing Chromium binary. It runs a temporary local server,
+never the live vessel, and writes screenshots to `/tmp/substrate-participation-*.png`.
 
 ## What it talks to
 

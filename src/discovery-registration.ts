@@ -27,7 +27,7 @@ import {
   SELF_ENDPOINT,
   VESSEL_ID,
   VESSEL_NAME,
-} from "./config.js";
+} from "./config.ts";
 
 const REREGISTER_INTERVAL_MS = 60_000;
 

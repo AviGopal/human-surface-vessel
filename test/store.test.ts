@@ -16,7 +16,7 @@
 // Importing inside the test keeps that side effect contained and the file self-contained.
 import { describe, expect, test } from "bun:test";
 
-const store = await import("../src/store");
+const store = await import("../src/store.ts");
 
 describe("asVisibility", () => {
   test("passes through the two legal values", () => {

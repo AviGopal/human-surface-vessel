@@ -132,10 +132,7 @@ export function StarterChips({ onInsert }: { onInsert: (text: string) => void })
     return (
       <>
         <p className="sf-note sf-muted" style={{ marginTop: "var(--sf-space-3)" }}>
-          The {shapes.data.length} shapes currently visible are all internal plumbing — none of them
-          is something a person would ask for, so there are no suggestions to make. That usually
-          means the wider fleet's vocabulary is not being read right now. Type what you want; the
-          walk does not depend on this list.
+          No suggestions are available right now. Describe what you want to accomplish in your own words.
         </p>
         <div className="sf-chips">
           <SelfChip onInsert={onInsert} />

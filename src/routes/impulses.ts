@@ -13,7 +13,7 @@
  */
 
 import { Hono } from "hono";
-import { DISCOVERY_SHAPES, METABOB_API_KEY, type DiscoveryShape } from "../config.js";
+import { DISCOVERY_SHAPES, METABOB_API_KEY, type DiscoveryShape } from "../config.ts";
 import {
   asVisibility,
   recordAssertion,
@@ -23,15 +23,16 @@ import {
   recordObservation,
   upsertPanel,
   listPanels,
-  recentFeedback,
+  questionView,
+  ParticipationConflict,
   type Ask,
   type InteractorEvent,
   type Observation,
   getRenderPolicy,
   writeRenderPolicy,
   recordSurfaceIntent,
-} from "../store.js";
-import { GRAMMAR, readSurfaceIntent } from "../surface-intent.js";
+} from "../store.ts";
+import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 
 type Pointer = Record<string, unknown>;
 
@@ -103,7 +104,18 @@ function feedbackKind(p: Pointer): "answer" | "reaction" | "dismiss" {
 
 function asks(p: Pointer): Ask[] | undefined {
   const v = p["asks"];
-  return Array.isArray(v) ? (v as Ask[]) : undefined;
+  if (!Array.isArray(v)) return undefined;
+  const seen = new Set<string>();
+  return v.filter((a): a is Ask => {
+    if (!a || typeof a !== "object" || typeof a.id !== "string" ||
+        typeof a.prompt !== "string" || seen.has(a.id)) return false;
+    seen.add(a.id);
+    return true;
+  }).map(a => ({
+    id: a.id, prompt: a.prompt,
+    type: ["text", "choice", "number"].includes(a.type) ? a.type : "text",
+    ...(Array.isArray(a.choices) ? { choices: a.choices.filter(c => typeof c === "string") } : {}),
+  }));
 }
 
 
@@ -192,7 +204,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const panel = upsertPanel({
         id: str(pointer, "id", `panel-${Date.now()}`),
         title: str(pointer, "title", "Untitled"),
-        body: str(pointer, "body", ""),
+        body: Object.hasOwn(pointer, "body") ? pointer["body"] : "",
         kind: str(pointer, "kind", type === "uiQuestion_write" ? "question" : "info"),
         importance: str(pointer, "importance", "medium"),
         asks: asks(pointer),
@@ -202,17 +214,10 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
     }
 
     case "uiQuestion": {
-      // Join each question panel to the answers recorded against it, so a caller
-      // can distinguish an UNANSWERED escalation from an answered one.
-      const answered = recentFeedback(500).filter((f) => f.kind === "answer");
       const wanted = optStr(pointer, "id") ?? optStr(pointer, "panel_id");
       const questions = listPanels()
-        .filter((pn) => pn.kind === "question")
-        .filter((pn) => (wanted ? pn.id === wanted : true))
-        .map((pn) => {
-          const mine = answered.filter((f) => f.panelId === pn.id);
-          return { ...pn, answers: mine, answered: mine.length > 0 };
-        });
+        .filter(pn => pn.kind === "question" && (!wanted || pn.id === wanted))
+        .map(questionView);
       return c.json({
         resolved: true,
         success: true,
@@ -220,7 +225,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         body: {
           questions,
           total: questions.length,
-          unanswered: questions.filter((q) => !q.answered).length,
+          unanswered: questions.filter((q) => !q.answered && !q.declined).length,
         },
       });
     }
@@ -233,13 +238,23 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           400,
         );
       }
-      const entry = recordFeedback({
+      let entry;
+      try {
+        entry = recordFeedback({
+        id: optStr(pointer, "response_id"),
+        panelRevision: optNum(pointer, "panel_revision"),
         panelId,
         askId: optStr(pointer, "ask_id") ?? optStr(pointer, "askId"),
         value: pointer["value"],
         kind: feedbackKind(pointer),
         visibility: asVisibility(pointer["visibility"], "public"),
       });
+      } catch (error) {
+        if (error instanceof ParticipationConflict) {
+          return c.json({ resolved: false, success: false, error: error.message }, 409);
+        }
+        throw error;
+      }
       // ONE FUNNEL. A human complaint about this surface is filed into the SAME
       // keyspace the substrate's own `ui_legibility_scan` files into —
       // `ui-feedback-<region>-<kind>` — differing only in `source`. That is the
@@ -256,8 +271,9 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       // is WRONG. Collapsing them keyed every complaint about a region as
       // `...-answer`, so two different problems with the same region collided on
       // one gap id and the second silently overwrote the first.
-      const complaintKind = optStr(pointer, "complaint_kind") ?? entry.kind;
-      void fileFeedbackGap({ ...entry, complaintKind }).catch(() => {});
+      const complaintKind = optStr(pointer, "complaint_kind");
+      // Answering or declining a question is not a complaint about the interface.
+      if (complaintKind) void fileFeedbackGap({ ...entry, complaintKind }).catch(() => {});
       return c.json({ resolved: true, success: true, shape: type, body: entry });
     }
 

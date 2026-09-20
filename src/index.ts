@@ -1,5 +1,5 @@
-import { buildUiView } from "./ui-view.js";
-import { getRenderPolicy } from "./store.js";
+import { buildUiView } from "./ui-view.ts";
+import { getRenderPolicy } from "./store.ts";
 /**
  * human-surface-vessel — the substrate's human surface.
  *
@@ -24,14 +24,15 @@ import {
   VESSEL_ID,
   VESSEL_NAME,
   config,
-} from "./config.js";
+} from "./config.ts";
 import {
   deregisterFromDiscovery,
   discoveryStatus,
   startDiscoveryRegistration,
-} from "./discovery-registration.js";
-import { impulsesRouter } from "./routes/impulses.js";
-import { corsHeaders, proxyRouter } from "./routes/proxy.js";
+} from "./discovery-registration.ts";
+import { impulsesRouter } from "./routes/impulses.ts";
+import { participationRouter } from "./routes/participation.ts";
+import { corsHeaders, proxyRouter } from "./routes/proxy.ts";
 import {
   counts,
   listPanels,
@@ -42,7 +43,7 @@ import {
   recentObservations,
   signatureInputs,
   subscribe,
-} from "./store.js";
+} from "./store.ts";
 
 const app = new Hono();
 
@@ -71,6 +72,7 @@ app.get("/shapes", (c) => c.json({ shapes: DISCOVERY_SHAPES }));
 // ─── Routers ────────────────────────────────────────────────────────────────
 
 app.route("/", impulsesRouter);
+app.route("/", participationRouter);
 app.route("/", proxyRouter);
 
 // ─── Local read surface for the UI ──────────────────────────────────────────

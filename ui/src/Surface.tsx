@@ -1,8 +1,6 @@
 /**
- * One page, three regions, fixed geometry. The regions do not resize around
- * their contents — ASK and DETAIL are auto-height but bounded by their own
- * content boxes, and RUNS is pinned to `--sf-live-region-height`, so a run
- * arriving cannot push anything the reader is looking at.
+ * Goals, human participation, runs and evidence share a page. Run arrivals and
+ * question updates are buffered so they do not displace work being inspected.
  */
 
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -11,6 +9,7 @@ import { AskRegion } from "./components/AskRegion";
 import { DetailPanel } from "./components/DetailPanel";
 import { GapStrip } from "./components/GapStrip";
 import { RunsRegion } from "./components/RunsRegion";
+import { ParticipationRegion } from "./components/ParticipationRegion";
 import { useRenderPolicy } from "./api/queries";
 import { useLiveControls } from "./state/liveControls";
 import { useTokenOverrides } from "./lib/useTokenOverrides";
@@ -38,12 +37,11 @@ export function Surface(): ReactNode {
       {/*
         * The document had no `h1` at all, so its heading outline started at
         * `h2: Ask` with nothing above it — a screen reader's heading list had
-        * no root. It is visually hidden rather than rendered because the
-        * geometry is deliberately three regions and no chrome bar; the
-        * outline needs a root, the layout does not need a banner.
+        * no root. A visually hidden title supplies that document outline.
         */}
       <h1 className="sf-visually-hidden">The do-anything surface</h1>
       <AskRegion onDispatched={open} />
+      <ParticipationRegion />
       <RunsRegion selectedDispatchId={selected} onSelect={open} />
       <DetailPanel dispatchId={selected} />
       <GapStrip />
