@@ -1035,6 +1035,56 @@ proxyRouter.post("/api/feedback", async (c) => {
   });
 });
 
+// ─── exposure record (browser write) ────────────────────────────────────────
+
+/**
+ * What the surface actually PUT ON SCREEN, and what the person then did with it.
+ *
+ * The endpoint `ui/src/api/exposure.ts` posts to, wired here rather than left a
+ * 404: the record was already produced by the browser and dropped on the floor,
+ * and a learner with no evidence source can only confirm its own ranking.
+ *
+ * It self-posts the `interactorObservation` SHAPE exactly as /api/feedback
+ * self-posts `uiFeedback`, so a record from the browser travels the same single
+ * path a record from anywhere else does — which is also why the learner's
+ * trigger lives at that one shape case and not here.
+ *
+ * NOT `uiFeedback`, EVER: every record from here is machine-origin by
+ * construction, and that channel is human contributions only (48 machine-written
+ * records polluted the operator-verdict corpus once, and
+ * development-vessel/src/resolvers/interactor-passthrough.ts:72 now refuses
+ * them). Nothing in this route touches it.
+ */
+proxyRouter.post("/api/observations", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
+  if (!body || typeof body["obs_type"] !== "string") {
+    return c.json(
+      { error: "obs_type is required" },
+      400,
+      corsHeaders(c.req.header("Origin")),
+    );
+  }
+  // The pointer is forwarded WHOLE. The shape case names the columns it reads
+  // and persists the remainder verbatim, so a field this route has never heard
+  // of reaches the corpus instead of being filtered out by a stale allowlist
+  // here — two places that both have to know the field list is how a producer
+  // and its consumer diverge.
+  return passthrough({
+    url: `http://127.0.0.1:${PORT}${RESOLVE_PATH}`,
+    method: "POST",
+    rawBody: JSON.stringify({
+      impulse: {
+        pointer: {
+          ...body,
+          type: "interactorObservation",
+          visibility: body["visibility"] ?? "operator_only",
+        },
+      },
+    }),
+    origin: c.req.header("Origin"),
+  });
+});
+
 // ─── render policy (browser read) ───────────────────────────────────────────
 
 /**
@@ -1106,7 +1156,31 @@ proxyRouter.post("/api/surface-intent", async (c) => {
     );
   }
 
-  const next = writeRenderPolicy(reading.patch);
+  const write = writeRenderPolicy(reading.patch);
+  if (!write.changed) {
+    // Understood, and already in force. 422 for the same reason as the branch
+    // above: the reader asked for something and nothing happened, so nothing
+    // may be reported as applied. The revision does not move either.
+    recordSurfaceIntent({
+      text,
+      changedFields: [],
+      unparsed: reading.unparsed.map((u) => u.text),
+      appliedRevision: null,
+    });
+    return c.json(
+      {
+        applied: false,
+        understood: true,
+        changes: [],
+        unparsed: reading.unparsed,
+        error: write.refusal?.reason ?? "this instruction moved no field",
+        policy: write.policy,
+      },
+      422,
+      corsHeaders(origin),
+    );
+  }
+  const next = write.policy;
   recordSurfaceIntent({
     text,
     changedFields: reading.changes.map((ch) => ch.field),

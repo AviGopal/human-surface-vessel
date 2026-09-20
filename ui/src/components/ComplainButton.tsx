@@ -25,7 +25,12 @@ const KINDS: ReadonlyArray<{ id: Kind; label: string }> = [
   { id: "wrong", label: "wrong" },
 ];
 
-export function ComplainButton({ region }: { region: string }): ReactNode {
+/**
+ * `onFiled` fires only after the gap store ACCEPTED the complaint (state
+ * "filed"), never on open or on submit: an outcome record for a complaint that
+ * failed to file would be a record of an act that did not land.
+ */
+export function ComplainButton({ region, onFiled }: { region: string; onFiled?: () => void }): ReactNode {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<Kind>("hard_to_understand");
   const [text, setText] = useState("");
@@ -45,6 +50,7 @@ export function ComplainButton({ region }: { region: string }): ReactNode {
       if (!res.ok) throw new Error(String(res.status));
       setState("filed");
       setText("");
+      onFiled?.();
       // The gap strip is the evidence that this landed; refresh it rather than
       // claiming success on our own say-so.
       void qc.invalidateQueries({ queryKey: ["interfaceGaps"] });

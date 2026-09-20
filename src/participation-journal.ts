@@ -3,7 +3,28 @@ import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, 
 import { join } from "node:path";
 
 const directory = join(process.env.WORKSPACE_ROOT ?? "/workspace", "interactor-log");
-type Channel = "uiPanel_write" | "uiFeedback_write";
+/**
+ * `renderPolicy_write` joins this log for one reason: the policy is the shaped
+ * impulse that steers how the surface renders, and — once importance weights
+ * live in it — what it shows first. A weight that evaporates on restart cannot
+ * support a claim that anything was learned, so the policy must be replayable
+ * from the same durable corpus panels and feedback already are.
+ *
+ * `interactorObservation_write` joins it for the mirror-image reason: the
+ * exposure corpus is the EVIDENCE the importance learner reads, and
+ * `recordObservation`'s in-memory array is a ring capped at MAX_HISTORY = 500
+ * whose oldest entry is shifted out. A learner reading that ring would train on
+ * a window it cannot bound and would lose its whole corpus on restart, so a
+ * claim that the surface learned from what it showed would rest on state that
+ * evaporates. Only the exposure family is journaled here (see store.ts
+ * `recordObservation`): click/dwell/scroll/focus telemetry has no reader that
+ * needs it durable, and journaling it would grow a file nothing reads.
+ */
+type Channel =
+  | "uiPanel_write"
+  | "uiFeedback_write"
+  | "renderPolicy_write"
+  | "interactorObservation_write";
 
 /**
  * The single write/read boundary for the interactor log — which is why the
@@ -66,7 +87,20 @@ interface Envelope {
  * (`rg` over the fleet finds no consumer of uiPanel_write.jsonl) and no such
  * file exists in the live container, so wrapping it would migrate a corpus
  * nobody reads. What is NOT optional is that the read path below tolerates both
- * forms on BOTH channels, so switching this on later needs no second migration.
+ * forms on ALL channels, so switching this on later needs no second migration.
+ *
+ * `renderPolicy_write` is left bare for the same reason and is additionally
+ * SAFE under the three-way unwrap below: a policy snapshot carries neither a
+ * `record` key (case 1) nor a `pointer.panel_id` (case 2), so it falls through
+ * to case 3 and is read back byte-identical to what was written.
+ *
+ * `interactorObservation_write` is bare on the same two grounds. The safety
+ * argument is checked, not assumed: the flat `Observation` this vessel writes
+ * has no `record` key, and the verbatim remainder of the browser's pointer is
+ * nested under `body` rather than under a top-level `pointer`, so a
+ * `panel_id` inside it cannot trip case 2 and get flattened into a synthesized
+ * feedback entry. Byte-identical read-back is what the learner's restart
+ * falsifier asserts, so this is load-bearing rather than incidental.
  */
 function wrapFeedback(record: unknown): unknown {
   const r = record as {

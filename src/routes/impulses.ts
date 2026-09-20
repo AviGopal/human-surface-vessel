@@ -30,10 +30,14 @@ import {
   type Ask,
   type InteractorEvent,
   type Observation,
+  type ExposureOutcome,
   getRenderPolicy,
   writeRenderPolicy,
+  RENDER_POLICY_PATCH_KEYS,
   recordSurfaceIntent,
 } from "../store.ts";
+import { explainRanking, rankPanels, type ImportanceWeights } from "../importance.ts";
+import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 
 type Pointer = Record<string, unknown>;
@@ -86,7 +90,70 @@ function optPosition(p: Pointer): { x: number; y: number } | undefined {
  */
 const PANEL_CONTENT_KEYS = ["title", "body", "kind", "importance", "asks", "visibility"] as const;
 
-const OBSERVATION_TYPES = ["click", "dwell", "scroll", "focus"] as const;
+/**
+ * `exposure` and `exposure_outcome` are the exposure corpus — what the surface
+ * put on screen and what became of it. They arrive on `interactorObservation`
+ * (the channel already advertised and served here) rather than on a minted
+ * shape, which is what ui/src/api/exposure.ts posts and what the importance
+ * learner reads.
+ */
+const OBSERVATION_TYPES = [
+  "click",
+  "dwell",
+  "scroll",
+  "focus",
+  "exposure",
+  "exposure_outcome",
+] as const;
+const EXPOSURE_OUTCOMES = ["answered", "declined", "complained", "shown_not_acted"] as const;
+
+/**
+ * Pointer keys the observation case consumes into named columns. Everything
+ * else on an exposure pointer is persisted VERBATIM under `body` — the record
+ * carries `visible_in_viewport[]`, `renderer_bundle`, `candidates_total`,
+ * `unobservable[]` and more, and the previous version of this case kept six
+ * fields and dropped the rest, which would have left the learner's corpus
+ * unable to say what conditions produced an outcome.
+ */
+const OBSERVATION_COLUMN_KEYS = new Set([
+  "type",
+  "obs_type",
+  "observation_type",
+  "event_type",
+  "kind",
+  "panel_id",
+  "panelId",
+  "ask_id",
+  "askId",
+  "duration_ms",
+  "durationMs",
+  "position",
+  "visibility",
+  "outcome",
+  "outcome_scope",
+  "outcomeScope",
+  "exposure_count",
+  "exposureCount",
+  "inferred",
+  "scan_status",
+  "scanStatus",
+]);
+
+function exposureOutcome(p: Pointer): ExposureOutcome | undefined {
+  const v = p["outcome"];
+  return (EXPOSURE_OUTCOMES as readonly string[]).includes(String(v))
+    ? (v as ExposureOutcome)
+    : undefined;
+}
+
+function observationBody(p: Pointer): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(p)) {
+    if (OBSERVATION_COLUMN_KEYS.has(k)) continue;
+    out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
 const EVENT_TYPES = ["click", "dismiss", "expand", "collapse", "focus", "fetch"] as const;
 const FEEDBACK_KINDS = ["answer", "reaction", "dismiss"] as const;
 
@@ -127,6 +194,131 @@ function asks(p: Pointer): Ask[] | undefined {
   }));
 }
 
+
+/**
+ * Read the ranking weights out of a `renderPolicy_write` pointer.
+ *
+ * Accepted in camelCase and snake_case for the reason stated at the attribution
+ * fields below: this vessel's own callers write camelCase while substrate
+ * impulses are snake_cased, and a caller whose key spelling is silently dropped
+ * is the hollow acceptance this route was repaired for.
+ *
+ * Every input this parser could not use is pushed onto `rejected` and reported
+ * back to the caller. A learner whose weight table arrives half-read must be
+ * told which half, or it will grade an order it did not choose. Dropping a bad
+ * entry silently would be the same defect as the nested-`policy` 200.
+ */
+function importanceWeightsPatch(
+  pointer: Pointer,
+  rejected: string[],
+): Partial<ImportanceWeights> | undefined {
+  const raw = optBody(pointer, "importanceWeights") ?? optBody(pointer, "importance_weights");
+  if (!raw) {
+    // Named, not ignored: a non-object under a key this route reads is a caller
+    // error worth reporting rather than a silent no-op.
+    const present = pointer["importanceWeights"] ?? pointer["importance_weights"];
+    if (present !== undefined) rejected.push("importanceWeights must be an object of weight fields");
+    return undefined;
+  }
+  const pick = (...keys: string[]): unknown => {
+    for (const key of keys) if (Object.hasOwn(raw, key)) return raw[key];
+    return undefined;
+  };
+  const numberMap = (value: unknown, label: string): Record<string, number> | undefined => {
+    if (value === undefined) return undefined;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      rejected.push(`${label} must be an object mapping keys to numbers`);
+      return undefined;
+    }
+    const out: Record<string, number> = {};
+    const entries = Object.entries(value as Record<string, unknown>);
+    for (const [key, entry] of entries) {
+      if (typeof entry !== "number" || !Number.isFinite(entry)) {
+        rejected.push(`${label}.${key} is not a finite number`);
+        continue;
+      }
+      // A KIND WEIGHT MAY NOT BE DRIVEN TO ZERO OR BELOW.
+      //
+      // Finite was not a sufficient guard. A write of byKind {someKind: -1000}
+      // was accepted and put in force; the kind then sorted last, was cut by
+      // every slice, was therefore never shown, therefore produced no outcome
+      // record — and the learner's floor applies only to kinds it MOVES, so
+      // nothing could ever lift it again. Verified before this change: five
+      // learning passes left such a weight at exactly -1000. That is the same
+      // irreversibility class as a type scale that could be flattened and never
+      // recover, rebuilt one layer down: the learner is careful and the impulse
+      // that feeds it was not.
+      //
+      // Refused rather than silently clamped, because a caller who asked for
+      // an invisible kind should be told the request was not honoured. The
+      // floor matches the learner's own MIN_KIND_WEIGHT so the two agree.
+      if (label.endsWith("byKind") && entry < MIN_KIND_WEIGHT) {
+        rejected.push(
+          `${label}.${key} (${entry}) is below the minimum weight ${MIN_KIND_WEIGHT} — a kind at or below zero is never shown, so it can never earn its way back`,
+        );
+        continue;
+      }
+      out[key] = entry;
+    }
+    // A map whose every entry was junk is NOT applied. A supplied map replaces
+    // the one in force wholly, so applying the empty survivor would read as
+    // "clear the table" — a caller who fat-fingered one weight would silently
+    // destroy the whole ranking. Clearing stays possible, but only by asking for
+    // it: an explicitly empty object.
+    if (entries.length > 0 && Object.keys(out).length === 0) {
+      rejected.push(
+        `${label} had no usable entry, so it was not applied and the table in force is unchanged (send {} if you mean to clear it)`,
+      );
+      return undefined;
+    }
+    return out;
+  };
+  const scalar = (value: unknown, label: string): number | undefined => {
+    if (value === undefined) return undefined;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    rejected.push(`${label} is not a finite number`);
+    return undefined;
+  };
+  const byKind = numberMap(pick("byKind", "by_kind"), "importanceWeights.byKind");
+  const declaredImportance = numberMap(
+    pick("declaredImportance", "declared_importance"),
+    "importanceWeights.declaredImportance",
+  );
+  const agePerDay = scalar(pick("agePerDay", "age_per_day"), "importanceWeights.agePerDay");
+  const unansweredBoost = scalar(
+    pick("unansweredBoost", "unanswered_boost"),
+    "importanceWeights.unansweredBoost",
+  );
+  const patch: Partial<ImportanceWeights> = {
+    ...(byKind ? { byKind } : {}),
+    ...(declaredImportance ? { declaredImportance } : {}),
+    ...(agePerDay !== undefined ? { agePerDay } : {}),
+    ...(unansweredBoost !== undefined ? { unansweredBoost } : {}),
+  };
+  return Object.keys(patch).length > 0 ? patch : undefined;
+}
+
+/**
+ * Read the payload slice size. `null` is a value, not an absence: it means "no
+ * slice — return every ranked solicitation". A negative or fractional size is
+ * refused and named rather than rounded into something the caller did not ask
+ * for.
+ */
+function visibleSliceSizePatch(
+  pointer: Pointer,
+  rejected: string[],
+): number | null | undefined {
+  const raw = Object.hasOwn(pointer, "visibleSliceSize")
+    ? pointer["visibleSliceSize"]
+    : Object.hasOwn(pointer, "visible_slice_size")
+      ? pointer["visible_slice_size"]
+      : undefined;
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw === "number" && Number.isInteger(raw) && raw >= 0) return raw;
+  rejected.push("visibleSliceSize must be null (no slice) or a non-negative integer");
+  return undefined;
+}
 
 const DEV_VESSEL_ENDPOINT = (
   process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090"
@@ -280,14 +472,82 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         // answer it.
         .filter(pn => isSolicitation(pn) && (!wanted || pn.id === wanted))
         .map(questionView);
+
+      // ORDERED BY IMPORTANCE, from the impulse, at request time.
+      //
+      // `listPanels()` sorts by `updatedAt` descending, which orders the wall by
+      // whatever the substrate touched most recently — and the substrate's own
+      // re-escalation loop touches exactly the items that have been ignored
+      // longest, so recency ranks the stale escalations it manufactured. The
+      // weights come off the renderPolicy impulse HERE, on every request:
+      // nothing in this file imports a weight table, so a learner changes what a
+      // human is shown first by writing the impulse, with no rebuild and no
+      // restart. That is the whole law-1 requirement, and
+      // test/importance-ranking.test.ts is its falsifier.
+      const policy = getRenderPolicy();
+      const rejected: string[] = [];
+      // A caller may ask for a different slice than the policy's. It is a
+      // per-request value carried in the pointer (so it is visible in a trace),
+      // and the response says which source was used — a request override must
+      // never be able to masquerade as the policy in force. It exists because a
+      // shaped read that truncates with no way to ask for the rest loses
+      // information a machine caller has no recourse for.
+      const requestedSlice = visibleSliceSizePatch(pointer, rejected);
+      const sliceSource = requestedSlice === undefined ? "policy" : "request";
+      const sliceSize = requestedSlice === undefined ? policy.visibleSliceSize : requestedSlice;
+
+      const ranked = rankPanels(questions, policy.importanceWeights, Date.now());
+      const shown = sliceSize === null ? ranked : ranked.slice(0, sliceSize);
+      const byId = new Map(questions.map((q) => [q.id, q]));
+      const sliced = shown.flatMap((scored, index) => {
+        const view = byId.get(scored.panel.id);
+        // `rank` is the position in the WHOLE ranked set, and the slice is a
+        // prefix of it, so index+1 is that position — not merely a position
+        // within the slice.
+        return view ? [{ ...view, rank: index + 1, because: scored.because }] : [];
+      });
+
       return c.json({
         resolved: true,
         success: true,
         shape: type,
         body: {
-          questions,
-          total: questions.length,
+          // The slice, highest importance first. Each row carries its rank and
+          // the reasons it holds that rank, so a human has something concrete to
+          // disagree with. READERS, named by what they do rather than by a line
+          // number that a neighbouring edit invalidates: the `data-rank` /
+          // `data-rank-explanation` spreads in
+          // ui/src/components/ParticipationRegion.tsx (currently :257-258)
+          // publish them onto the row, and `collectCandidates` in
+          // ui/src/lib/exposure.ts (currently :352-358) reads them back off the
+          // element into the exposure record's rank / rank_source /
+          // ranking_explanation.
+          questions: sliced,
+          // UNCHANGED MEANING: every solicitation this read matched, not the
+          // size of the slice above. A caller that compares the two can tell a
+          // slice from the whole, which is the point.
+          total: ranked.length,
+          // Also over the whole matched set, never the slice: how many questions
+          // are waiting on a human is not a fact about what fitted in a payload.
           unanswered: questions.filter((q) => !q.answered && !q.declined).length,
+          /**
+           * The honest summary. Truncation is stated, not implied: a caller
+           * seeing `not_shown_count > 0` knows there is more and knows how much.
+           * `slice_source` names WHERE the size came from, and `policy_revision`
+           * identifies the weights that produced this order, so an order can be
+           * replayed against the impulse that caused it.
+           */
+          ranking: {
+            solicitations_total: ranked.length,
+            shown_count: sliced.length,
+            not_shown_count: Math.max(0, ranked.length - sliced.length),
+            slice_size: sliceSize,
+            slice_source: sliceSource,
+            policy_revision: policy.revision,
+            weights: policy.importanceWeights,
+            explanation: explainRanking(ranked, sliceSize === null ? undefined : sliceSize),
+            ...(rejected.length > 0 ? { rejected_values: rejected } : {}),
+          },
         },
       });
     }
@@ -352,15 +612,86 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           400,
         );
       }
+      const panelId = optStr(pointer, "panel_id") ?? optStr(pointer, "panelId");
+      const outcome = exposureOutcome(pointer);
+      // An outcome record with no panel id, or with an outcome this vessel does
+      // not recognise, is REFUSED rather than stored as a record the learner
+      // will then skip. A corpus full of unusable records looks like evidence.
+      if (obsType === "exposure_outcome" && (!panelId || !outcome)) {
+        return c.json(
+          {
+            resolved: false,
+            success: false,
+            shape: type,
+            error:
+              `an exposure_outcome needs panel_id and outcome (one of ${EXPOSURE_OUTCOMES.join(", ")}); ` +
+              `panel_id ${panelId ? "was given" : "was missing"}, outcome ${
+                outcome ? "was given" : `was ${JSON.stringify(pointer["outcome"] ?? null)}`
+              }`,
+          },
+          400,
+        );
+      }
+      const scanStatusRaw = optStr(pointer, "scan_status") ?? optStr(pointer, "scanStatus");
       const entry = recordObservation({
         type: obsType,
-        panelId: optStr(pointer, "panel_id") ?? optStr(pointer, "panelId"),
+        panelId,
         askId: optStr(pointer, "ask_id") ?? optStr(pointer, "askId"),
         durationMs: optNum(pointer, "duration_ms") ?? optNum(pointer, "durationMs"),
         position: optPosition(pointer),
         visibility: asVisibility(pointer["visibility"], "operator_only"),
+        ...(outcome ? { outcome } : {}),
+        ...(pointer["outcome_scope"] === "ask" || pointer["outcomeScope"] === "ask"
+          ? { outcomeScope: "ask" as const }
+          : outcome
+            ? { outcomeScope: "panel" as const }
+            : {}),
+        ...(() => {
+          const n = optNum(pointer, "exposure_count") ?? optNum(pointer, "exposureCount");
+          return n === undefined ? {} : { exposureCount: n };
+        })(),
+        ...(typeof pointer["inferred"] === "boolean" ? { inferred: pointer["inferred"] } : {}),
+        ...(scanStatusRaw === "failed" || scanStatusRaw === "observed"
+          ? { scanStatus: scanStatusRaw }
+          : {}),
+        ...(() => {
+          const body = observationBody(pointer);
+          return body ? { body } : {};
+        })(),
       });
-      return c.json({ resolved: true, success: true, shape: type, body: entry });
+
+      // THE LEARNER'S TRIGGER. New outcome evidence exists exactly here, so the
+      // pass runs here: an exported-but-uncalled learner reads correctly and
+      // runs never. The result is REPORTED, not swallowed — a caller can see
+      // whether a weight moved, and `reason` cites the evidence it moved on. A
+      // refusal from the policy writer is the CONVERGED case (the weights the
+      // evidence implies are already in force), not a failure, so it is
+      // reported and not turned into a non-2xx on the record that was accepted.
+      const learning =
+        obsType === "exposure_outcome"
+          ? (() => {
+              const result = runImportanceLearningPass();
+              return {
+                changed: result.changed,
+                changed_fields: result.changedFields,
+                policy_revision: result.policy.revision,
+                weights: result.policy.importanceWeights,
+                moves: result.pass.moves,
+                evidence: result.pass.evidence,
+                skipped: result.pass.skipped,
+                reason: result.pass.reason,
+                ...(result.refusal ? { refusal: result.refusal.reason } : {}),
+              };
+            })()
+          : undefined;
+
+      return c.json({
+        resolved: true,
+        success: true,
+        shape: type,
+        body: entry,
+        ...(learning ? { learning } : {}),
+      });
     }
 
     case "interactorEvent": {
@@ -453,7 +784,17 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const rawPresentation = pointer["presentation"];
       const presentation =
         rawPresentation === "onepage" || rawPresentation === "stacked" ? rawPresentation : undefined;
-      const next = writeRenderPolicy({
+      // Attribution. Accepted in both spellings because this vessel's own
+      // callers write camelCase while substrate impulses are snake_cased, and a
+      // caller whose key spelling is silently dropped is exactly the hollow
+      // acceptance this route is being repaired for.
+      const assignedBy = optStr(pointer, "assignedBy") ?? optStr(pointer, "assigned_by");
+      const assignmentReason = optStr(pointer, "reason");
+      // Everything this parser could not use, reported on BOTH outcomes below.
+      const rejected: string[] = [];
+      const importanceWeights = importanceWeightsPatch(pointer, rejected);
+      const visibleSliceSize = visibleSliceSizePatch(pointer, rejected);
+      const write = writeRenderPolicy({
         ...(tokenOverrides ? { tokenOverrides } : {}),
         ...(formByShape ? { formByShape } : {}),
         ...(presentation ? { presentation } : {}),
@@ -461,9 +802,57 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           ? { maxPreviewChars: maxPreview as number | null }
           : {}),
         ...(typeof expanded === "boolean" ? { ledgerDefaultExpanded: expanded } : {}),
+        ...(importanceWeights ? { importanceWeights } : {}),
+        ...(visibleSliceSize !== undefined ? { visibleSliceSize } : {}),
         ...(typeof pointer["note"] === "string" ? { note: pointer["note"] as string } : {}),
+        ...(assignedBy ? { assignedBy } : {}),
+        ...(assignmentReason ? { reason: assignmentReason } : {}),
       });
-      return c.json({ resolved: true, success: true, shape: type, body: next });
+      if (!write.changed) {
+        // REFUSAL, not a 200 with a bumped revision. The caller is told what was
+        // not read (`unread_keys`) as well as what this route does read, because
+        // the whole defect being repaired here is a payload silently ignored: a
+        // pointer that nests its fields under `policy` used to return 200 while
+        // recording nothing, which is indistinguishable from success.
+        const unread = Object.keys(pointer).filter(
+          (k) =>
+            k !== "type" &&
+            k !== "assigned_by" &&
+            k !== "importance_weights" &&
+            k !== "visible_slice_size" &&
+            !(RENDER_POLICY_PATCH_KEYS as readonly string[]).includes(k),
+        );
+        return c.json(
+          {
+            resolved: false,
+            success: false,
+            shape: type,
+            applied: false,
+            error: write.refusal?.reason ?? "this write moved no field",
+            accepted_keys: write.refusal?.acceptedKeys ?? RENDER_POLICY_PATCH_KEYS,
+            unread_keys: unread,
+            // A value this route READ but could not use is not the same thing as
+            // a key it never reads; collapsing the two would tell a learner its
+            // weights were an unknown field when in fact one entry was junk.
+            rejected_values: rejected,
+            policy_revision: write.policy.revision,
+            policy: write.policy,
+          },
+          422,
+        );
+      }
+      return c.json({
+        resolved: true,
+        success: true,
+        shape: type,
+        body: write.policy,
+        changed_fields: write.changedFields,
+        // Reported on the SUCCESS path too: a partially-read weight table that
+        // still moved a field is applied-but-partial, and that must not be
+        // invisible under a green result (same rule the surfaceIntent branch
+        // below applies to a partially parsed instruction).
+        ...(rejected.length > 0 ? { rejected_values: rejected, partial: true } : {}),
+      });
     }
 
     case "surfaceIntent": {
@@ -514,7 +903,33 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
 
       // Writes through the SAME shaped impulse every other author uses, so the
       // surface picks it up on its next read with no rebuild and no deploy.
-      const next = writeRenderPolicy(reading.patch);
+      const write = writeRenderPolicy(reading.patch);
+      if (!write.changed) {
+        // The parser read the words and they asked for what is already in force.
+        // Reported as understood-but-not-applied, on the same 422 as an unread
+        // instruction: nothing happened, so nothing may read as applied.
+        recordSurfaceIntent({
+          text,
+          changedFields: [],
+          unparsed: reading.unparsed.map((u) => u.text),
+          appliedRevision: null,
+        });
+        return c.json(
+          {
+            resolved: false,
+            success: false,
+            shape: type,
+            understood: true,
+            applied: false,
+            error: write.refusal?.reason ?? "this instruction moved no field",
+            changes: [],
+            unparsed: reading.unparsed,
+            policy_revision: write.policy.revision,
+          },
+          422,
+        );
+      }
+      const next = write.policy;
       recordSurfaceIntent({
         text,
         changedFields: reading.changes.map((ch) => ch.field),

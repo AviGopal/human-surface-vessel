@@ -19,6 +19,21 @@ export interface Question {
   responses: ParticipationResponse[];
   answered: boolean;
   declined: boolean;
+  /**
+   * Importance rank and its reasons, as computed by the ranker
+   * (src/importance.ts `rankPanels` / `ScoredPanel.because`) and carried on the
+   * questions payload. OPTIONAL because the payload does not carry them yet:
+   * while they are absent, the row renders no rank attributes and the exposure
+   * record says rank_source "dom_order" with a null explanation rather than
+   * inventing one.
+   *
+   * Reader of both, in this change:
+   * ui/src/lib/exposure.ts collectCandidates (reads them back off the row's
+   * data-rank / data-rank-explanation attributes) → the exposure record's
+   * `rank`, `rank_source`, `ranking_explanation`.
+   */
+  rank?: number;
+  because?: string[];
 }
 
 export interface Contribution {

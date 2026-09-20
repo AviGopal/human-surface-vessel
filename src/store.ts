@@ -18,6 +18,8 @@
  */
 
 import { appendParticipation, readParticipation } from "./participation-journal.ts";
+import { isSolicitation } from "./solicitation.ts";
+import { DEFAULT_IMPORTANCE_WEIGHTS, type ImportanceWeights } from "./importance.ts";
 
 export type AskType = "text" | "choice" | "number";
 export type Visibility = "public" | "operator_only";
@@ -53,14 +55,106 @@ export interface Feedback {
   receivedAt: number;
 }
 
+/**
+ * `exposure` and `exposure_outcome` join the behavioural telemetry types
+ * because they ARE behavioural telemetry: what the surface put on screen, and
+ * what the person then did with it. They travel on `interactorObservation`
+ * rather than on a minted shape (law 3: the observation channel already
+ * expresses them, and splitting it would give the learner two corpora to read).
+ */
+export type ObservationType =
+  | "click"
+  | "dwell"
+  | "scroll"
+  | "focus"
+  | "exposure"
+  | "exposure_outcome";
+
+/**
+ * The four states a SHOWN solicitation can end in, kept distinct here because
+ * collapsing any pair destroys the signal the learner exists to use.
+ * Mirrors `ui/src/lib/exposure.ts`'s `ExposureOutcome` — the producer's own
+ * union — and is declared (not imported) because `src/` must not depend on the
+ * browser bundle's module graph.
+ */
+export type ExposureOutcome = "answered" | "declined" | "complained" | "shown_not_acted";
+
 export interface Observation {
-  type: "click" | "dwell" | "scroll" | "focus";
+  type: ObservationType;
   panelId?: string;
   askId?: string;
   durationMs?: number;
   position?: { x: number; y: number };
   visibility: Visibility;
   observedAt: number;
+  /**
+   * The KIND of the solicitation this observation is about, RESOLVED AT WRITE
+   * TIME from the panel store — never copied from the browser's pointer, which
+   * could claim anything, and never defaulted to a placeholder.
+   *
+   * `null` means the panel id named no panel this vessel holds, so the kind is
+   * genuinely unknown. The learner keys on kind and SKIPS a null (reader:
+   * src/importance-learn.ts `aggregateByKind`, which counts it into
+   * `skipped.unresolvedKind` and reports the count in the write's reason). A
+   * bucket called "unknown" would make the pipeline look conditioned on kind
+   * while a share of its evidence was conditioned on nothing.
+   *
+   * READER: src/importance-learn.ts — the null check, and the per-kind fold
+   * that keys on it (currently :351 and :364-377).
+   */
+  panelKind?: string | null;
+  /** exposure_outcome only. READER: src/importance-learn.ts, folded by `panelFate` (currently :345, :305-310). */
+  outcome?: ExposureOutcome;
+  /**
+   * Whether the act addressed the whole solicitation or one ask of it. Kept
+   * because `questionView` reads `declined` only when there is no `askId`, so a
+   * per-ask decline is written into feedback and never read back as a decline;
+   * carrying the scope here keeps the two distinguishable in the evidence even
+   * while that is true of the store.
+   *
+   * READER: src/importance-learn.ts — read off the record and counted into
+   * `KindEvidence.askScopedActs`, which the learned revision reason states
+   * (currently :373 and :396).
+   */
+  outcomeScope?: "panel" | "ask";
+  /**
+   * Presentation ticks this id was in the visible slice when the act happened.
+   *
+   * READER: src/importance-learn.ts (currently :361), which SKIPS a `shown_not_acted`
+   * record that cannot show a count of at least 2 — the negative signal is
+   * "shown REPEATEDLY and never acted on", and being shown once and not yet
+   * answered is not evidence of anything.
+   */
+  exposureCount?: number;
+  /**
+   * True for `shown_not_acted` — the only outcome a machine infers.
+   *
+   * READER: src/importance-learn.ts (currently :372, :395), which count how many of a
+   * kind's opportunities were inferred rather than performed and say so in the
+   * learned revision reason, so a weight that fell on inference alone is not
+   * mistaken for one people decided.
+   */
+  inferred?: boolean;
+  /**
+   * `exposure` only: "observed" or "failed". A failed scan means the reporter
+   * could not measure what was on screen; it is NOT an empty slice, and the
+   * learner reports the count rather than reading it as "nothing was shown"
+   * (READER: src/importance-learn.ts `corpusHealth`, currently :292).
+   */
+  scanStatus?: "observed" | "failed";
+  /**
+   * The remainder of the producer's pointer, VERBATIM. The exposure record
+   * carries fields no column here names (`visible_in_viewport[]`,
+   * `renderer_bundle`, `candidates_total`, `unobservable[]`, …) and dropping
+   * them would leave the corpus unable to answer "what conditions produced this
+   * outcome" — the provenance half of the record. Nested under `body` (the
+   * precedent is `InteractorEvent.body`) so it cannot collide with a column.
+   *
+   * READER: src/importance-learn.ts `corpusHealth` (currently :289), which reads `renderer_bundle` out of
+   * it so the learned revision states which renderer(s) the evidence spans — a
+   * weight learned across two presentations was learned from two surfaces.
+   */
+  body?: Record<string, unknown>;
 }
 
 export interface InteractorEvent {
@@ -169,37 +263,14 @@ export function getPanel(id: string): Panel | undefined {
 export class ParticipationConflict extends Error {}
 
 /**
- * Kinds that are purely informational — a panel the substrate is TELLING a human,
- * with nothing being asked of them. Everything else solicits.
+ * The solicitation predicate lives in ./solicitation.ts and is re-exported here
+ * so every existing importer of `store.isSolicitation` is unchanged. It moved
+ * for one reason, stated in that file: this module now reads
+ * `DEFAULT_IMPORTANCE_WEIGHTS` from ./importance.ts while building the initial
+ * render policy, and importance.ts needs the predicate — a runtime cycle that
+ * throws at import under one of the two load orders. One definition, no cycle.
  */
-const INFORMATIONAL_KINDS: ReadonlySet<string> = new Set(["info", "pulse"]);
-
-/**
- * Does this panel ask a human for something?
- *
- * DENYLIST, fail-visible, deliberately. An allowlist has already failed twice in
- * production here, and it cannot not fail: the kind vocabulary is OPEN at
- * runtime — the write path stores an unrecognised kind uncoerced (a probe wrote
- * `escalation_kind_nobody_invented_yet` and it persisted at revision 1), and the
- * escalation kinds that exist live (`gap_needs_human`, `gap_pending_verification`,
- * `gap_needs_localization`, `gap_reland_needs_human`, `question`) were each
- * minted by a caller, not by this file. Any new escalation kind a resolver
- * invents is therefore invisible under an allowlist, and invisible means the
- * human is never asked.
- *
- * "Has asks" is not the predicate either: the live escalation panels carry ZERO
- * asks (development-vessel's gap-to-feature.ts emits title/body/kind/importance
- * only), so keying on asks would surface 3 of 445 live panels.
- *
- * The only genuinely choosable thing here is the failure polarity, and it is not
- * symmetric: a human can dismiss noise, and cannot see silence.
- *
- * Read by recordFeedback (the answer guard), signatureInputs (the open-age
- * metric), and routes/impulses.ts's `uiQuestion` reader.
- */
-export function isSolicitation(panel: Pick<Panel, "kind">): boolean {
-  return !INFORMATIONAL_KINDS.has(panel.kind);
-}
+export { isSolicitation };
 
 export function recordFeedback(
   f: Omit<Feedback, "id" | "receivedAt" | "visibility"> & { id?: string; visibility?: Visibility },
@@ -303,16 +374,43 @@ export function questionView(panel: Panel) {
   return { ...panel, responses, answers, answered, declined };
 }
 
+/**
+ * Which observation types are the exposure corpus. Exported because the route
+ * that accepts them and the learner that reads them must agree with the writer
+ * about the membership of this set, and three hand-kept copies of a list like
+ * this one is how the three re-derived `isSolicitation` predicates diverged.
+ */
+export const EXPOSURE_OBSERVATION_TYPES = ["exposure", "exposure_outcome"] as const;
+
+export function isExposureObservation(type: ObservationType): boolean {
+  return (EXPOSURE_OBSERVATION_TYPES as readonly string[]).includes(type);
+}
+
 export function recordObservation(
-  o: Omit<Observation, "observedAt" | "visibility"> & { visibility?: Visibility },
+  o: Omit<Observation, "observedAt" | "visibility" | "panelKind"> & { visibility?: Visibility },
 ): Observation {
+  const exposure = isExposureObservation(o.type);
   const entry: Observation = {
     ...o,
+    // Resolved HERE, from the store's own panels, at the moment of the write —
+    // the only place the kind is a fact rather than a claim. Set only for the
+    // exposure family so nothing suggests click/dwell telemetry carries a
+    // populated kind when it does not.
+    ...(exposure ? { panelKind: (o.panelId ? panels.get(o.panelId)?.kind : undefined) ?? null } : {}),
     visibility: asVisibility(o.visibility, "operator_only"),
     observedAt: Date.now(),
   };
   observations.push(entry);
   if (observations.length > MAX_HISTORY) observations.shift();
+  // Journaled BEFORE acknowledgement, and only for the exposure family: this is
+  // the learner's evidence, and the array above is a 500-entry ring that shifts
+  // its oldest entry out. The ring is deliberately NOT repopulated from the
+  // journal at init — it is a recent-telemetry view, and replaying a long
+  // exposure corpus into it would evict live telemetry to no reader's benefit.
+  // The learner reads the journal file itself (src/importance-learn.ts
+  // `readExposureCorpus`), so its corpus is neither bounded by MAX_HISTORY nor
+  // lost on restart.
+  if (exposure) appendParticipation("interactorObservation_write", entry);
   emit("observation_recorded", entry);
   return entry;
 }
@@ -450,6 +548,15 @@ export function signatureInputs(): SignatureInputs {
 /* ───────────────────────── render policy ─────────────────────────────────── */
 
 /**
+ * The documented default for `RenderPolicy.visibleSliceSize` — the starting
+ * value of a learnable field, not a law. Exported so the reader's response and
+ * the falsifiers can NAME it instead of each carrying a copy of the number
+ * (a hand-copied default is the drift RENDER_POLICY_PATCH_KEYS exists to stop).
+ * The rationale is on the field itself.
+ */
+export const DEFAULT_VISIBLE_SLICE_SIZE = 50;
+
+/**
  * The shaped impulse that steers rendering.
  *
  * `formByShape` overrides the surface's built-in form heuristic for a given
@@ -480,9 +587,129 @@ export interface RenderPolicy {
    * repertoire's versioning rules require).
    */
   readonly presentation: "onepage" | "stacked";
+  /**
+   * The weights that ORDER what the surface shows.
+   *
+   * This is the law-1 half of "the system should always show what it thinks is
+   * most important, and it should learn what is important from what it shows".
+   * Every number that decides an order arrives HERE, on the impulse, and is read
+   * at request time by the `uiQuestion` reader
+   * (src/routes/impulses.ts:`getRenderPolicy().importanceWeights` handed to
+   * `rankPanels`). Nothing at the ranking site imports a weight table, so a
+   * learner can change what the surface considers important by writing this
+   * impulse — no rebuild, no restart, no code change. The cautionary instance of
+   * the opposite is in this same vessel: `ui-view.ts`'s COMPONENT_COUNTS is an
+   * `as const` literal, so the only grader of the surface reads fiction.
+   *
+   * Defaults to `DEFAULT_IMPORTANCE_WEIGHTS` and is POPULATED, never null: a
+   * reader of this impulse must be able to see the weights actually in force. A
+   * null meaning "whatever the module default is" would make the impulse look
+   * conditioned while the decision lived somewhere a trace cannot see it.
+   */
+  readonly importanceWeights: ImportanceWeights;
+  /**
+   * How many ranked solicitations the `uiQuestion` read returns, or null for all
+   * of them.
+   *
+   * Read at use time by the same reader, for the same reason as the weights: a
+   * constant here would be the law-1 defect in a new place. The value is a
+   * PAYLOAD slice, not the viewport slice — what a person's screen actually
+   * showed is measured separately and behaviourally
+   * (ui/src/lib/exposure.ts), and the two must not be confused.
+   *
+   * DEFAULT: 50, documented on its own terms. The shaped read serves machine
+   * callers as well as the browser, so the default is set well above any single
+   * screenful — an ordinary corpus is returned whole and nothing is amputated
+   * from a caller that never asked for a slice — and well below the live
+   * solicitation count (~425 on the substrate this vessel fronts), so at the
+   * scale where the wall exists the slice is real and `not_shown_count` is
+   * non-zero. Truncation is never silent: the read reports how many
+   * solicitations exist, how many are in the slice, and how many are not shown.
+   */
+  readonly visibleSliceSize: number | null;
+  /**
+   * Who assigned THIS revision — an operator id, an activity name, or null when
+   * the author was not stated. Describes this write only and is NEVER inherited
+   * from the previous revision: attribution copied onto a revision its named
+   * author did not make is false attribution, which is worse than an honest
+   * null, because a causal claim ("this activity chose this variant") would then
+   * rest on a name the store invented.
+   *
+   * Read at use time by: the refusal branch of `writeRenderPolicy` below (it
+   * tells a second author whose assignment is currently in force before
+   * refusing their no-op), the `renderPolicy` resolve
+   * (src/routes/impulses.ts:428) and `GET /api/render-policy`
+   * (src/routes/proxy.ts:1046-1048), which serve the whole impulse on the
+   * browser's poll cadence, and the read-back assertion in
+   * validation/human-participation/stage4-trace.ts:71-84, which matches link 2
+   * on these VALUES rather than on a status code.
+   */
+  readonly assignedBy: string | null;
+  /**
+   * Why this revision was assigned, in the author's own words. Same lifetime,
+   * same non-inheritance rule, and the same readers as `assignedBy` above.
+   */
+  readonly reason: string | null;
   readonly revision: number;
   readonly updatedAt: number;
   readonly note: string | null;
+}
+
+/**
+ * The keys `writeRenderPolicy` reads out of a patch.
+ *
+ * Exported because a route that refuses a write must be able to NAME what it
+ * accepts instead of just saying no (src/routes/impulses.ts, renderPolicy_write),
+ * and a hand-maintained copy of this list in the route would drift from the
+ * writer that actually reads it.
+ */
+export const RENDER_POLICY_PATCH_KEYS = [
+  "tokenOverrides",
+  "formByShape",
+  "maxPreviewChars",
+  "ledgerDefaultExpanded",
+  "presentation",
+  "importanceWeights",
+  "visibleSliceSize",
+  "note",
+  "assignedBy",
+  "reason",
+] as const;
+
+/**
+ * The fields whose movement makes a write a CHANGE.
+ *
+ * `assignedBy`/`reason` are deliberately excluded. They are metadata ABOUT a
+ * change, not a change to how anything renders, so a patch that carries only an
+ * author cannot manufacture a revision — and, more importantly, an EMPTY patch
+ * (the nested-`policy` pointer) cannot be accepted on the grounds that it
+ * "cleared" the previous author.
+ */
+const RENDER_POLICY_CONTENT_FIELDS = [
+  "tokenOverrides",
+  "formByShape",
+  "maxPreviewChars",
+  "ledgerDefaultExpanded",
+  "presentation",
+  // Both ranking fields are CONTENT: a write that changes only the weights or
+  // only the slice size changes what a human is shown, so it must advance the
+  // revision. Leaving them out would refuse a weight assignment as "moved no
+  // field" — which is precisely how a learner's write would vanish.
+  "importanceWeights",
+  "visibleSliceSize",
+  "note",
+] as const satisfies readonly (keyof RenderPolicy)[];
+
+/** What a write did, or why it did nothing. */
+export interface RenderPolicyWrite {
+  /** True exactly when at least one content field moved and the policy advanced. */
+  readonly changed: boolean;
+  /** The policy now in force — the new one on a change, the untouched one on a refusal. */
+  readonly policy: RenderPolicy;
+  /** The content fields that moved. Empty exactly when `changed` is false. */
+  readonly changedFields: string[];
+  /** Present only on refusal: why nothing was written, and what this writer reads. */
+  readonly refusal: { reason: string; acceptedKeys: readonly string[] } | null;
 }
 
 let renderPolicy: RenderPolicy = {
@@ -491,6 +718,10 @@ let renderPolicy: RenderPolicy = {
   maxPreviewChars: null,
   ledgerDefaultExpanded: true,
   presentation: "onepage",
+  importanceWeights: DEFAULT_IMPORTANCE_WEIGHTS,
+  visibleSliceSize: DEFAULT_VISIBLE_SLICE_SIZE,
+  assignedBy: null,
+  reason: null,
   revision: 0,
   updatedAt: Date.now(),
   note: "default — no override; the built-in heuristic is in force",
@@ -544,25 +775,213 @@ export function getRenderPolicy(): RenderPolicy {
   return renderPolicy;
 }
 
+/**
+ * Key-order-insensitive canonical form, applied at EVERY depth.
+ *
+ * Depth matters now that a policy field is itself nested: `importanceWeights`
+ * carries `byKind` and `declaredImportance` maps, and a one-level sort would
+ * stringify those inner maps in insertion order — so re-writing identical
+ * weights with the kinds listed in a different order would read as a CHANGE and
+ * manufacture a revision, which is exactly the hollow acceptance
+ * `writeRenderPolicy` refuses. Arrays keep their order, because order is content
+ * in an array.
+ */
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .sort(([x], [y]) => x.localeCompare(y))
+      .map(([k, v]) => [k, canonicalize(v)]);
+  }
+  return value;
+}
+
+/** Value equality for a policy field — key-order-insensitive at every depth. */
+function sameFieldValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    return JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
+  }
+  return false;
+}
+
+/**
+ * Write the behaviour impulse — or REFUSE.
+ *
+ * Two properties this function is responsible for, both of which it previously
+ * lacked:
+ *
+ * 1. `revision` is CONTENT IDENTITY. It advances if and only if a content field
+ *    actually moved, so "impulse plus exact revision" can be reconstructed from
+ *    it. It used to advance on every call whatever it was handed, which is how a
+ *    write that recorded nothing at all read as a success (the stage-4 trace's
+ *    link 2: status 200, revision 0 → 1, zero fields recorded).
+ *
+ * 2. A write that moves nothing is REFUSED and says what this writer reads,
+ *    rather than being accepted hollowly. This is the surfaceIntent
+ *    unparsed-clause precedent in this same vessel (src/routes/impulses.ts:485-510
+ *    — nothing moved, so nothing is written, the revision does not advance, and
+ *    the caller is told what the parser does read) applied to the impulse write
+ *    path. A refusal that also names the assignment currently in force lets the
+ *    caller see whose decision their no-op was about to overwrite.
+ *
+ * Accepted writes are journaled as a SNAPSHOT and replayed at module init, so a
+ * restart does not silently revert the policy to the compiled default.
+ */
 export function writeRenderPolicy(patch: {
   tokenOverrides?: Record<string, string>;
   formByShape?: Record<string, string>;
   maxPreviewChars?: number | null;
   ledgerDefaultExpanded?: boolean;
   presentation?: "onepage" | "stacked";
+  /**
+   * A FULL or PARTIAL replacement of the ranking weights.
+   *
+   * Partial means field-by-field: a top-level field the patch omits keeps the
+   * value in force. A map the patch DOES supply (`byKind`,
+   * `declaredImportance`) replaces that map wholly rather than merging keys,
+   * because a key-merge can never remove a weight — an author who means "these
+   * are the weights" would silently keep stale entries they thought they had
+   * dropped, and the impulse would then describe an order nobody chose. To clear
+   * a map, send `{}`; every unlisted key is then scored at that map's documented
+   * neutral (importance.ts `neutralOf`), not at zero.
+   */
+  importanceWeights?: Partial<ImportanceWeights>;
+  visibleSliceSize?: number | null;
   note?: string | null;
-}): RenderPolicy {
-  renderPolicy = {
+  assignedBy?: string | null;
+  reason?: string | null;
+}): RenderPolicyWrite {
+  const weightPatch = patch.importanceWeights;
+  const candidate: RenderPolicy = {
     tokenOverrides: patch.tokenOverrides ?? renderPolicy.tokenOverrides,
     formByShape: patch.formByShape ?? renderPolicy.formByShape,
     maxPreviewChars:
       patch.maxPreviewChars === undefined ? renderPolicy.maxPreviewChars : patch.maxPreviewChars,
     ledgerDefaultExpanded: patch.ledgerDefaultExpanded ?? renderPolicy.ledgerDefaultExpanded,
     presentation: patch.presentation ?? renderPolicy.presentation,
+    importanceWeights: weightPatch
+      ? {
+          byKind: weightPatch.byKind ?? renderPolicy.importanceWeights.byKind,
+          agePerDay: weightPatch.agePerDay ?? renderPolicy.importanceWeights.agePerDay,
+          declaredImportance:
+            weightPatch.declaredImportance ?? renderPolicy.importanceWeights.declaredImportance,
+          unansweredBoost:
+            weightPatch.unansweredBoost ?? renderPolicy.importanceWeights.unansweredBoost,
+        }
+      : renderPolicy.importanceWeights,
+    // `=== undefined`, not `??`: null is a MEANING here ("no slice — return every
+    // ranked solicitation"), and `??` would silently turn it into the default.
+    visibleSliceSize:
+      patch.visibleSliceSize === undefined ? renderPolicy.visibleSliceSize : patch.visibleSliceSize,
+    // NOT `?? renderPolicy.assignedBy` — see the field comment: this write's
+    // author, or null. Never the previous author's name on someone else's edit.
+    assignedBy: patch.assignedBy ?? null,
+    reason: patch.reason ?? null,
     revision: renderPolicy.revision + 1,
     updatedAt: Date.now(),
     note: patch.note === undefined ? renderPolicy.note : patch.note,
   };
+
+  const changedFields = RENDER_POLICY_CONTENT_FIELDS.filter(
+    (f) => !sameFieldValue(renderPolicy[f], candidate[f]),
+  );
+
+  if (changedFields.length === 0) {
+    const inForce = renderPolicy.assignedBy
+      ? `revision ${renderPolicy.revision} was assigned by ${renderPolicy.assignedBy}${
+          renderPolicy.reason ? ` because: ${renderPolicy.reason}` : ""
+        }`
+      : `revision ${renderPolicy.revision} names no assigner${
+          renderPolicy.reason ? ` and gives the reason: ${renderPolicy.reason}` : ""
+        }`;
+    return {
+      changed: false,
+      policy: renderPolicy,
+      changedFields: [],
+      refusal: {
+        reason:
+          `this write moved no field, so nothing was recorded and the revision did not advance. ` +
+          `The keys this writer reads are: ${RENDER_POLICY_PATCH_KEYS.join(", ")} ` +
+          `(assignedBy/reason describe a change and cannot make one on their own). ` +
+          `The policy in force is unchanged: ${inForce}.`,
+        acceptedKeys: RENDER_POLICY_PATCH_KEYS,
+      },
+    };
+  }
+
+  renderPolicy = candidate;
+  appendParticipation("renderPolicy_write", renderPolicy);
   emit("renderPolicy", renderPolicy);
-  return renderPolicy;
+  return { changed: true, policy: renderPolicy, changedFields: [...changedFields], refusal: null };
+}
+
+/**
+ * Replay of the policy snapshot — deliberately NOT beside the panel/feedback
+ * replays at the top of this file: `renderPolicy` is declared above with `let`,
+ * so a loop placed up there would touch it in its temporal dead zone and throw
+ * at import. Like those loops it preserves the journaled identity (`revision`,
+ * `updatedAt`, `assignedBy`, `reason`) and emits nothing — a restart is not a
+ * new assignment. The last valid line wins: each line is a whole snapshot.
+ */
+for (const raw of readParticipation("renderPolicy_write")) {
+  const p = raw as Partial<RenderPolicy> | null;
+  if (!p || typeof p !== "object") continue;
+  if (!Number.isInteger(p.revision) || (p.revision as number) < 1) continue;
+  if (typeof p.updatedAt !== "number" || !Number.isFinite(p.updatedAt)) continue;
+  if (p.presentation !== "onepage" && p.presentation !== "stacked") continue;
+  /**
+   * A journal line written before the ranking fields existed carries neither of
+   * them, and a line written by a future author could carry junk. Both restore
+   * to the documented default rather than to a broken policy: the replay's job
+   * is to not lose an assignment, never to invent one. Only finite numbers
+   * survive into a weight map — a NaN weight would not crash the scorer (it
+   * treats non-finite as 0) but it would make the impulse claim a weight that
+   * scores as something else, and the impulse is what a grader reads.
+   */
+  const numberMap = (v: unknown): Record<string, number> | undefined =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v as Record<string, unknown>).filter(
+            (e): e is [string, number] => typeof e[1] === "number" && Number.isFinite(e[1]),
+          ),
+        )
+      : undefined;
+  const finite = (v: unknown): number | undefined =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  const journaledWeights = (v: unknown): ImportanceWeights => {
+    const w = (v && typeof v === "object" ? v : {}) as Partial<ImportanceWeights>;
+    return {
+      byKind: numberMap(w.byKind) ?? DEFAULT_IMPORTANCE_WEIGHTS.byKind,
+      agePerDay: finite(w.agePerDay) ?? DEFAULT_IMPORTANCE_WEIGHTS.agePerDay,
+      declaredImportance:
+        numberMap(w.declaredImportance) ?? DEFAULT_IMPORTANCE_WEIGHTS.declaredImportance,
+      unansweredBoost: finite(w.unansweredBoost) ?? DEFAULT_IMPORTANCE_WEIGHTS.unansweredBoost,
+    };
+  };
+  const stringMap = (v: unknown): Record<string, string> =>
+    v && typeof v === "object"
+      ? Object.fromEntries(
+          Object.entries(v as Record<string, unknown>).filter(
+            (e): e is [string, string] => typeof e[1] === "string",
+          ),
+        )
+      : {};
+  renderPolicy = {
+    tokenOverrides: stringMap(p.tokenOverrides),
+    formByShape: stringMap(p.formByShape),
+    maxPreviewChars: typeof p.maxPreviewChars === "number" ? p.maxPreviewChars : null,
+    ledgerDefaultExpanded: typeof p.ledgerDefaultExpanded === "boolean" ? p.ledgerDefaultExpanded : true,
+    presentation: p.presentation,
+    importanceWeights: journaledWeights(p.importanceWeights),
+    // `null` is a journaled MEANING (no slice), so it is preserved; only a
+    // missing or non-numeric value falls back to the documented default.
+    visibleSliceSize:
+      p.visibleSliceSize === null ? null : (finite(p.visibleSliceSize) ?? DEFAULT_VISIBLE_SLICE_SIZE),
+    assignedBy: typeof p.assignedBy === "string" ? p.assignedBy : null,
+    reason: typeof p.reason === "string" ? p.reason : null,
+    revision: p.revision as number,
+    updatedAt: p.updatedAt,
+    note: typeof p.note === "string" ? p.note : null,
+  };
 }
