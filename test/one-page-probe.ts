@@ -10,25 +10,31 @@ const { impulsesRouter } = await import(root + "/src/routes/impulses.ts");
 const { participationRouter } = await import(root + "/src/routes/participation.ts");
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 
-async function author(id: string, title: string, body: unknown) {
+// `asks` is a TOP-LEVEL pointer field whose items carry `prompt` — the vessel's
+// interaction contract (src/routes/impulses.ts asks()). `body` is opaque human
+// content the vessel never reinterprets as UI controls, so asks nested in the
+// body produce zero parts and no part selector renders.
+async function author(id: string, title: string, body: unknown, asks: unknown[]) {
   const response = await impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ pointer: { type: "uiQuestion_write", id, title, body } }),
+    body: JSON.stringify({ pointer: { type: "uiQuestion_write", id, title, body, asks } }),
   });
   assert.equal(response.status, 200);
+  const panel = (await response.json() as any).body;
+  assert.deepEqual(panel.asks?.map((a: any) => a.id), (asks as any[]).map(a => a.id),
+    `${id}: the vessel did not accept the declared asks — the part selector would be absent`);
 }
 
 // Realistic load: three concurrent questions (S7 shape), one carrying long material
 // so internal scrolling is actually exercised, not vacuously true.
-await author("frozen-s7-a", "Name a retention policy for interaction journals",
-  { asks: [{ id: "a1", text: "Propose a retention bound for interactor-log journals (currently unbounded)." }] });
-await author("frozen-s7-b", "Choose a probe cadence",
-  { asks: [{ id: "b1", text: "How often should the standing trend battery fire?" }] });
+await author("frozen-s7-a", "Name a retention policy for interaction journals", {},
+  [{ id: "a1", prompt: "Propose a retention bound for interactor-log journals (currently unbounded)." }]);
+await author("frozen-s7-b", "Choose a probe cadence", {},
+  [{ id: "b1", prompt: "How often should the standing trend battery fire?" }]);
 await author("frozen-s7-c", "Keep or retire the churn composition", {
   context: "learned-composition-uifeedback-write-to-shellresult: 368 fail / 36 success since July; " +
     "still firing every 30-60 minutes. ".repeat(12),
-  asks: [{ id: "c1", text: "Retire, repair, or observe longer?" }],
-});
+}, [{ id: "c1", prompt: "Retire, repair, or observe longer?" }]);
 
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const path = new URL(request.url).pathname;
@@ -38,6 +44,10 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
   if (path === "/api/resolve") return Response.json({ resolved: true, body: { dispatches: [] } });
   if (path.startsWith("/api/")) return Response.json({ gaps: [] });
   const file = Bun.file(root + "/ui/dist" + (path === "/" ? "/index.html" : path));
+  // A missing asset (the browser's /favicon.ico) gets a 404, not an unhandled
+  // ENOENT rejection: that rejection set a non-zero exit status after this probe
+  // had already printed PASS. Absence only — other read errors still propagate.
+  if (!(await file.exists())) return new Response("not found", { status: 404 });
   return new Response(file);
 }});
 

@@ -22,8 +22,10 @@ import {
   recordFeedback,
   recordObservation,
   upsertPanel,
+  getPanel,
   listPanels,
   questionView,
+  isSolicitation,
   ParticipationConflict,
   type Ask,
   type InteractorEvent,
@@ -76,6 +78,13 @@ function optPosition(p: Pointer): { x: number; y: number } | undefined {
   const y = v["y"];
   return typeof x === "number" && typeof y === "number" ? { x, y } : undefined;
 }
+
+/**
+ * The panel fields a write can carry. Used twice in the write path: to decide
+ * whether a write over an existing panel carries any content at all, and (field
+ * by field) to decide default-vs-preserve. Keep the two in step.
+ */
+const PANEL_CONTENT_KEYS = ["title", "body", "kind", "importance", "asks", "visibility"] as const;
 
 const OBSERVATION_TYPES = ["click", "dwell", "scroll", "focus"] as const;
 const EVENT_TYPES = ["click", "dismiss", "expand", "collapse", "focus", "fetch"] as const;
@@ -201,14 +210,58 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
   switch (type) {
     case "uiPanel_write":
     case "uiQuestion_write": {
+      const id = str(pointer, "id", `panel-${Date.now()}`);
+      const existing = getPanel(id);
+
+      // (2) REFUSE a contentless write over existing content.
+      //
+      // The absence-preservation below (1) alone would turn a defaulted write
+      // (`{type, id}` and nothing else — what an LLM-defaulted satisfier step
+      // emits) into a no-op, and upsertPanel's no-op short-circuit would then
+      // return success with the unchanged revision. The walk would record a
+      // GREEN step for a write that carried nothing: destruction traded for
+      // hollowness. Refusing loudly is what lets the caller fall through to
+      // bridge/escalate instead of believing it asked a human something.
+      //
+      // Exists-only by construction: a fresh id still creates with the literal
+      // defaults, because a first write with no content is the caller saying
+      // "make a blank panel here", not overwriting anything.
+      //
+      // `visibility` counts as content-bearing: a visibility-only update is a
+      // real, intentional state change (public ↔ operator_only) and refusing it
+      // would break a legitimate write.
+      if (existing && !PANEL_CONTENT_KEYS.some(k => Object.hasOwn(pointer, k))) {
+        return c.json({
+          resolved: false,
+          success: false,
+          shape: type,
+          error: `contentless write refused: panel '${id}' already exists and this ${type} carried no content-bearing field (${PANEL_CONTENT_KEYS.join(", ")}). Nothing was changed. Supply the field(s) you intend to write, or read the panel instead of rewriting it.`,
+        }, 409);
+      }
+
+      // (1) ABSENCE PRESERVES. `Object.hasOwn` is the only form that tells
+      // "field omitted" apart from "field explicitly empty": an explicit
+      // `body: ""` must still clear the body, while an omitted body on an
+      // existing panel must keep what is stored. `??` collapses the two.
+      // Literal defaults apply ONLY when there is no existing panel.
       const panel = upsertPanel({
-        id: str(pointer, "id", `panel-${Date.now()}`),
-        title: str(pointer, "title", "Untitled"),
-        body: Object.hasOwn(pointer, "body") ? pointer["body"] : "",
-        kind: str(pointer, "kind", type === "uiQuestion_write" ? "question" : "info"),
-        importance: str(pointer, "importance", "medium"),
-        asks: asks(pointer),
-        visibility: asVisibility(pointer["visibility"], "public"),
+        id,
+        title: Object.hasOwn(pointer, "title")
+          ? str(pointer, "title", existing?.title ?? "Untitled")
+          : (existing?.title ?? "Untitled"),
+        body: Object.hasOwn(pointer, "body")
+          ? pointer["body"]
+          : (existing ? existing.body : ""),
+        kind: Object.hasOwn(pointer, "kind")
+          ? str(pointer, "kind", existing?.kind ?? (type === "uiQuestion_write" ? "question" : "info"))
+          : (existing?.kind ?? (type === "uiQuestion_write" ? "question" : "info")),
+        importance: Object.hasOwn(pointer, "importance")
+          ? str(pointer, "importance", existing?.importance ?? "medium")
+          : (existing?.importance ?? "medium"),
+        asks: Object.hasOwn(pointer, "asks") ? asks(pointer) : existing?.asks,
+        visibility: Object.hasOwn(pointer, "visibility")
+          ? asVisibility(pointer["visibility"], existing?.visibility ?? "public")
+          : (existing?.visibility ?? "public"),
       });
       return c.json({ resolved: true, success: true, shape: type, body: panel });
     }
@@ -216,7 +269,16 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
     case "uiQuestion": {
       const wanted = optStr(pointer, "id") ?? optStr(pointer, "panel_id");
       const questions = listPanels()
-        .filter(pn => pn.kind === "question" && (!wanted || pn.id === wanted))
+        // Everything that ASKS a human something, not only kind==="question".
+        // The escalation kinds gap-to-feature.ts emits (gap_needs_human, …) were
+        // written to this surface and then filtered back out of the only read
+        // path the browser has, so the human was never shown what the substrate
+        // had escalated. `isSolicitation` is the store's single predicate for
+        // this; the answer guard reads the same one, which is the whole reason
+        // it had to be fixed FIRST — a reader-only fix shows a human an
+        // escalation and then tells them "the question changed" when they
+        // answer it.
+        .filter(pn => isSolicitation(pn) && (!wanted || pn.id === wanted))
         .map(questionView);
       return c.json({
         resolved: true,

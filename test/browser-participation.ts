@@ -21,6 +21,12 @@ const server = Bun.serve({hostname:"127.0.0.1",port:0, async fetch(request) {
   if (path === "/api/resolve") return Response.json({resolved:true,body:{dispatches:[]}});
   if (path.startsWith("/api/")) return Response.json({gaps:[]});
   const file = Bun.file(root + "/ui/dist" + (path === "/" ? "/index.html" : path));
+  // Answer a missing asset honestly. The browser asks for /favicon.ico, which the
+  // bundle does not ship; streaming a nonexistent Bun.file raised an UNHANDLED
+  // ENOENT rejection that set a non-zero exit status after this script had already
+  // printed PASS — so the exit code carried no verdict. Only absence is handled;
+  // any other read error still propagates.
+  if (!(await file.exists())) return new Response("not found", {status:404});
   return new Response(file);
 }});
 let browser; let debugPage;
@@ -60,7 +66,13 @@ try {
   await author({claim:"Revised question",source:"New evidence"});
   await active.getByLabel("Your contribution",{exact:true}).fill("false");
   await region.getByRole("button",{name:"Send contribution",exact:true}).click();
-  await region.getByText(/The question changed or is unavailable/).waitFor();
+  // The revision branch of the answer guard, which now reports ONLY a revision
+  // change. It used to share one message with "panel missing" and "panel is
+  // informational"; that collapsed message told a human who answered a live
+  // escalation at the correct revision that the question had changed, which was
+  // false. Asserting the revision-specific wording here is what keeps the three
+  // branches from being re-collapsed.
+  await region.getByText(/The question changed since you loaded it/).waitFor();
   assert.equal(await active.getByLabel("Your contribution",{exact:true}).inputValue(),"false");
   await region.getByRole("button",{name:/Refresh questions|Review updates/}).click();
   await region.getByRole("button",{name:"Review revised question",exact:true}).click();

@@ -11,3 +11,13 @@ ui/node_modules/
 # pulling this repo and nothing rebuilds on pull, so git is the only channel by
 # which a UI change reaches a running surface. See ui/.gitignore for the full
 # reasoning and the cost.
+
+# Compiled output: this vessel RUNS the TypeScript sources (unit ExecStart is
+# `bun src/index.ts`). Checked-in JS/d.ts siblings went stale by a day and
+# described a system without the panel-revision mechanism at all — an auditor
+# reading them would review code that does not run. They also previously
+# shadowed source changes in the UI build.
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map

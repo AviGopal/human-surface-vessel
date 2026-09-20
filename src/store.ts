@@ -154,7 +154,52 @@ export function listPanels(): Panel[] {
   return Array.from(panels.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+/**
+ * The stored panel for `id`, or undefined if this id has never been written.
+ *
+ * Exists so a write path can distinguish CREATION from UPDATE before it builds
+ * the record: a field omitted from an update must fall back to what is already
+ * stored, and a literal default ("Untitled", "") must only ever apply to a
+ * genuine creation. Read by routes/impulses.ts (uiPanel_write / uiQuestion_write).
+ */
+export function getPanel(id: string): Panel | undefined {
+  return panels.get(id);
+}
+
 export class ParticipationConflict extends Error {}
+
+/**
+ * Kinds that are purely informational — a panel the substrate is TELLING a human,
+ * with nothing being asked of them. Everything else solicits.
+ */
+const INFORMATIONAL_KINDS: ReadonlySet<string> = new Set(["info", "pulse"]);
+
+/**
+ * Does this panel ask a human for something?
+ *
+ * DENYLIST, fail-visible, deliberately. An allowlist has already failed twice in
+ * production here, and it cannot not fail: the kind vocabulary is OPEN at
+ * runtime — the write path stores an unrecognised kind uncoerced (a probe wrote
+ * `escalation_kind_nobody_invented_yet` and it persisted at revision 1), and the
+ * escalation kinds that exist live (`gap_needs_human`, `gap_pending_verification`,
+ * `gap_needs_localization`, `gap_reland_needs_human`, `question`) were each
+ * minted by a caller, not by this file. Any new escalation kind a resolver
+ * invents is therefore invisible under an allowlist, and invisible means the
+ * human is never asked.
+ *
+ * "Has asks" is not the predicate either: the live escalation panels carry ZERO
+ * asks (development-vessel's gap-to-feature.ts emits title/body/kind/importance
+ * only), so keying on asks would surface 3 of 445 live panels.
+ *
+ * The only genuinely choosable thing here is the failure polarity, and it is not
+ * symmetric: a human can dismiss noise, and cannot see silence.
+ *
+ * Read by recordFeedback (the answer guard), signatureInputs (the open-age
+ * metric), and routes/impulses.ts's `uiQuestion` reader.
+ */
+export function isSolicitation(panel: Pick<Panel, "kind">): boolean {
+  return !INFORMATIONAL_KINDS.has(panel.kind);
+}
 
 export function recordFeedback(
   f: Omit<Feedback, "id" | "receivedAt" | "visibility"> & { id?: string; visibility?: Visibility },
@@ -169,10 +214,47 @@ export function recordFeedback(
     }
     return previous;
   }
-  if (f.panelRevision !== undefined) {
-    const panel = panels.get(f.panelId);
-    if (!panel || panel.kind !== "question" || panel.revision !== f.panelRevision) {
-      throw new ParticipationConflict("The question changed or is unavailable. Review it before responding; your draft has not been applied.");
+  const panel = panels.get(f.panelId);
+  // THREE distinct conditions, three distinct messages, deliberately NOT
+  // collapsed. The collapsed form told a human who answered a live
+  // `gap_needs_human` escalation at the correct revision that "the question
+  // changed" — a statement that was simply false, and the worst kind of
+  // false: it blames the artifact for the guard's own mistake. Collapsing
+  // missing-panel into the informational branch reproduces exactly that
+  // confabulation in a new coat, so each branch reports only what it knows.
+  //
+  // The branches were correct; the CONDITION that decided whether they ran at
+  // all was not. All four used to sit inside `if (f.panelRevision !== undefined)`,
+  // so a `uiFeedback` that simply omitted `panel_revision` skipped every check:
+  // a bogus ask id was accepted, stored, and admitted into the current-revision
+  // `answers` set that `questionView` treats as the completion oracle (observed:
+  // validation/human-participation/asks-contract-probe.ts stored
+  // askId="part-does-not-exist" at HTTP 200). The gating below is therefore
+  // split by WHAT IS KNOWABLE, not by whether a revision happened to be sent:
+  //
+  //  - A revision COMPARISON is meaningless without a revision, and a caller who
+  //    asserts a revision is asserting this panel is here — so missing-panel and
+  //    revision-mismatch both stay conditional on `f.panelRevision !== undefined`.
+  //  - Whenever this store HOLDS the panel, two facts are knowable with or without
+  //    a revision: an ask id the panel does not contain is bogus, and an
+  //    informational panel solicits nothing. Those run unconditionally.
+  //  - When this store does NOT hold the panel and no revision was asserted, we
+  //    accept. Do not "fix" that: this vessel holds 0 panels in deployment while
+  //    the live panel corpus is served by another vessel, so feedback about an
+  //    unknown panel is the ordinary cross-vessel (and legacy, revision-less)
+  //    path. Refusing it would silently discard real human contributions.
+  //
+  // Precedence is preserved from the original: missing → informational →
+  // revision mismatch → unknown part.
+  if (f.panelRevision !== undefined && !panel) {
+    throw new ParticipationConflict("That question is no longer available on this surface. Your draft has not been applied.");
+  }
+  if (panel) {
+    if (!isSolicitation(panel)) {
+      throw new ParticipationConflict("That panel is informational — nothing is being asked of you there, so there is nothing to respond to. Your draft has not been applied.");
+    }
+    if (f.panelRevision !== undefined && panel.revision !== f.panelRevision) {
+      throw new ParticipationConflict("The question changed since you loaded it. Review the current version before responding; your draft has not been applied.");
     }
     if (f.askId !== undefined && !panel.asks?.some(ask => ask.id === f.askId)) {
       throw new ParticipationConflict("This question no longer contains the requested part.");
@@ -340,7 +422,7 @@ export function signatureInputs(): SignatureInputs {
     const view = questionView(p);
     const isOpen = !view.declined && !view.answered;
     if (isOpen) panelsOpen += 1;
-    if (isOpen && (p.kind === "question" || (p.asks?.length ?? 0) > 0)) {
+    if (isOpen && isSolicitation(p)) {
       ages.push(now - p.updatedAt);
     }
   }
