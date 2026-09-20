@@ -388,9 +388,13 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
             ),
           )
         : undefined;
+      const rawPresentation = pointer["presentation"];
+      const presentation =
+        rawPresentation === "onepage" || rawPresentation === "stacked" ? rawPresentation : undefined;
       const next = writeRenderPolicy({
         ...(tokenOverrides ? { tokenOverrides } : {}),
         ...(formByShape ? { formByShape } : {}),
+        ...(presentation ? { presentation } : {}),
         ...(typeof maxPreview === "number" || maxPreview === null
           ? { maxPreviewChars: maxPreview as number | null }
           : {}),

@@ -389,6 +389,15 @@ export interface RenderPolicy {
   readonly formByShape: Record<string, string>;
   readonly maxPreviewChars: number | null;
   readonly ledgerDefaultExpanded: boolean;
+  /**
+   * Which presentation variant of the repertoire this surface should render:
+   * "onepage" (v2 single-viewport workbench) or "stacked" (v1 order). Selected
+   * through the impulse so a selection activity — not a rebuild — chooses the
+   * variant. The browser adopts it at page load, never mid-session: a person's
+   * open work is not reflowed underneath them (the adoption boundary the
+   * repertoire's versioning rules require).
+   */
+  readonly presentation: "onepage" | "stacked";
   readonly revision: number;
   readonly updatedAt: number;
   readonly note: string | null;
@@ -399,6 +408,7 @@ let renderPolicy: RenderPolicy = {
   formByShape: {},
   maxPreviewChars: null,
   ledgerDefaultExpanded: true,
+  presentation: "onepage",
   revision: 0,
   updatedAt: Date.now(),
   note: "default — no override; the built-in heuristic is in force",
@@ -457,6 +467,7 @@ export function writeRenderPolicy(patch: {
   formByShape?: Record<string, string>;
   maxPreviewChars?: number | null;
   ledgerDefaultExpanded?: boolean;
+  presentation?: "onepage" | "stacked";
   note?: string | null;
 }): RenderPolicy {
   renderPolicy = {
@@ -465,6 +476,7 @@ export function writeRenderPolicy(patch: {
     maxPreviewChars:
       patch.maxPreviewChars === undefined ? renderPolicy.maxPreviewChars : patch.maxPreviewChars,
     ledgerDefaultExpanded: patch.ledgerDefaultExpanded ?? renderPolicy.ledgerDefaultExpanded,
+    presentation: patch.presentation ?? renderPolicy.presentation,
     revision: renderPolicy.revision + 1,
     updatedAt: Date.now(),
     note: patch.note === undefined ? renderPolicy.note : patch.note,

@@ -1415,7 +1415,11 @@ summary {
    verdict next to detail. Below 1000px the stacked order is unchanged: the
    narrow screen concentrates on the current activity and the page may scroll. */
 @media (min-width: 1000px) {
-  html, body, #root { height: 100%; }
+  /* The variant is chosen by the renderPolicy impulse: absence of the
+     attribute (policy not yet read) and "onepage" both render the one-page
+     workbench; "stacked" restores the v1 order at every width. */
+  :root:not([data-presentation="stacked"]) {
+  &, body, #root { height: 100%; }
   body { overflow: hidden; }
   .sf-app {
     height: 100dvh;
@@ -1472,4 +1476,5 @@ summary {
   /* Known-wrong stays present but never taller than a glance; it scrolls
      internally past three findings. */
   .sf-gaps .sf-region-body { overflow-y: auto; max-height: 8.5rem; padding: var(--sf-space-3) var(--sf-space-4); }
+  }
 }

@@ -4,6 +4,7 @@
  */
 
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { AskRegion } from "./components/AskRegion";
 import { DetailPanel } from "./components/DetailPanel";
@@ -21,6 +22,20 @@ export function Surface(): ReactNode {
   const { paused, intervalMs } = useLiveControls();
   const policy = useRenderPolicy({ enabled: !paused, intervalMs }).data;
   useTokenOverrides(policy?.tokenOverrides);
+
+  // Presentation variant (repertoire v1 "stacked" vs v2 "onepage") is adopted
+  // from the FIRST policy read and then held for the life of the page. Token
+  // overrides repaint live because they fix legibility in place; a layout swap
+  // mid-session would reflow the work a person is in the middle of, so its
+  // adoption boundary is a new page, exactly as the repertoire's versioning
+  // rules require. The selection itself still arrives as a shaped impulse.
+  const adoptedPresentation = useRef<string | null>(null);
+  useEffect(() => {
+    if (policy && adoptedPresentation.current === null) {
+      adoptedPresentation.current = policy.presentation ?? "onepage";
+      document.documentElement.dataset["presentation"] = adoptedPresentation.current;
+    }
+  }, [policy]);
 
   const navigate = useNavigate();
   // The detail panel is addressable: a run's URL is shareable and survives a

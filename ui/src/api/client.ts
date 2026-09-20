@@ -330,6 +330,8 @@ export interface RenderPolicy {
   readonly formByShape: Readonly<Record<string, string>>;
   readonly maxPreviewChars: number | null;
   readonly ledgerDefaultExpanded: boolean;
+  /** Repertoire variant chosen through the impulse; adopted at page load only. */
+  readonly presentation?: "onepage" | "stacked";
   readonly revision: number;
   readonly updatedAt: number;
   readonly note: string | null;
