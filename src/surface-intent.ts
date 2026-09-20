@@ -258,19 +258,37 @@ function scaleTokens(
 ): ScaleResult {
   const detail: Record<string, string> = {};
   let clamped = false;
-  let fromBase = 0;
-  let toBase = 0;
+
+  // Scale the DESIGNED scale, never the current one.
+  //
+  // The previous form multiplied each token by `factor` independently and then
+  // clamped each one. Two consequences, both observed live: (1) once any two
+  // tokens reached the same bound they were equal, and every later instruction
+  // multiplied equal values by one factor, so they stayed equal — the type
+  // hierarchy was destroyed irreversibly and no amount of "bigger" brought it
+  // back; (2) a single collapse therefore persisted across every subsequent
+  // interaction. The live surface was found with all six steps at 10.44px,
+  // which is the 9px floor times one "bigger" step: flattened, then scaled.
+  //
+  // So: derive ONE ratio from the base token against its DESIGNED default, and
+  // rebuild every step as its own default times that ratio. The ratios between
+  // steps are then a property of the design, not of the override history — a
+  // flattened policy repairs itself on the next instruction, and the ends
+  // compress under clamping exactly as the reader-facing message already says,
+  // without the middle of the scale collapsing.
+  const baseDefault = tokens.find(([t]) => t === baseToken)?.[1] ?? 14.5;
+  const fromBase = currentPx(baseToken, baseDefault, overrides);
+  const wantedBase = fromBase * factor;
+  const toBase = Math.min(maxPx, Math.max(minPx, wantedBase));
+  if (Math.abs(toBase - wantedBase) > 0.01) clamped = true;
+  const ratio = toBase / baseDefault;
+
   for (const [token, dflt] of tokens) {
-    const before = currentPx(token, dflt, overrides);
-    const wanted = before * factor;
+    const wanted = dflt * ratio;
     const after = Math.min(maxPx, Math.max(minPx, wanted));
     if (Math.abs(after - wanted) > 0.01) clamped = true;
     overrides[token] = px(after);
     detail[token] = px(after);
-    if (token === baseToken) {
-      fromBase = before;
-      toBase = after;
-    }
   }
   return { detail, clamped, fromBase, toBase };
 }
@@ -429,8 +447,29 @@ export function readSurfaceIntent(text: string, current: RenderPolicy): IntentRe
       continue;
     }
 
-    /* 4. a named text size. */
-    const sizeMatch = /\b(\d+(?:\.\d+)?)\s*(?:px|pixels?|pt)?\b/.exec(c);
+    /* 4. a named text size.
+     *
+     * A bare number is NOT a font size. The unit used to be optional here, so
+     * any clause carrying a digit and any one of text/font/type/size/letters
+     * was read as an absolute type-scale instruction — and "type" occurs in
+     * "type-scale", "typecheck" and "prototype", while "size" occurs in plain
+     * prose about payloads. Measured before this change, against the real
+     * parser: "resolve impulse type 3 and report the result" drove the base to
+     * the 9px floor, "Fix the type error in store.ts line 174" drove it to the
+     * 40px ceiling, and "Reduce the size of the payload to 2 items" drove it to
+     * 9px. This surface shares one input box with goal dispatch (the "change
+     * this surface" starter chip fills that box rather than sending), so
+     * ordinary goal text was silently restyling the page — which is precisely
+     * the defect a human reported: "every interact with the goal execution box
+     * results in the text size decreasing".
+     *
+     * A number is a size only when it carries a unit, or when an explicit
+     * setter binds it to the size word ("set the text to 16"). Everything else
+     * falls through to rule 5, where "bigger"/"smaller" still work.
+     */
+    const sizeMatch =
+      /\b(\d+(?:\.\d+)?)\s*(?:px|pixels?|pt)\b/.exec(c) ??
+      /\b(?:text|font|type|typeface|letters?)\b(?:\s+size)?\s*(?:to|=|:|at)\s+(\d+(?:\.\d+)?)\b/.exec(c);
     if (
       sizeMatch &&
       sizeMatch[1] !== undefined &&
@@ -469,9 +508,29 @@ export function readSurfaceIntent(text: string, current: RenderPolicy): IntentRe
       continue;
     }
 
-    /* 5. relative text size. Density words are excluded — they are rule 6. */
-    const wantsBigger = /\b(?:bigger|larger|large|big|huge|increase|grow|enlarge|zoom in)\b/.test(c);
-    const wantsSmaller = /\b(?:smaller|small|tiny|tinier|reduce|shrink|decrease|zoom out)\b/.test(c);
+    /* 5. relative text size. Density words are excluded — they are rule 6.
+     *
+     * The comparative must be NEAR a word naming the thing being sized. A bare
+     * comparative anywhere in the clause is not an instruction about type:
+     * "reduce", "increase", "grow" and "shrink" are ordinary goal verbs, and
+     * this parser shares its input box with goal dispatch. Measured before this
+     * change: "Reduce the size of the payload to 2 items" shrank the whole type
+     * scale, which is the most frequent form of the defect a human reported —
+     * far more common in real goal text than a bare number.
+     *
+     * Proximity in either order, because both "make the text bigger" and "make
+     * the labels on the human surface bigger" are things people write. A
+     * comparative with no subject nearby ("make it bigger") now falls through
+     * to `unparsed`, which is the honest outcome: it records the demand signal
+     * instead of guessing which of several scales was meant.
+     */
+    const NEAR = "[^.;]{0,40}?";
+    const SUBJ = "(?:text|font|type|typeface|letters?|labels?|caption|captions)";
+    const BIGGER = "(?:bigger|larger|large|big|huge|increase[ds]?|grow|enlarge|zoom in)";
+    const SMALLER = "(?:smaller|small|tiny|tinier|reduce[ds]?|shrink|decrease[ds]?|zoom out)";
+    const near = (a: string, b: string): RegExp => new RegExp(`\\b${a}\\b${NEAR}\\b${b}\\b`, "i");
+    const wantsBigger = near(SUBJ, BIGGER).test(c) || near(BIGGER, SUBJ).test(c);
+    const wantsSmaller = near(SUBJ, SMALLER).test(c) || near(SMALLER, SUBJ).test(c);
     const aboutSpacing = /\b(?:space|spacing|spaced|gap|gaps|padding|margin|denser|looser)\b/.test(c);
     if ((wantsBigger || wantsSmaller) && !aboutSpacing) {
       if (wantsBigger && wantsSmaller) {
