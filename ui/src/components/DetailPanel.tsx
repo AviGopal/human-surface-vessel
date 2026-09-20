@@ -118,7 +118,7 @@ export function DetailPanel({ dispatchId }: { dispatchId: string | null }): Reac
 
   if (!dispatchId) {
     return (
-      <section className="sf-region" aria-labelledby="sf-detail-title" {...handlers}>
+      <section className="sf-region sf-detail" aria-labelledby="sf-detail-title" {...handlers}>
         <div className="sf-region-head">
           <h2 className="sf-region-title" id="sf-detail-title">
             Detail
@@ -189,7 +189,7 @@ export function DetailPanel({ dispatchId }: { dispatchId: string | null }): Reac
   const explanation = walk && !isTerminalState ? null : walk ? pathExplanation(walk) : null;
 
   return (
-    <section className="sf-region" aria-labelledby="sf-detail-title" {...handlers}>
+    <section className="sf-region sf-detail" aria-labelledby="sf-detail-title" {...handlers}>
       <div className="sf-region-head">
         <h2 className="sf-region-title" id="sf-detail-title">
           Detail

@@ -235,7 +235,7 @@ export function AskRegion({ onDispatched }: { onDispatched: (dispatchId: string)
   };
 
   return (
-    <section className="sf-region" aria-labelledby="sf-ask-title">
+    <section className="sf-region sf-ask" aria-labelledby="sf-ask-title">
       <div className="sf-region-head">
         <h2 className="sf-region-title" id="sf-ask-title">
           Ask

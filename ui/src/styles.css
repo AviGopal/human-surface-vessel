@@ -1405,3 +1405,71 @@ summary {
   .sf-participation-detail { padding: var(--sf-space-4); }
   .sf-question-card .sf-select { max-width: 100%; }
 }
+
+/* ───────────────────────── one-page workbench (wide) ─────────────────────────
+   At >=1000px the surface is a single viewport: everything required — intent
+   entry, the system's questions with the active one open, runs with their
+   verdicts, the selected run's evidence, and the interface's own known faults —
+   is visible at once, and only regions scroll, never the page. The relationships
+   a wide screen exists to expose sit side by side: question next to evidence,
+   verdict next to detail. Below 1000px the stacked order is unchanged: the
+   narrow screen concentrates on the current activity and the page may scroll. */
+@media (min-width: 1000px) {
+  html, body, #root { height: 100%; }
+  body { overflow: hidden; }
+  .sf-app {
+    height: 100dvh;
+    max-width: none;
+    margin: 0;
+    padding: var(--sf-space-4);
+    gap: var(--sf-space-3);
+    grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+    grid-template-rows: auto minmax(0, 1.15fr) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "ask    ask"
+      "quest  runs"
+      "quest  detail"
+      "gaps   gaps";
+  }
+  .sf-ask { grid-area: ask; }
+  .sf-participation { grid-area: quest; }
+  .sf-runs { grid-area: runs; }
+  .sf-detail { grid-area: detail; }
+  .sf-gaps { grid-area: gaps; }
+
+  /* Regions become flex columns whose bodies own the overflow. min-height: 0
+     everywhere a grid/flex child must be allowed to shrink below content. */
+  .sf-region { display: flex; flex-direction: column; min-height: 0; }
+  .sf-region > .sf-region-body,
+  .sf-participation-workspace,
+  .sf-runs-viewport { flex: 1 1 auto; min-height: 0; }
+  .sf-region > .sf-region-body { overflow: auto; }
+
+  /* Ask compresses to an entry bar: input, send, and the starter hint share
+     one row; the room goes to the work. Panels that appear after a dispatch
+     (outcome, contract, error) break to their own full-width line. */
+  .sf-ask .sf-region-body {
+    padding: var(--sf-space-3) var(--sf-space-4);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sf-space-2) var(--sf-space-5);
+  }
+  .sf-ask form { display: flex; flex: 1 1 36rem; align-items: center; gap: var(--sf-space-3); }
+  .sf-ask form > div { margin-top: 0 !important; flex: 0 0 auto; }
+  .sf-ask .sf-textarea { flex: 1 1 20rem; min-height: 2.75rem; height: 2.75rem; resize: none; }
+  .sf-ask .sf-error, .sf-ask .sf-contract { flex-basis: 100%; }
+
+  /* Questions: list and detail columns scroll independently inside the region. */
+  .sf-participation-workspace { overflow: hidden; }
+  .sf-question-list { overflow-y: auto; min-height: 0; }
+  .sf-participation-detail { overflow-y: auto; min-height: 0; }
+
+  /* Runs: the scroll column fills whatever height the row grants it. */
+  .sf-runs-viewport { display: flex; flex-direction: column; }
+  .sf-runs-scroll { height: auto; flex: 1 1 auto; min-height: 0; }
+
+  /* Known-wrong stays present but never taller than a glance; it scrolls
+     internally past three findings. */
+  .sf-gaps .sf-region-body { overflow-y: auto; max-height: 8.5rem; padding: var(--sf-space-3) var(--sf-space-4); }
+}

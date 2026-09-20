@@ -224,7 +224,7 @@ export function RunsRegion({
   }
 
   return (
-    <section className="sf-region" aria-labelledby="sf-runs-title" {...handlers}>
+    <section className="sf-region sf-runs" aria-labelledby="sf-runs-title" {...handlers}>
       <div className="sf-region-head">
         <h2 className="sf-region-title" id="sf-runs-title">
           Runs
