@@ -261,6 +261,12 @@ export type FormDecisionSource =
   | "empty_preview"
   /** A human pinned this shape through `surfaceIntent`. The strongest evidence there is. */
   | "pin"
+  /**
+   * The form learner wrote this entry from exposure outcomes. Ranks below a
+   * human pin and above every heuristic; recorded distinctly so a learned
+   * choice is graded separately from a pinned one.
+   */
+  | "learned"
   /** Payload unwrapped from a command envelope inside a truncated preview. */
   | "truncated_envelope"
   /** A fragment. Classified conservatively and never rescued. */
@@ -526,12 +532,23 @@ export function planContent(
   preview: string,
   truncated: boolean,
   formByShape?: Readonly<Record<string, string>>,
+  learnedFormByShape?: Readonly<Record<string, string>>,
 ): RenderPlan {
   if (preview.trim().length === 0) return { form: "empty", text: "", decidedBy: "empty_preview" };
 
   const pinned = formByShape?.[shape];
   if (pinned !== undefined && isKnownForm(pinned) && isPinnable(pinned)) {
     return { form: pinned, text: preview, decidedBy: "pin" };
+  }
+
+  // The LEARNED table, consulted only when no human pin exists for the shape.
+  // Order is the rule: a pin always wins; a learned entry sits above every
+  // heuristic below (including `rescueBareScalar` of the default) and below the
+  // pin. Recording `decidedBy: "learned"` distinctly is what lets a learned
+  // choice be graded separately from a pinned one.
+  const learned = learnedFormByShape?.[shape];
+  if (learned !== undefined && isKnownForm(learned) && isPinnable(learned)) {
+    return { form: learned, text: preview, decidedBy: "learned" };
   }
 
   if (truncated) {

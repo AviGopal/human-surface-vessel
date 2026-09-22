@@ -328,6 +328,12 @@ export async function submitGrade(g: GradeSubmission): Promise<void> {
 export interface RenderPolicy {
   readonly tokenOverrides: Readonly<Record<string, string>>;
   readonly formByShape: Readonly<Record<string, string>>;
+  /**
+   * Written only by the form learner from exposure outcomes; consulted by the
+   * planner beneath a human pin. Optional on the browser side: a vessel that
+   * predates the field must read as "no learned entries", not as a type error.
+   */
+  readonly learnedFormByShape?: Readonly<Record<string, string>>;
   readonly maxPreviewChars: number | null;
   readonly ledgerDefaultExpanded: boolean;
   /** Repertoire variant chosen through the impulse; adopted at page load only. */
