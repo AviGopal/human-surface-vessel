@@ -574,10 +574,24 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           400,
         );
       }
+      // response_id is REQUIRED: the store's idempotency (return the identical
+      // prior record on a repeat, 409 on same-id-different-content) only
+      // engages when the caller names its submission. Without it every re-POST
+      // minted a fresh receipt id + timestamp — the 2026-09-21 lifecycle
+      // audit's "repeated response produced a different receipt" finding. The
+      // browser always sends one (crypto.randomUUID()); do NOT derive one by
+      // hashing content — two humans giving the same answer must not collide.
+      const responseId = optStr(pointer, "response_id");
+      if (!responseId) {
+        return c.json(
+          { resolved: false, success: false, shape: type, error: "response_id required" },
+          400,
+        );
+      }
       let entry;
       try {
         entry = recordFeedback({
-        id: optStr(pointer, "response_id"),
+        id: responseId,
         panelRevision: optNum(pointer, "panel_revision"),
         panelId,
         askId: optStr(pointer, "ask_id") ?? optStr(pointer, "askId"),
