@@ -51,6 +51,9 @@ export function FormDecisionRecorder({
       // The DRAWN length, not the envelope's. `entry.chars` counts the wrapper,
       // and the ledger foot already had to correct for exactly this confusion.
       drawn_chars: plan.text.length,
+      // Measured here because only this side has the text. See the field's
+      // comment in lib/form-decision.ts for why the census cannot infer it.
+      single_line: !plan.text.includes("\n"),
       truncated,
       region,
     });
@@ -59,6 +62,6 @@ export function FormDecisionRecorder({
     // the same bytes is not a new decision. The ledger dedupes regardless; this
     // keeps the effect from re-firing on every identical re-render in the first
     // place.
-  }, [shape, signature, plan.form, plan.decidedBy, policyRevision, plan.text.length, truncated, region]);
+  }, [shape, signature, plan.form, plan.decidedBy, policyRevision, plan.text, truncated, region]);
   return null;
 }

@@ -30,6 +30,7 @@ function decision(over: Record<string, unknown> = {}): Record<string, unknown> {
     decided_by: "rescue",
     policy_revision: 3,
     drawn_chars: 36,
+    single_line: true,
     truncated: false,
     region: "evidence_ledger",
     ...over,
@@ -106,7 +107,7 @@ describe("the form_decision observation channel", () => {
     expect(view.content_forms.bare_values_as_verbatim).toBe(0);
   });
 
-  test("the misroute bucket fills when a short value lands on verbatim", async () => {
+  test("the misroute bucket fills when a short SINGLE-LINE value lands on verbatim", async () => {
     // A POSITIVE CONTROL for the bucket. Without this the assertion above is
     // satisfied by a counter that never increments for any input.
     const before = buildFormCensus().bare_values_as_verbatim ?? 0;
@@ -123,6 +124,63 @@ describe("the form_decision observation channel", () => {
       ],
     });
     expect(buildFormCensus().bare_values_as_verbatim).toBe(before + 1);
+  });
+
+  test("FALSIFIER: a short MULTI-LINE verbatim is not a misroute", async () => {
+    // A two-line `git_status` is CORRECTLY verbatim. The census cannot tell it
+    // from a single-line value by length alone, which is why the browser
+    // records `single_line` — without it this bucket is a false-positive
+    // generator wired to a gap-filing detector.
+    const before = buildFormCensus().bare_values_as_verbatim ?? 0;
+    await resolve({
+      type: "interactorObservation",
+      obs_type: "form_decision",
+      decisions: [
+        decision({
+          form: "text",
+          decided_by: "unparsed",
+          drawn_chars: 24,
+          single_line: false,
+          content_signature: "fnv1a32:00000004:24",
+        }),
+      ],
+    });
+    expect(buildFormCensus().bare_values_as_verbatim).toBe(before);
+  });
+
+  test("FALSIFIER: a TRUNCATED short value is not a misroute", async () => {
+    // The rescue refuses truncated content BY DESIGN, so counting it here would
+    // report the planner's correct behaviour as a defect.
+    const before = buildFormCensus().bare_values_as_verbatim ?? 0;
+    await resolve({
+      type: "interactorObservation",
+      obs_type: "form_decision",
+      decisions: [
+        decision({
+          form: "text",
+          decided_by: "truncated",
+          drawn_chars: 30,
+          single_line: true,
+          truncated: true,
+          content_signature: "fnv1a32:00000005:30",
+        }),
+      ],
+    });
+    expect(buildFormCensus().bare_values_as_verbatim).toBe(before);
+  });
+
+  test("FALSIFIER: a row with NO single_line field is not counted", async () => {
+    // An absent field is unknown, not false. A build predating `single_line`
+    // must not have its rows guessed into (or out of) the bucket.
+    const before = buildFormCensus().bare_values_as_verbatim ?? 0;
+    await resolve({
+      type: "interactorObservation",
+      obs_type: "form_decision",
+      decisions: [
+        { shape: "legacy", content_signature: "fnv1a32:00000006:9", form: "text", decided_by: "unparsed", drawn_chars: 9, region: "evidence_ledger" },
+      ],
+    });
+    expect(buildFormCensus().bare_values_as_verbatim).toBe(before);
   });
 });
 

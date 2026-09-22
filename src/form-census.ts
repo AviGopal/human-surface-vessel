@@ -75,6 +75,8 @@ interface DecisionRow {
   form?: unknown;
   decided_by?: unknown;
   drawn_chars?: unknown;
+  single_line?: unknown;
+  truncated?: unknown;
   region?: unknown;
 }
 
@@ -145,11 +147,31 @@ export function buildFormCensus(
       if (typeof row.shape === "string" && typeof row.content_signature === "string") {
         payloads.add(`${row.shape}${KEY_SEP}${row.content_signature}`);
       }
-      // The misroute class, counted from the record rather than re-judged here.
-      // `text` plus a short drawn length is the signature of a value drawn as a
-      // code listing; the rescue was supposed to empty this bucket and a
-      // regression refills it.
-      if (row.form === "text" && typeof row.drawn_chars === "number" && row.drawn_chars <= 300) {
+      /*
+       * The misroute class, counted from the record rather than re-judged here.
+       *
+       * ALL FOUR CONDITIONS ARE REQUIRED, and the two added last are what keep
+       * this bucket from being a false-positive generator once a gap-filing
+       * detector reads it:
+       *
+       *   • `single_line` — a short MULTI-line payload (a two-line `git_status`)
+       *     is correctly verbatim and is not a value drawn as a listing. The
+       *     census cannot infer this, which is why the browser records it.
+       *   • `!truncated` — the rescue refuses truncated content BY DESIGN, so
+       *     counting a truncated short preview here would report the planner's
+       *     correct behaviour as a defect.
+       *
+       * A row from a build that predates `single_line` is not counted: an
+       * absent field is unknown, and guessing it would put the bucket's
+       * meaning back where these two conditions took it from.
+       */
+      if (
+        row.form === "text" &&
+        typeof row.drawn_chars === "number" &&
+        row.drawn_chars <= 300 &&
+        row.single_line === true &&
+        row.truncated !== true
+      ) {
         bareVerbatim += 1;
       }
     }

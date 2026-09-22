@@ -75,6 +75,18 @@ export interface FormDecision {
   readonly drawn_chars: number;
   /** True when the plan was made from a preview the producer had already cut. */
   readonly truncated: boolean;
+  /**
+   * Whether the drawn text is a single line.
+   *
+   * Recorded because the CENSUS CANNOT DERIVE IT. The server sees only a hash
+   * and a length, so a short multi-line payload and a short single-line one are
+   * indistinguishable to it — and the census's misroute bucket ("a value drawn
+   * as a code listing") is only about the single-line case. Without this field
+   * the bucket counts a correctly-verbatim two-line `git_status` as a misroute,
+   * and once a detector files gaps from that bucket it becomes a
+   * false-positive generator wired to the gap store.
+   */
+  readonly single_line: boolean;
   /** Where on the surface it was drawn. A question card and a ledger row are different reads. */
   readonly region: string;
 }
