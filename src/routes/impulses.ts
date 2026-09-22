@@ -38,6 +38,7 @@ import {
 } from "../store.ts";
 import { explainRanking, rankPanels, type ImportanceWeights } from "../importance.ts";
 import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.ts";
+import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 
 type Pointer = Record<string, unknown>;
@@ -719,16 +720,37 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         obsType === "exposure_outcome"
           ? (() => {
               const result = runImportanceLearningPass();
+              // THE FORM LEARNER runs at the same trigger — new outcome evidence
+              // is new evidence for both. It returns the table it wants written
+              // and never writes itself; the write happens here, carrying ONLY
+              // learnedFormByShape so the human's formByShape is never touched.
+              // KNOWN DOUBLE-BUMP: when both passes move on one outcome the
+              // revision advances twice. Folding the two into one write means
+              // changing the importance pass's contract; deferred, and named.
+              const formPass = runFormLearningPass();
+              const formWrite = formPass.changed
+                ? writeRenderPolicy({ learnedFormByShape: formPass.learnedFormByShape, assignedBy: FORM_LEARNER_ID, reason: formPass.reason })
+                : null;
               return {
                 changed: result.changed,
                 changed_fields: result.changedFields,
-                policy_revision: result.policy.revision,
+                policy_revision: formWrite ? formWrite.policy.revision : result.policy.revision,
                 weights: result.policy.importanceWeights,
                 moves: result.pass.moves,
                 evidence: result.pass.evidence,
                 skipped: result.pass.skipped,
                 reason: result.pass.reason,
                 ...(result.refusal ? { refusal: result.refusal.reason } : {}),
+                form_learning: {
+                  changed: formPass.changed,
+                  learned_form_by_shape: formWrite ? formWrite.policy.learnedFormByShape : formPass.learnedFormByShape,
+                  moves: formPass.moves,
+                  evidence: formPass.evidence,
+                  skipped: formPass.skipped,
+                  reason: formPass.reason,
+                  learner: formPass.learnerId,
+                  ...(formWrite?.refusal ? { refusal: formWrite.refusal.reason } : {}),
+                },
               };
             })()
           : undefined;
