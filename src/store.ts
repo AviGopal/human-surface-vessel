@@ -586,6 +586,15 @@ export interface RenderPolicy {
    */
   readonly tokenOverrides: Record<string, string>;
   readonly formByShape: Record<string, string>;
+  /**
+   * The form LEARNER's table, and only its. `formByShape` above is the human's
+   * pin table: written by `surfaceIntent`, and its clear-pins path replaces the
+   * whole map. Keeping learned entries in a separate field is what makes two
+   * rules hold by construction: a human pin always wins over a learned one,
+   * and clearing human pins never touches what was learned. The planner reads
+   * this only when `formByShape` has no entry for the shape.
+   */
+  readonly learnedFormByShape: Record<string, string>;
   readonly maxPreviewChars: number | null;
   readonly ledgerDefaultExpanded: boolean;
   /**
@@ -676,6 +685,7 @@ export interface RenderPolicy {
 export const RENDER_POLICY_PATCH_KEYS = [
   "tokenOverrides",
   "formByShape",
+  "learnedFormByShape",
   "maxPreviewChars",
   "ledgerDefaultExpanded",
   "presentation",
@@ -698,6 +708,8 @@ export const RENDER_POLICY_PATCH_KEYS = [
 const RENDER_POLICY_CONTENT_FIELDS = [
   "tokenOverrides",
   "formByShape",
+  // CONTENT, not metadata: a change here changes what a human is shown.
+  "learnedFormByShape",
   "maxPreviewChars",
   "ledgerDefaultExpanded",
   "presentation",
@@ -725,6 +737,7 @@ export interface RenderPolicyWrite {
 let renderPolicy: RenderPolicy = {
   tokenOverrides: {},
   formByShape: {},
+  learnedFormByShape: {},
   maxPreviewChars: null,
   ledgerDefaultExpanded: true,
   presentation: "onepage",
@@ -841,6 +854,7 @@ function sameFieldValue(a: unknown, b: unknown): boolean {
 export function writeRenderPolicy(patch: {
   tokenOverrides?: Record<string, string>;
   formByShape?: Record<string, string>;
+  learnedFormByShape?: Record<string, string>;
   maxPreviewChars?: number | null;
   ledgerDefaultExpanded?: boolean;
   presentation?: "onepage" | "stacked";
@@ -866,6 +880,7 @@ export function writeRenderPolicy(patch: {
   const candidate: RenderPolicy = {
     tokenOverrides: patch.tokenOverrides ?? renderPolicy.tokenOverrides,
     formByShape: patch.formByShape ?? renderPolicy.formByShape,
+    learnedFormByShape: patch.learnedFormByShape ?? renderPolicy.learnedFormByShape,
     maxPreviewChars:
       patch.maxPreviewChars === undefined ? renderPolicy.maxPreviewChars : patch.maxPreviewChars,
     ledgerDefaultExpanded: patch.ledgerDefaultExpanded ?? renderPolicy.ledgerDefaultExpanded,
@@ -980,6 +995,7 @@ for (const raw of readParticipation("renderPolicy_write")) {
   renderPolicy = {
     tokenOverrides: stringMap(p.tokenOverrides),
     formByShape: stringMap(p.formByShape),
+    learnedFormByShape: stringMap(p.learnedFormByShape),
     maxPreviewChars: typeof p.maxPreviewChars === "number" ? p.maxPreviewChars : null,
     ledgerDefaultExpanded: typeof p.ledgerDefaultExpanded === "boolean" ? p.ledgerDefaultExpanded : true,
     presentation: p.presentation,
