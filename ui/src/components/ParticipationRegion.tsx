@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { fetchQuestions, sendContribution, type Contribution, type Question, type ParticipationResponse, type Ranking } from "../api/participation";
 import { planContent } from "../lib/ledger";
+import { contentSignature } from "../lib/form-decision";
 import { sortRuns } from "../lib/sort";
 import { useLiveControls, useRegionFreeze } from "../state/liveControls";
 import { useRenderPolicy } from "../api/queries";
@@ -26,7 +27,7 @@ function contentText(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? "";
 }
 
-function QuestionCard({ incoming, onRecorded, formByShape, policyRevision }: {
+function QuestionCard({ incoming, onRecorded, formByShape, learnedFormByShape, policyRevision }: {
   incoming: Question;
   onRecorded: (receipt: ParticipationResponse) => void;
   /**
@@ -40,6 +41,8 @@ function QuestionCard({ incoming, onRecorded, formByShape, policyRevision }: {
    * human is reading.
    */
   formByShape?: Readonly<Record<string, string>>;
+  /** `renderPolicy.learnedFormByShape`: consulted by the planner beneath the pin. */
+  learnedFormByShape?: Readonly<Record<string, string>>;
   policyRevision: number | null;
 }): ReactNode {
   // Hold the exact question being answered. New versions require explicit review.
@@ -77,7 +80,7 @@ function QuestionCard({ incoming, onRecorded, formByShape, policyRevision }: {
   // Keyed on the SAME shape name a pin would name. Pinning is keyed by shape,
   // so a card that planned against an ad-hoc literal could never be pinned;
   // the constant makes the key one thing in one place.
-  const questionPlan = planContent(QUESTION_CONTENT_SHAPE, contentText(question.body), false, formByShape);
+  const questionPlan = planContent(QUESTION_CONTENT_SHAPE, contentText(question.body), false, formByShape, learnedFormByShape);
 
   return (
     <article className="sf-question-card" aria-labelledby={`${id}-title`}>
@@ -358,6 +361,17 @@ export function ParticipationRegion(): ReactNode {
             data-solicitation-id={question.id} data-exposure-role="list_row"
             {...(typeof question.rank === "number" ? { "data-rank": String(question.rank) } : {})}
             {...(question.because?.[0] ? { "data-rank-explanation": question.because[0] } : {})}
+            {...(() => {
+              // The form decision, published on the MEASURED element. The form is
+              // decided inside QuestionCard, which the exposure reporter never sees;
+              // it reads the row. These two attributes are read from the DOM beside
+              // `data-rank`, so an outcome can be joined to the form_decision record
+              // that produced it — the join the form learner needs. Planned here with
+              // the same inputs QuestionCard uses, so the two agree by construction.
+              const text = contentText(question.body);
+              const plan = planContent(QUESTION_CONTENT_SHAPE, text, false, renderPolicy?.formByShape, renderPolicy?.learnedFormByShape);
+              return { "data-content-form": plan.form, "data-content-signature": contentSignature(text) };
+            })()}
             aria-current={selectedId === question.id ? "true" : undefined} onClick={() => setSelected(question.id)}>
             <span>{question.title}</span>
             <small>{question.answered ? "Response recorded" : question.declined ? "Declined" : "Awaiting your input"}</small>
@@ -369,6 +383,7 @@ export function ParticipationRegion(): ReactNode {
               incoming={question}
               onRecorded={recordReceipt}
               formByShape={renderPolicy?.formByShape}
+              learnedFormByShape={renderPolicy?.learnedFormByShape}
               /*
                * THE POLICY THAT DECIDED THE FORM, not the one that ordered the
                * list. `ranking.policy_revision` is the revision whose WEIGHTS
