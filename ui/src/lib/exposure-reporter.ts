@@ -18,9 +18,42 @@ import {
   type Rect,
 } from "./exposure";
 import { sendObservation } from "../api/exposure";
+import { FormDecisionLedger, buildFormDecisionRecord, type FormDecision } from "./form-decision";
 
 const ledger = new ExposureLedger();
+const formLedger = new FormDecisionLedger();
 let tickSeq = 0;
+
+/**
+ * A form decision, on its way to the corpus.
+ *
+ * Called from the render path, which is why it is a no-op-safe enqueue rather
+ * than a POST: a renderer must not do network I/O per row, and a decision that
+ * cost a request would have to be sampled, which would put a silent cap on the
+ * evidence. Decisions accumulate and ride out on the next presentation tick,
+ * under the same measured conditions the exposure record carries — so a form
+ * and the viewport it was drawn into are joinable without another key.
+ */
+export function recordFormDecision(decision: FormDecision): void {
+  formLedger.record(decision);
+}
+
+/**
+ * Post whatever decisions accumulated, if any.
+ *
+ * Silence when nothing is pending, deliberately: an empty batch would be a row
+ * asserting "the surface made no form decisions", which is a claim about the
+ * page rather than an observation of it, and a corpus full of them would drown
+ * the real ones.
+ */
+export function flushFormDecisions(conditions: {
+  rendererBundle: string | null;
+  presentationVariant: string | null;
+}): void {
+  const decisions = formLedger.drain();
+  if (decisions.length === 0) return;
+  sendObservation(buildFormDecisionRecord(decisions, conditions, tickSeq));
+}
 
 function viewportRect(win: Window): Rect {
   return { x: 0, y: 0, width: win.innerWidth, height: win.innerHeight };
@@ -68,6 +101,10 @@ export function reportExposureTick(root: ParentNode, snapshotCount: number, atte
   for (const event of ledger.tick(visible.map((item) => item.solicitation_id))) {
     sendObservation(buildOutcomeRecord(event, conditions));
   }
+  // AFTER the exposure record, and on the same tick's conditions. Order matters
+  // for the same reason it matters in the learner's own corroboration rule:
+  // measure the screen first, then report what was decided for it.
+  flushFormDecisions(conditions);
 }
 
 /** A human act on a solicitation: answered, declined, or complained about. */

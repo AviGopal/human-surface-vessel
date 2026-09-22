@@ -45,6 +45,32 @@ export interface Contribution {
   value: unknown;
 }
 
+/**
+ * The honest summary the `uiQuestion` read publishes alongside the rows.
+ *
+ * It was ALREADY BEING SENT and was being dropped here: `fetchQuestions`
+ * returned `body.questions` and discarded the rest, so the surface withheld
+ * part of a ranked set honestly in the payload and silently on screen. A slice
+ * that does not say it is a slice reads as the whole.
+ */
+export interface Ranking {
+  readonly solicitations_total: number;
+  readonly shown_count: number;
+  readonly not_shown_count: number;
+  readonly slice_size: number | null;
+  readonly slice_source: string;
+  /** The `renderPolicy` revision whose weights produced this order. */
+  readonly policy_revision: number;
+  readonly explanation?: string;
+  readonly rejected_values?: readonly string[];
+}
+
+export interface QuestionPage {
+  readonly questions: Question[];
+  /** Null when the server did not publish a summary — an older build. Never faked. */
+  readonly ranking: Ranking | null;
+}
+
 async function read(response: Response): Promise<Record<string, unknown>> {
   const body = await response.json().catch(() => null);
   if (!response.ok || !body || body.resolved !== true || body.success !== true) {
@@ -53,11 +79,16 @@ async function read(response: Response): Promise<Record<string, unknown>> {
   return body;
 }
 
-export async function fetchQuestions(): Promise<Question[]> {
+export async function fetchQuestions(): Promise<QuestionPage> {
   const result = await read(await fetch("/api/questions", { credentials: "same-origin" }));
-  const body = result.body as { questions?: Question[] } | undefined;
+  const body = result.body as { questions?: Question[]; ranking?: Ranking } | undefined;
   if (!Array.isArray(body?.questions)) throw new Error("The question record is unavailable.");
-  return body.questions;
+  // The summary is PASSED THROUGH when present and null when absent. Deriving
+  // it from `questions.length` would produce a line claiming the slice is the
+  // whole set — which is exactly the withholding this exists to disclose.
+  const ranking =
+    body?.ranking && typeof body.ranking.solicitations_total === "number" ? body.ranking : null;
+  return { questions: body.questions, ranking };
 }
 
 export async function sendContribution(contribution: Contribution): Promise<ParticipationResponse> {

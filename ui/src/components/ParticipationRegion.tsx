@@ -1,20 +1,47 @@
 // @interaction:exempt-file P3 — all question lists render an explicitly accepted snapshot; polling never splices rows into it
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { fetchQuestions, sendContribution, type Contribution, type Question, type ParticipationResponse } from "../api/participation";
+import { fetchQuestions, sendContribution, type Contribution, type Question, type ParticipationResponse, type Ranking } from "../api/participation";
 import { planContent } from "../lib/ledger";
 import { sortRuns } from "../lib/sort";
 import { useLiveControls, useRegionFreeze } from "../state/liveControls";
+import { useRenderPolicy } from "../api/queries";
 import { reportExposureAct, reportExposureTick } from "../lib/exposure-reporter";
 import { ComplainButton } from "./ComplainButton";
 import { ContentRender } from "./ContentRender";
+import { FormDecisionRecorder } from "./FormDecisionRecorder";
 import { LiveControls } from "./LiveControls";
+
+/**
+ * The shape name a question's body is planned and pinned under.
+ *
+ * A constant rather than an inline literal because it is a PIN KEY: a person
+ * writing "show human_question as prose" has to name the same string the
+ * planner looks up, and two copies of it in two files is how that stops being
+ * true without anything failing.
+ */
+export const QUESTION_CONTENT_SHAPE = "human_question";
 
 function contentText(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? "";
 }
 
-function QuestionCard({ incoming, onRecorded }: { incoming: Question; onRecorded: (receipt: ParticipationResponse) => void }): ReactNode {
+function QuestionCard({ incoming, onRecorded, formByShape, policyRevision }: {
+  incoming: Question;
+  onRecorded: (receipt: ParticipationResponse) => void;
+  /**
+   * `renderPolicy.formByShape`, threaded in for the first time.
+   *
+   * This region used to call `planContent` with no policy at all, so a pin a
+   * person set through `surfaceIntent` changed the evidence ledger and could
+   * never change the question card in front of them — the instruction worked in
+   * one region and silently did not in the other. A pin is the strongest form
+   * evidence this surface has; it may not be dropped on the way to the card a
+   * human is reading.
+   */
+  formByShape?: Readonly<Record<string, string>>;
+  policyRevision: number | null;
+}): ReactNode {
   // Hold the exact question being answered. New versions require explicit review.
   const [question, setQuestion] = useState(incoming);
   const [text, setText] = useState("");
@@ -47,11 +74,23 @@ function QuestionCard({ incoming, onRecorded }: { incoming: Question; onRecorded
     mutation.mutate(pending.current.contribution);
   }
 
+  // Keyed on the SAME shape name a pin would name. Pinning is keyed by shape,
+  // so a card that planned against an ad-hoc literal could never be pinned;
+  // the constant makes the key one thing in one place.
+  const questionPlan = planContent(QUESTION_CONTENT_SHAPE, contentText(question.body), false, formByShape);
+
   return (
     <article className="sf-question-card" aria-labelledby={`${id}-title`}>
       <p className="sf-question-eyebrow">A question from the system</p>
       <h3 id={`${id}-title`}>{question.title}</h3>
-      <div className="sf-question-content"><ContentRender plan={planContent("human_question", contentText(question.body), false)} /></div>
+      <div className="sf-question-content"><ContentRender plan={questionPlan} /></div>
+      <FormDecisionRecorder
+        shape={QUESTION_CONTENT_SHAPE}
+        plan={questionPlan}
+        truncated={false}
+        policyRevision={policyRevision}
+        region="question_card"
+      />
       {question.asks?.map(part => (
         <p key={part.id}><strong>{part.prompt}</strong>{part.choices?.length ? ` Options: ${part.choices.join("; ")}` : ""}</p>
       ))}
@@ -128,6 +167,10 @@ function QuestionCard({ incoming, onRecorded }: { incoming: Question; onRecorded
 
 export function ParticipationRegion(): ReactNode {
   const { paused, intervalMs } = useLiveControls();
+  // Read HERE rather than taken as a prop, so the region cannot be mounted
+  // without the policy that decides how its content is drawn. react-query
+  // dedupes with the Surface's own read, so this costs no extra request.
+  const renderPolicy = useRenderPolicy({ enabled: !paused, intervalMs }).data;
   const { frozen, handlers } = useRegionFreeze();
   const query = useQuery({
     queryKey: ["humanQuestions"], queryFn: fetchQuestions,
@@ -135,6 +178,16 @@ export function ParticipationRegion(): ReactNode {
     refetchOnWindowFocus: false, retry: false,
   });
   const [snapshot, setSnapshot] = useState<Question[] | null>(null);
+  /**
+   * The ranking summary that was in force when the DISPLAYED snapshot was
+   * accepted — not the newest one the server has sent.
+   *
+   * Pinned to the snapshot on purpose: the buffer exists so the list does not
+   * move under a reader, and a count that advanced while the rows did not would
+   * say "showing 3 of 9" over a list of 4. The disclosure has to describe what
+   * is on screen or it is a different kind of lie from the one it fixes.
+   */
+  const [shownRanking, setShownRanking] = useState<Ranking | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   // Exposure ticks are counted, not timed: this increments only where a
   // snapshot from the server is ACCEPTED for display (first paint below, and
@@ -143,12 +196,13 @@ export function ParticipationRegion(): ReactNode {
   const [acceptedTicks, setAcceptedTicks] = useState(0);
   const regionRef = useRef<HTMLElement | null>(null);
   const visible = snapshot ?? [];
-  const available = query.data ?? [];
+  const available = query.data?.questions ?? [];
   useEffect(() => {
     // First paint needs no confirmation. Subsequent arrivals are buffered.
     if (snapshot === null && query.data) {
-      setSnapshot(query.data);
-      const initial = sortRuns(query.data.map(question => ({ ...question, dispatchId: question.id, startedAtMs: question.createdAt })));
+      setSnapshot(query.data.questions);
+      setShownRanking(query.data.ranking);
+      const initial = sortRuns(query.data.questions.map(question => ({ ...question, dispatchId: question.id, startedAtMs: question.createdAt })));
       setSelected(initial.find(question => !question.answered && !question.declined)?.id ?? initial[0]?.id ?? null);
       setAcceptedTicks(count => count + 1);
     }
@@ -247,7 +301,8 @@ export function ParticipationRegion(): ReactNode {
   async function refresh(): Promise<void> {
     const result = await query.refetch();
     if (result.data && !result.isError) {
-      setSnapshot(result.data);
+      setSnapshot(result.data.questions);
+      setShownRanking(result.data.ranking);
       setAcceptedTicks(count => count + 1);
     }
   }
@@ -258,6 +313,24 @@ export function ParticipationRegion(): ReactNode {
         <div className="sf-participation-heading">
           <h2 className="sf-region-title" id="sf-participation-title">Questions for you</h2>
           <span className="sf-participation-count">{snapshot === null ? "Checking for requests" : `${waiting} awaiting your perspective`}</span>
+          {/*
+            * THE WITHHOLDING, SAID OUT LOUD.
+            *
+            * The `uiQuestion` read has always published `shown_count` /
+            * `not_shown_count`, and the surface has always dropped them — so a
+            * ranked slice of 250 solicitations looked like the whole list, and
+            * a person could not tell that the ordering had chosen FOR them.
+            * Rendered only when something is actually withheld: a line reading
+            * "showing 4 of 4" on every load is noise that trains a reader to
+            * stop reading this spot, and then the one time it matters they will
+            * not see it either.
+            */}
+          {shownRanking && shownRanking.not_shown_count > 0 ? (
+            <span className="sf-participation-slice" data-slice-source={shownRanking.slice_source}>
+              Showing the {shownRanking.shown_count} most important of{" "}
+              {shownRanking.solicitations_total} · {shownRanking.not_shown_count} not shown
+            </span>
+          ) : null}
         </div>
         <details className="sf-participation-updates"><summary>Update settings</summary><LiveControls frozen={frozen} regionName="participation" /></details>
       </div>
@@ -292,7 +365,22 @@ export function ParticipationRegion(): ReactNode {
         </nav>
         <div className="sf-participation-detail">
           {ordered.map(question => <div key={question.id} hidden={selectedId !== question.id}>
-            <QuestionCard incoming={question} onRecorded={recordReceipt} />
+            <QuestionCard
+              incoming={question}
+              onRecorded={recordReceipt}
+              formByShape={renderPolicy?.formByShape}
+              /*
+               * THE POLICY THAT DECIDED THE FORM, not the one that ordered the
+               * list. `ranking.policy_revision` is the revision whose WEIGHTS
+               * produced the order; the form came from the same impulse's
+               * `formByShape`, read here. They are usually the same number and
+               * are not the same fact — preferring the ranking's would make a
+               * form decision joinable to the wrong half of the policy, and a
+               * probe against a surface whose ranking and render reads differ
+               * caught exactly that (0 vs 9).
+               */
+              policyRevision={renderPolicy?.revision ?? null}
+            />
           </div>)}
         </div>
       </div> : null}

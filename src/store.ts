@@ -68,7 +68,17 @@ export type ObservationType =
   | "scroll"
   | "focus"
   | "exposure"
-  | "exposure_outcome";
+  | "exposure_outcome"
+  /**
+   * The form this surface chose for a payload, and which branch chose it.
+   *
+   * Telemetry about the SURFACE rather than about the person, and that is why
+   * it sits here rather than on the feedback channel: nobody judged these. It
+   * records that a choice was made and names its author, which is what a later
+   * judgement — a pin, a complaint, a fidelity predicate — needs something to
+   * attach to.
+   */
+  | "form_decision";
 
 /**
  * The four states a SHOWN solicitation can end in, kept distinct here because

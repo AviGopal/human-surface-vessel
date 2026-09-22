@@ -1228,6 +1228,16 @@ summary {
 
 .sf-gap-list { list-style: none; margin: 0; padding: 0; }
 
+/* The collapse control, and the padding the region body needs OUTSIDE the
+   one-page media query.
+   The one-page block sets `.sf-gaps .sf-region-body` padding and its 8.5rem
+   cap; on a narrow viewport that block does not apply, so the body would have
+   rendered flush against the region edge. Stated here rather than left to the
+   wider layout, because "it looks right on my screen" is how the cap that
+   named a non-existent element survived in the first place. */
+.sf-gaps .sf-region-body { padding: var(--sf-space-4) var(--sf-space-6) var(--sf-space-5); }
+.sf-gap-collapse { white-space: nowrap; }
+
 .sf-gap-row {
   display: grid;
   grid-template-columns: 7.5rem minmax(0, 1fr);
@@ -1372,6 +1382,16 @@ summary {
 /* Human participation: invitations stay visible while the current exchange holds still. */
 .sf-participation-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-3); }
 .sf-participation-count { color: var(--sf-ink-2); font-size: var(--sf-text-sm); }
+/* The withholding disclosure. Monospace numerals so "4 of 250" reads as a
+   measurement rather than as copy, and it sits on its own line under the count
+   so it cannot be mistaken for part of the heading. */
+.sf-participation-slice {
+  display: block;
+  font-family: var(--sf-font-mono);
+  font-size: var(--sf-text-xs);
+  color: var(--sf-ink-2);
+  margin-top: var(--sf-space-2);
+}
 .sf-participation-updates { font-size: var(--sf-text-sm); }
 .sf-participation-updates .sf-live-controls { margin-top: var(--sf-space-3); }
 .sf-participation-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sf-space-4); padding: var(--sf-space-4) var(--sf-space-6); border-bottom: 1px solid var(--sf-rule); }

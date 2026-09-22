@@ -15,7 +15,7 @@
  * for the same reason: an unresolved finding must not read quieter than a
  * resolved one.
  */
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLiveControls, useRegionFreeze } from "../state/liveControls";
 import { ComplainButton } from "./ComplainButton";
@@ -36,6 +36,43 @@ async function fetchGaps(): Promise<readonly InterfaceGap[]> {
   if (!res.ok) throw new Error(`gap store unavailable (${res.status})`);
   const j = (await res.json()) as { gaps?: InterfaceGap[] };
   return j.gaps ?? [];
+}
+
+/**
+ * Where the reader's collapse choice lives.
+ *
+ * A HUMAN ASKED FOR THIS, in these words: the section "takes up too much space
+ * if there are any gaps in the list. Without changing the interface's single
+ * screen nature. Allow it to collapse."
+ *
+ * Two decisions follow from that sentence and are worth defending:
+ *
+ *  1. DEFAULT OPEN. Collapsing by default would make a surface whose job is to
+ *     show what is wrong with it start by hiding what is wrong with it. The
+ *     complaint was about space, not about wanting the findings gone.
+ *  2. THE COUNT NEVER COLLAPSES. `n open · n closed` stays in the header in
+ *     both states, so collapsing changes how much room the list takes and
+ *     never whether a reader can tell there is something to read. A collapse
+ *     that hid the count would answer the complaint by introducing a worse
+ *     one.
+ *
+ * Persisted, because a preference a person has to re-express on every reload is
+ * not a preference the interface has learned. `localStorage` rather than the
+ * render policy: this is one reader's view state on one device, not a
+ * substrate-wide behaviour, and putting it on the policy impulse would make one
+ * person's collapse everybody's.
+ */
+const COLLAPSE_KEY = "sf.gaps.collapsed";
+
+function readCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(COLLAPSE_KEY) === "1";
+  } catch {
+    // A blocked storage API is not a preference. Fall back to open — the state
+    // that shows more, not less.
+    return false;
+  }
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -94,6 +131,14 @@ export function GapStrip(): ReactNode {
   const gaps = q.data ?? [];
   const open = gaps.filter((g) => g.status !== "closed");
   const closed = gaps.filter((g) => g.status === "closed");
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
+    } catch {
+      // Unpersistable is not unusable: the session still honours the choice.
+    }
+  }, [collapsed]);
 
   return (
     /*
@@ -110,13 +155,38 @@ export function GapStrip(): ReactNode {
         </h2>
         <span className="sf-gap-head-right">
           <ComplainButton region="the surface" />
+          {/* NEVER COLLAPSES. See COLLAPSE_KEY. */}
           <span className="sf-gap-count">
             {open.length} open · {closed.length} closed
           </span>
+          <button
+            type="button"
+            className="sf-button sf-button-quiet sf-gap-collapse"
+            aria-expanded={!collapsed}
+            aria-controls="sf-gaps-body"
+            onClick={() => setCollapsed((was) => !was)}
+          >
+            {collapsed ? "Show findings" : "Hide findings"}
+          </button>
         </span>
       </header>
 
-      <p className="sf-note sf-muted" style={{ margin: "var(--sf-space-4) var(--sf-space-6) 0" }}>
+      {/*
+        * `sf-region-body`, and the class name is the FIX rather than a wrapper.
+        *
+        * The one-page stylesheet already carried the bound this section needed
+        * — `.sf-gaps .sf-region-body { overflow-y: auto; max-height: 8.5rem }`
+        * — and this component never rendered an element it could match, so the
+        * cap had no effect and the list grew without limit. That is the whole
+        * mechanism behind the complaint that the section "takes up too much
+        * space if there are any gaps in the list": a bound was written, named
+        * an element that did not exist, and silently did nothing. Attaching it
+        * fixes the space complaint even when the section is expanded; the
+        * collapse control is the reader's own lever on top of it.
+        */}
+      {collapsed ? null : (
+      <div className="sf-region-body" id="sf-gaps-body">
+      <p className="sf-note sf-muted">
         What this interface knows is wrong with it — the substrate's own legibility findings and
         human complaints in one list, so agreement and disagreement between them are visible.
       </p>
@@ -140,6 +210,8 @@ export function GapStrip(): ReactNode {
             <GapRow key={g.id} gap={g} />
           ))}
         </ul>
+      )}
+      </div>
       )}
     </section>
   );

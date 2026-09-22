@@ -268,6 +268,7 @@ export function DetailPanel({ dispatchId }: { dispatchId: string | null }): Reac
 
               <EvidenceLedger
                 formByShape={renderPolicy?.formByShape}
+                policyRevision={renderPolicy?.revision ?? null}
                 provenance={walk.poolProvenance}
                 completionShapes={walk.completionShapes}
                 answerBody={walk.answerBody}

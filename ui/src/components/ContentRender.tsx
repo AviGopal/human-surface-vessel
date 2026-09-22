@@ -257,7 +257,9 @@ function renderValue(key: string, v: unknown, depth: number): ReactNode {
     // The long-string case, and the reason it matters: this is how a
     // `codeReadResult.content` or a `memoryNote` body becomes terminal or prose
     // instead of an escaped ribbon inside a table-shaped box.
-    return <ContentRender plan={{ form: heuristicForm(key, v, true), text: v }} />;
+    return (
+      <ContentRender plan={{ form: heuristicForm(key, v, true), text: v, decidedBy: "nested_field" }} />
+    );
   }
   if (Array.isArray(v)) {
     if (v.length === 0) return <span className="sf-muted">empty list</span>;

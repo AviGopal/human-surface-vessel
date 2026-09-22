@@ -46,6 +46,7 @@ import { formatChars } from "../lib/time";
 import { describesFilesystem, extractPaths } from "../lib/tree";
 import type { ExecutionPath, RawProvenance } from "../api/types";
 import { ContentRender } from "./ContentRender";
+import { FormDecisionRecorder } from "./FormDecisionRecorder";
 import { Prose } from "./Prose";
 
 function EntryHead({ entry }: { entry: LedgerEntry }): ReactNode {
@@ -73,10 +74,13 @@ function EntryHead({ entry }: { entry: LedgerEntry }): ReactNode {
 function Entry({
   entry,
   formByShape,
+  policyRevision,
 }: {
   entry: LedgerEntry;
   /** The `renderPolicy` override, read at use time. Undefined = heuristic. */
   formByShape?: Readonly<Record<string, string>>;
+  /** `renderPolicy.revision` the decision was made under. */
+  policyRevision?: number | null;
 }): ReactNode {
   if (entry.kind === "empty") {
     // NAME the emptiness. An empty impulse proves a step RAN; it does not
@@ -103,6 +107,13 @@ function Entry({
       <div className="sf-ledger-body">
         <ContentRender plan={plan} />
       </div>
+      <FormDecisionRecorder
+        shape={entry.shape}
+        plan={plan}
+        truncated={entry.truncated}
+        policyRevision={policyRevision ?? null}
+        region="evidence_ledger"
+      />
 
       {/* Length rides alongside — below, never instead. */}
       <div className="sf-ledger-foot">
@@ -262,11 +273,49 @@ function segmentAnswer(body: string): readonly AnswerSegment[] {
 }
 
 /** Tier 1 of the fallback: real content, without per-impulse provenance. */
+/**
+ * One non-prose segment of the answer card, with its form decision recorded.
+ *
+ * Extracted into its own component purely so the recorder's effect has a
+ * component to live in — a `.map` callback is not one, and inlining a hook
+ * there is the conditional-hook bug. The answer card is recorded because it IS
+ * a form decision a person reads; leaving it out would make the corpus quietly
+ * ledger-only while the answer is the part they came for.
+ */
+function AnswerSegmentView({
+  shape,
+  text,
+  truncated,
+  formByShape,
+  policyRevision,
+}: {
+  shape: string;
+  text: string;
+  truncated: boolean;
+  formByShape?: Readonly<Record<string, string>>;
+  policyRevision: number | null;
+}): ReactNode {
+  const plan = planContent(shape, text, truncated, formByShape);
+  return (
+    <>
+      <ContentRender plan={plan} />
+      <FormDecisionRecorder
+        shape={shape}
+        plan={plan}
+        truncated={truncated}
+        policyRevision={policyRevision}
+        region="answer_card"
+      />
+    </>
+  );
+}
+
 function AnswerEntry({
   answerBody,
   producedBy,
   provenanceRetained,
   formByShape,
+  policyRevision,
 }: {
   answerBody: string;
   producedBy: string | undefined;
@@ -274,6 +323,7 @@ function AnswerEntry({
   /** The same `renderPolicy` pins the ledger entries use, so one instruction
       cannot leave the answer card and the entry below it disagreeing. */
   formByShape?: Readonly<Record<string, string>>;
+  policyRevision?: number | null;
 }): ReactNode {
   return (
     // The answer card is marked. Every impulse is still mirrored and every
@@ -310,15 +360,14 @@ function AnswerEntry({
               source={segment.text}
             />
           ) : (
-            <ContentRender
+            <AnswerSegmentView
               // @interaction:exempt P4 — answer segments carry no domain id; position IS identity and the body is re-segmented wholesale, never reconciled
               key={`s${i}`}
-              plan={planContent(
-                segment.declaredShape ?? "goal_answer",
-                segment.text,
-                segment.truncated,
-                formByShape,
-              )}
+              shape={segment.declaredShape ?? "goal_answer"}
+              text={segment.text}
+              truncated={segment.truncated}
+              formByShape={formByShape}
+              policyRevision={policyRevision ?? null}
             />
           ),
         )}
@@ -368,6 +417,7 @@ function TreeNote({
 
 export function EvidenceLedger({
   formByShape,
+  policyRevision,
   provenance,
   completionShapes,
   answerBody,
@@ -377,6 +427,9 @@ export function EvidenceLedger({
 }: {
   /** `renderPolicy.formByShape`, threaded from the live query. */
   formByShape?: Readonly<Record<string, string>>;
+  /** `renderPolicy.revision`, recorded with every form decision so a
+      complaint can be joined to the policy it was made under. */
+  policyRevision?: number | null;
   provenance: readonly RawProvenance[];
   completionShapes: readonly string[] | null;
   answerBody: string | null;
@@ -411,13 +464,19 @@ export function EvidenceLedger({
             producedBy={selectedTemplateId}
             provenanceRetained
             formByShape={formByShape}
+            policyRevision={policyRevision}
           />
         ) : null}
         {entries.map((entry, i) => (
           // Provenance entries have no id of their own; shape plus position is
           // the stable identity available, and the ledger is replaced wholesale
           // on each poll rather than reconciled row by row.
-          <Entry key={`${entry.shape}-${i}`} entry={entry} formByShape={formByShape} />
+          <Entry
+            key={`${entry.shape}-${i}`}
+            entry={entry}
+            formByShape={formByShape}
+            policyRevision={policyRevision}
+          />
         ))}
         <TreeNote goal={goal} answerBody={answerBody} provenanceText={provenanceText} />
       </div>
@@ -439,6 +498,7 @@ export function EvidenceLedger({
           producedBy={selectedTemplateId}
           provenanceRetained={false}
           formByShape={formByShape}
+          policyRevision={policyRevision}
         />
         <TreeNote goal={goal} answerBody={answerBody} provenanceText="" />
       </div>

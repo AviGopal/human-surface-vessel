@@ -104,6 +104,20 @@ const OBSERVATION_TYPES = [
   "focus",
   "exposure",
   "exposure_outcome",
+  /**
+   * WHICH FORM THE SURFACE CHOSE FOR A PAYLOAD, AND WHICH BRANCH CHOSE IT.
+   *
+   * On the same channel as the exposure corpus, for the same reason: it is an
+   * unconstrained append-only observation channel this vessel already
+   * advertises and serves, and a `uiFormDecision` shape would split the channel
+   * for no capability it cannot express (law 3).
+   *
+   * It is the PREREQUISITE for any form learning, not the learning itself.
+   * Until this existed, the surface decided how to draw every impulse and
+   * recorded nothing about having decided — so there was no decision for a
+   * reward to attach to, whichever mechanism eventually supplies the reward.
+   */
+  "form_decision",
 ] as const;
 const EXPOSURE_OUTCOMES = ["answered", "declined", "complained", "shown_not_acted"] as const;
 
@@ -631,6 +645,26 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           },
           400,
         );
+      }
+      // A form-decision record with no decisions on it is REFUSED, on the same
+      // grounds as an outcome with no panel id: a corpus of unusable rows looks
+      // like evidence, and a reader counting rows would over-report how much of
+      // the surface has been observed.
+      if (obsType === "form_decision") {
+        const decisions = pointer["decisions"];
+        if (!Array.isArray(decisions) || decisions.length === 0) {
+          return c.json(
+            {
+              resolved: false,
+              success: false,
+              shape: type,
+              error:
+                "a form_decision needs a non-empty decisions[] — each entry naming shape, " +
+                "content_signature, form and decided_by",
+            },
+            400,
+          );
+        }
       }
       const scanStatusRaw = optStr(pointer, "scan_status") ?? optStr(pointer, "scanStatus");
       const entry = recordObservation({

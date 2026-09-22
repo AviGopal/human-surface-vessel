@@ -17,6 +17,8 @@
  * the surface is factored, only by what it actually renders.
  */
 
+import { buildFormCensus, type FormCensus } from "./form-census.ts";
+
 /** Effective font sizes this surface renders with, in px. */
 export const FONT_SCALE_PX = {
   "--sub-font-xs": 12,
@@ -41,6 +43,20 @@ export interface UiViewReport {
     component_counts: Record<string, number>;
   };
   surface: string;
+  /**
+   * WHAT THIS SURFACE HAS ACTUALLY DRAWN, and by which branch of the planner.
+   *
+   * Added because the detector reading this report could see the surface's
+   * TYPOGRAPHY and nothing about whether content was routed to a renderer that
+   * suits it — and the live census found 35 of 126 impulses drawn as code
+   * listings when they were single values. A legibility judgement that cannot
+   * see form is blind to the larger half of legibility.
+   *
+   * MEASURED, and `observed: false` until a browser has rendered and reported.
+   * See `form-census.ts` for why that distinction is load-bearing and why the
+   * numbers cannot be derived here.
+   */
+  content_forms: FormCensus;
 }
 
 /**
@@ -71,8 +87,16 @@ export function buildUiView(overrides: Record<string, string> = {}): UiViewRepor
     goal_dispatch: {
       open: true,
       effective_tokens,
+      // STILL DECLARED, and still the cautionary instance two other modules in
+      // this vessel cite by name. Left alone in this change rather than quietly
+      // half-fixed: making these measured needs the browser to report component
+      // counts the way it now reports form decisions, and doing it as a
+      // side-effect of the form work would ship an unreviewed second census.
+      // The form census beside it is measured; the difference is deliberate and
+      // this comment is the record of it.
       component_counts: { ...COMPONENT_COUNTS },
     },
     surface: "human-surface-vessel",
+    content_forms: buildFormCensus(),
   };
 }

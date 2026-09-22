@@ -245,10 +245,56 @@ export type MetaChip =
   | { readonly kind: "stderr"; readonly text: string }
   | { readonly kind: "envelopeShape"; readonly shape: string };
 
+/**
+ * WHICH BRANCH DECIDED. Carried on every plan because a form with no recorded
+ * author cannot be graded: "scalar" tells a learner what was drawn, and only
+ * `decidedBy` tells it whether that was a human's pin, an unwrapped envelope,
+ * positive structural evidence, or a guess of last resort. Grading them
+ * together would credit the heuristic for every pin a person set by hand.
+ *
+ * The field is REQUIRED rather than optional, and that is the whole of its
+ * enforcement: every `return` in `planContent` must name its source or the
+ * build fails, so a branch added later cannot ship anonymously.
+ */
+export type FormDecisionSource =
+  /** Nothing arrived. */
+  | "empty_preview"
+  /** A human pinned this shape through `surfaceIntent`. The strongest evidence there is. */
+  | "pin"
+  /** Payload unwrapped from a command envelope inside a truncated preview. */
+  | "truncated_envelope"
+  /** A fragment. Classified conservatively and never rescued. */
+  | "truncated"
+  /** Not JSON: classified from the bytes alone. */
+  | "unparsed"
+  /** Valid JSON that is not an object — a bare number, string or boolean. */
+  | "non_object"
+  /** `{producedBy, executionId}` exactly: provenance, no content. */
+  | "stub"
+  /** One unwrap of a command envelope. */
+  | "envelope"
+  /** A command envelope whose payload was blank. */
+  | "envelope_empty"
+  /** A single-key wrapper, the key read as a label. */
+  | "wrapper"
+  /** Every other object. The designed landing place for shapes nobody has seen. */
+  | "record"
+  /** `rescueBareScalar` lifted a short single-line value off the default branch. */
+  | "rescue"
+  /**
+   * A long string FIELD inside a record, re-planned by the recursive renderer
+   * rather than by `planContent`. Distinct because it is not a decision about
+   * an impulse — it is a decision about one field of one — so grading it as an
+   * impulse-level form choice would double-count the record that contains it.
+   */
+  | "nested_field";
+
 export interface RenderPlan {
   readonly form: ContentForm;
   /** What to draw. NOT always the preview: an unwrapped envelope draws its payload. */
   readonly text: string;
+  /** Which branch chose `form`. See `FormDecisionSource`. */
+  readonly decidedBy: FormDecisionSource;
   /** The key a single-key wrapper was carrying its value under. */
   readonly label?: string;
   readonly meta?: readonly MetaChip[];
@@ -258,6 +304,51 @@ export interface RenderPlan {
 
 /** Above this a value is not a scalar, whatever it parsed out of. */
 const SCALAR_MAX_CHARS = 300;
+
+/**
+ * Rescue a bare value from the verbatim block.
+ *
+ * `heuristicForm` already has a scalar branch, but it is reachable ONLY with
+ * `fromEnvelope` — so a one-line value that arrived off the wire rather than out
+ * of a command's `stdout` fell to the default and was drawn as a code listing.
+ * Measured on the live pool: 35 of 126 impulses, every `dispatch_id`,
+ * `due_score`, `rhythm_id`, `execute` and `folder` among them — and a bare
+ * number that was the ANSWER to the goal. The `Scalar` renderer's own header
+ * names this exact failure ("putting it in a monospace block was how a one-word
+ * answer came to look like a fragment of machine output"); the planner simply
+ * could not route to it, because `scalar` had no path that did not run through
+ * a JSON wrapper.
+ *
+ * THIS IS A RESCUE OF THE DEFAULT, NOT A NEW CLASSIFIER, and that distinction is
+ * the whole of its safety argument. It fires only on a form that already came
+ * back as `DEFAULT_CONTENT_FORM`, so it cannot take content away from `diff`,
+ * `rows`, `prose` or `terminal` — every one of those has already decided by the
+ * time this runs. P9 is untouched: the renderer's default branch still draws
+ * verbatim, and this only narrows what arrives there.
+ *
+ * NEVER ON TRUNCATED CONTENT, and that is the load-bearing exclusion. A short
+ * single line can be the PREFIX of something long, and `scalar` draws a
+ * complete value next to a copy button — asserting that a fragment is the whole
+ * value, and handing a reader a control that copies it, is precisely the
+ * fidelity failure F1 exists to catch. Both call sites sit past `planContent`'s
+ * `truncated` early return; adding a third above it would reintroduce the bug.
+ */
+function rescueBareScalar(
+  form: ContentForm,
+  text: string,
+  decidedBy: FormDecisionSource,
+): RenderPlan {
+  if (form !== DEFAULT_CONTENT_FORM) return { form, text, decidedBy };
+  const value = text.trim();
+  if (value.length === 0 || value.length > SCALAR_MAX_CHARS) return { form, text, decidedBy };
+  if (value.includes("\n")) return { form, text, decidedBy };
+  // A structured opener is never a bare value. It reached the default because
+  // the guard in `heuristicForm` put it there ON PURPOSE — an unparseable or
+  // fragmentary JSON blob — and drawing that as one value would claim it is
+  // complete when the guard exists to say it is not.
+  if (value.startsWith("{") || value.startsWith("[")) return { form, text, decidedBy };
+  return { form: "scalar", text, decidedBy: "rescue" };
+}
 
 /**
  * Every key a command envelope is allowed to carry.
@@ -436,11 +527,11 @@ export function planContent(
   truncated: boolean,
   formByShape?: Readonly<Record<string, string>>,
 ): RenderPlan {
-  if (preview.trim().length === 0) return { form: "empty", text: "" };
+  if (preview.trim().length === 0) return { form: "empty", text: "", decidedBy: "empty_preview" };
 
   const pinned = formByShape?.[shape];
   if (pinned !== undefined && isKnownForm(pinned) && isPinnable(pinned)) {
-    return { form: pinned, text: preview };
+    return { form: pinned, text: preview, decidedBy: "pin" };
   }
 
   if (truncated) {
@@ -449,20 +540,27 @@ export function planContent(
       return {
         form: heuristicForm(shape, prefix.text, true),
         text: prefix.text,
+        decidedBy: "truncated_envelope",
         ...(prefix.envelopeShape ? { envelopeShape: prefix.envelopeShape } : {}),
       };
     }
-    return { form: heuristicForm(shape, preview, false), text: preview };
+    return { form: heuristicForm(shape, preview, false), text: preview, decidedBy: "truncated" };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(preview.trim());
   } catch {
-    return { form: heuristicForm(shape, preview, false), text: preview };
+    // Not JSON at all: a bare id, a score, a word. This is where the 35
+    // misrouted values lived.
+    return rescueBareScalar(heuristicForm(shape, preview, false), preview, "unparsed");
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return { form: heuristicForm(shape, preview, false), text: preview };
+    // Valid JSON that is not an object — a bare number, string or boolean. The
+    // preview is passed through unchanged rather than re-serialised from
+    // `parsed`, so a JSON string keeps its quotes: they came off the wire and
+    // inventing a de-quoted value here would be a second unwrap.
+    return rescueBareScalar(heuristicForm(shape, preview, false), preview, "non_object");
   }
 
   const o = parsed as Record<string, unknown>;
@@ -471,7 +569,7 @@ export function planContent(
   // (a) the producer stub. An exact key set, because anything looser would
   // claim "no content carried" over a record that carried some.
   if (keys.length === 2 && typeof o["producedBy"] === "string" && typeof o["executionId"] === "string") {
-    return { form: "stub", text: preview };
+    return { form: "stub", text: preview, decidedBy: "stub" };
   }
 
   // (b) the command envelope. EXACTLY ONE unwrap — the payload is never
@@ -495,8 +593,16 @@ export function planContent(
     const declared = typeof o["shape"] === "string" ? { envelopeShape: o["shape"] } : {};
     // The command ran and printed nothing. NAME that — it is a different fact
     // from "this impulse was empty", and both are different from a blank box.
-    if (payload.trim().length === 0) return { form: "empty", text: "", meta, ...declared };
-    return { form: heuristicForm(shape, payload, true), text: payload, meta, ...declared };
+    if (payload.trim().length === 0) {
+      return { form: "empty", text: "", decidedBy: "envelope_empty", meta, ...declared };
+    }
+    return {
+      form: heuristicForm(shape, payload, true),
+      text: payload,
+      decidedBy: "envelope",
+      meta,
+      ...declared,
+    };
   }
 
   // (c) the single-key wrapper: `{"goal":"…"}`, `{"error":"…"}`. The key is a
@@ -509,13 +615,13 @@ export function planContent(
       !value.includes("\n") &&
       value.trim().length <= SCALAR_MAX_CHARS
     ) {
-      return { form: "scalar", text: value, label: only };
+      return { form: "scalar", text: value, label: only, decidedBy: "wrapper" };
     }
   }
 
   // (d) every other object, recognised or not. This is where result envelopes,
   // write receipts and each shape nobody has seen yet land.
-  return { form: "record", text: preview };
+  return { form: "record", text: preview, decidedBy: "record" };
 }
 
 /**
