@@ -197,6 +197,14 @@ const panels = new Map<string, Panel>();
 const feedback: Feedback[] = [];
 // Recent telemetry is bounded; durable response identity and question state must not expire with it.
 const feedbackRecords = new Map<string, Feedback>();
+// Per-panel index of feedbackRecords, in insertion order. questionView used to copy and scan
+// the whole map for every solicitation panel, O(panels x records) per /api/questions:
+// 3,390 x ~98k on 2026-09-26, which blocked the event loop for 13-20 s per request.
+const feedbackByPanel = new Map<string, Feedback[]>();
+function indexFeedback(f: Feedback): void {
+  const list = feedbackByPanel.get(f.panelId);
+  if (list) list.push(f); else feedbackByPanel.set(f.panelId, [f]);
+}
 const observations: Observation[] = [];
 const events: InteractorEvent[] = [];
 const asserts: InteractorAssertion[] = [];
@@ -344,6 +352,7 @@ export function recordFeedback(
   const entry: Feedback = { ...f, id: f.id ?? rid("fdbk"), visibility, receivedAt: Date.now() };
   appendParticipation("uiFeedback_write", entry);
   feedbackRecords.set(entry.id, entry);
+  indexFeedback(entry);
   feedback.push(entry);
   if (feedback.length > MAX_HISTORY) feedback.shift();
   emit("feedback_received", entry);
@@ -365,6 +374,7 @@ for (const raw of readParticipation("uiFeedback_write")) {
       typeof f.receivedAt === "number" && ["answer", "reaction", "dismiss"].includes(f.kind) &&
       !feedbackRecords.has(f.id)) {
     feedbackRecords.set(f.id, f);
+    indexFeedback(f);
     feedback.push(f);
     if (feedback.length > MAX_HISTORY) feedback.shift();
   }
@@ -375,7 +385,7 @@ export function recentFeedback(limit = 50): Feedback[] {
 }
 
 export function questionView(panel: Panel) {
-  const responses = [...feedbackRecords.values()].filter(f => f.panelId === panel.id);
+  const responses = [...(feedbackByPanel.get(panel.id) ?? [])];
   const current = responses.filter(f => (f.panelRevision ?? 1) === panel.revision);
   const answers = current.filter(f => f.kind === "answer");
   const wholeAnswer = answers.some(f => !f.askId);
