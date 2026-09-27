@@ -413,6 +413,24 @@ async function candidateEndpointsFor(shape: string): Promise<readonly GoalHostCa
 }
 
 async function resolveGoalHostEndpoint(): Promise<GoalHostCandidate> {
+  // Prefer a local goal-host when it is up, including during a drain.
+  // This preserves parity with direct :8210 dispatches that return draining:true.
+  try {
+    const localBase = ((process.env.GOAL_HOST_ENDPOINT ?? "http://127.0.0.1:8210") as string).replace(/\/+$/, "");
+    // Reachability probe with a tiny budget. Any well-formed response proves reachability.
+    const ping = await fetch(`${localBase}/v2/impulses/resolve`, {
+      method: "POST",
+      headers: upstreamHeaders(true),
+      body: JSON.stringify({ type: "vesselHealth" }),
+      signal: AbortSignal.timeout(1500),
+    });
+    // ok: healthy; 400/404: reachable but unknown shape/path; 503: draining. All mean "local host is up".
+    if (ping.ok || ping.status === 400 || ping.status === 404 || ping.status === 503) {
+      return localBase as unknown as GoalHostCandidate;
+    }
+  } catch {
+    // No local goal-host reachable; fall through to discovery-based selection.
+  }
   const now = Date.now();
   if (cachedGoalHost && now - cachedGoalHost.at < GOAL_HOST_CACHE_TTL_MS) {
     return cachedGoalHost.endpoint;
