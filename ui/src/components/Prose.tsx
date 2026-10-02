@@ -43,6 +43,16 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   });
 }
 
+/**
+ * A paragraph that is NOTHING but one code span is machine record and reads as
+ * one. Decided here, on the text, because CSS cannot: `:has(> code:only-child)`
+ * ignores text nodes, so it also matched every sentence containing exactly one
+ * inline code span and set the whole sentence in mono.
+ */
+function isCodeRecord(text: string): boolean {
+  return /^\s*`[^`]+`\s*$/.test(text);
+}
+
 type Block =
   | { kind: "p"; lines: string[] }
   | { kind: "h"; level: number; text: string }
@@ -215,7 +225,9 @@ export function Prose({ source }: { source: string }): ReactNode {
                 {block.lines.join("\n")}
               </pre>
             ) : (
-              <p key={key}>{renderInline(block.lines.join(" "), key)}</p>
+              <p key={key} {...(isCodeRecord(block.lines.join(" ")) ? { className: "sf-prose-record" } : {})}>
+                {renderInline(block.lines.join(" "), key)}
+              </p>
             );
         }
       })}

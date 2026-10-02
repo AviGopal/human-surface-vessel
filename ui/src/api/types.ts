@@ -60,6 +60,10 @@ export interface LearningConsequences {
 /** Raw provenance entry, straight off the wire. Normalize before rendering. */
 export interface RawProvenance {
   readonly shape?: unknown;
+  /** Slice V4: dispatch-unique pool id, the producing execution, and the ids actually bound as inputs. */
+  readonly id?: unknown;
+  readonly producerExecutionId?: unknown;
+  readonly consumedIds?: unknown;
   readonly goalSignature?: unknown;
   readonly producedBy?: unknown;
   /** ABSENT when the impulse carried no content. Never assume a string. */
@@ -67,6 +71,15 @@ export interface RawProvenance {
   readonly chars?: unknown;
   /** ABSENT when the impulse carried no content. Never assume a boolean. */
   readonly truncated?: unknown;
+}
+
+export interface RouteAround {
+  readonly kind?: string;
+  readonly at?: number;
+  readonly missing_producer?: readonly string[];
+  readonly failed_producers?: readonly { readonly shape?: string; readonly producer?: string; readonly reason?: string }[];
+  readonly termination?: string;
+  readonly route_taken?: string;
 }
 
 export interface GoalWalkState {
@@ -93,6 +106,8 @@ export interface GoalWalkState {
   readonly humanReachNotes: string | null;
   readonly trigger: string | null;
   readonly requeueOf: string | null;
+  /** Slice V6: one record per stall — what was missing, what failed, the route taken. */
+  readonly routeArounds?: readonly RouteAround[];
 
   /* ── serialized without a null coalesce: the KEY IS ABSENT ─────────────── */
   readonly goal?: string;

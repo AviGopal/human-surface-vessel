@@ -21,14 +21,14 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
-import { heuristicForm, parseDiff, parseRows, type MetaChip, type RenderPlan } from "../lib/ledger";
+import { CUT_KEY, heuristicForm, parseDiff, parseRows, type MetaChip, type RenderPlan } from "../lib/ledger";
 import { Prose } from "./Prose";
 
 /** Above this a value is not a scalar, whatever the plan said. */
 const SCALAR_MAX_CHARS = 300;
 
 /** Beyond this depth a record summarises instead of recursing. */
-const RECORD_MAX_DEPTH = 2;
+const RECORD_MAX_DEPTH = 4;
 
 function Verbatim({ text }: { text: string }): ReactNode {
   return <pre className="sf-verbatim">{text}</pre>;
@@ -102,7 +102,7 @@ function Diff({ text }: { text: string }): ReactNode {
  * than rendered dead: an affordance that does nothing when pressed teaches a
  * reader that this surface's controls are decorative.
  */
-function CopyButton({ text, what }: { text: string; what: string }): ReactNode {
+export function CopyButton({ text, what }: { text: string; what: string }): ReactNode {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -196,6 +196,17 @@ function MetaChipView({ chip }: { chip: MetaChip }): ReactNode {
   if (chip.kind === "envelopeShape") {
     return <span className="sf-muted sf-mono">{chip.shape}</span>;
   }
+  if (chip.kind === "failure") {
+    // The word carries the state; the colour only repeats it.
+    return (
+      <span className="sf-failure-chip">
+        failed{chip.text ? <span className="sf-failure-text">: {chip.text}</span> : null}
+      </span>
+    );
+  }
+  if (chip.kind === "note") {
+    return <span className="sf-muted">{chip.text}</span>;
+  }
   return null;
 }
 
@@ -236,6 +247,35 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:?\d\d)?$/;
+const EPOCH_KEY = /(^|_)(at|time|ts)$|At$|Ms$/;
+const URL_VALUE = /^https?:\/\/[^\s]+$/;
+
+function relative(ms: number): string {
+  const d = Date.now() - ms;
+  const a = Math.abs(d);
+  const s = Math.round(a / 1000);
+  const text =
+    s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 86400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86400)}d`;
+  return d >= 0 ? `${text} ago` : `in ${text}`;
+}
+
+/** A time, as an age a reader can place, with the exact instant on hover and in the DOM. */
+function TimeValue({ ms, raw }: { ms: number; raw: string }): ReactNode {
+  const iso = new Date(ms).toISOString();
+  return (
+    <time className="sf-scalar-value sf-time" dateTime={iso} title={raw}>
+      {relative(ms)} <span className="sf-muted">· {iso.replace("T", " ").replace(/\.\d+Z$/, "Z")}</span>
+    </time>
+  );
+}
+
+/** How many elements a collection has, said once above it. */
+function CountHead({ n, what }: { n: number; what: string }): ReactNode {
+  if (n <= 3) return null;
+  return <p className="sf-count-head">{plural(n, what, `${what}s`)}</p>;
+}
+
 /**
  * One field of a record, drawn by its own kind.
  *
@@ -247,10 +287,21 @@ function plural(n: number, one: string, many: string): string {
  */
 function renderValue(key: string, v: unknown, depth: number): ReactNode {
   if (v === null || v === undefined) return <span className="sf-muted">null</span>;
+  if (typeof v === "number" && EPOCH_KEY.test(key) && v > 1e12 && v < 1e13) {
+    return <TimeValue ms={v} raw={String(v)} />;
+  }
   if (typeof v === "boolean" || typeof v === "number") {
     return <span className="sf-scalar-value sf-mono">{String(v)}</span>;
   }
   if (typeof v === "string") {
+    if (ISO_TIME.test(v) && Number.isFinite(Date.parse(v))) return <TimeValue ms={Date.parse(v)} raw={v} />;
+    if (URL_VALUE.test(v) && v.length <= SCALAR_MAX_CHARS) {
+      return (
+        <a className="sf-scalar-value sf-link" href={v} target="_blank" rel="noreferrer noopener">
+          {v}
+        </a>
+      );
+    }
     if (!v.includes("\n") && v.length <= SCALAR_MAX_CHARS) {
       return <span className="sf-scalar-value">{v}</span>;
     }
@@ -280,10 +331,20 @@ function renderValue(key: string, v: unknown, depth: number): ReactNode {
         (cellValue) => cellValue === null || typeof cellValue !== "object",
       ),
     );
-    if (flat) return <Rows text={JSON.stringify(v)} />;
+    const what = objects ? "row" : "item";
+    if (flat) {
+      return (
+        <>
+          <CountHead n={v.length} what={what} />
+          <Rows text={JSON.stringify(v)} />
+        </>
+      );
+    }
     if (objects && depth < RECORD_MAX_DEPTH) {
       return (
-        <ul className="sf-value-list">
+        <>
+        <CountHead n={v.length} what={what} />
+        <ul className="sf-value-list sf-value-list--records">
           {v.map((item, i) => (
             <li
               // Elements of a JSON array parsed out of one blob have no domain
@@ -296,6 +357,7 @@ function renderValue(key: string, v: unknown, depth: number): ReactNode {
             </li>
           ))}
         </ul>
+        </>
       );
     }
     const scalars = v.every((e) => e === null || typeof e !== "object");
@@ -310,6 +372,7 @@ function renderValue(key: string, v: unknown, depth: number): ReactNode {
     }
     return <Summarised label={plural(v.length, "item", "items")} value={v} />;
   }
+  if (Object.keys(v as object).length === 0) return <span className="sf-muted">empty</span>;
   if (depth < RECORD_MAX_DEPTH) {
     return <RecordDl o={v as Record<string, unknown>} depth={depth + 1} />;
   }
@@ -354,12 +417,19 @@ function Summarised({ label, value }: { label: string; value: unknown }): ReactN
 function RecordDl({ o, depth }: { o: Readonly<Record<string, unknown>>; depth: number }): ReactNode {
   return (
     <dl className={depth > 1 ? "sf-record sf-record--nested" : "sf-record"}>
-      {Object.keys(o).map((key) => (
+      {Object.keys(o).map((key) =>
+        key === CUT_KEY ? (
+          <div className="sf-record-row sf-record-cut" key={key}>
+            <dt className="sf-record-key">⋯</dt>
+            <dd className="sf-record-value">{String(o[key])}</dd>
+          </div>
+        ) : (
         <div className="sf-record-row" key={key}>
           <dt className="sf-record-key">{key}</dt>
           <dd className="sf-record-value">{renderValue(key, o[key], depth)}</dd>
         </div>
-      ))}
+        ),
+      )}
     </dl>
   );
 }
@@ -375,7 +445,11 @@ function RecordFields({ text }: { text: string }): ReactNode {
     // renders a guess.
     return <Verbatim text={text} />;
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+  if (Array.isArray(parsed)) {
+    // A top-level collection: the same table-or-cards decision a nested one gets.
+    return parsed.length === 0 ? <Verbatim text={text} /> : <>{renderValue("items", parsed, 0)}</>;
+  }
+  if (typeof parsed !== "object" || parsed === null) {
     return <Verbatim text={text} />;
   }
   const o = parsed as Record<string, unknown>;
@@ -400,12 +474,15 @@ function Stub({ text }: { text: string }): ReactNode {
   const executionId = typeof o["executionId"] === "string" ? o["executionId"] : null;
   if (producedBy === null || executionId === null) return <Verbatim text={text} />;
   return (
-    // Nothing here is clickable, on the Prose.tsx precedent: impulse content is
-    // untrusted, so an execution id a walk invented never becomes a link.
+    // A POINTER, not an absence. The step ran and its output lives with its
+    // execution; this run carried only the reference (goal-host's horizontal
+    // bundle pools `{producedBy, executionId}` without reading the content).
+    // Saying "no content" here claimed a fact nobody measured. Nothing is
+    // clickable, on the Prose.tsx precedent: an execution id is untrusted text.
     <p className="sf-stub">
-      No content carried — this impulse records only that a step ran. Produced by{" "}
-      <span className="sf-mono">{activityLabel(producedBy)}</span> in execution{" "}
-      <span className="sf-mono">{executionId}</span>. <CopyButton text={executionId} what="the execution id" />
+      Pointer only — <span className="sf-mono">{activityLabel(producedBy)}</span>'s output was not carried into
+      this run · execution <span className="sf-mono">{executionId}</span>{" "}
+      <CopyButton text={executionId} what="the execution id" />
     </p>
   );
 }

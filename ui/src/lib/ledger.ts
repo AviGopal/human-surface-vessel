@@ -243,7 +243,11 @@ export function heuristicForm(shape: string, text: string, fromEnvelope: boolean
 export type MetaChip =
   | { readonly kind: "exit"; readonly code: number }
   | { readonly kind: "stderr"; readonly text: string }
-  | { readonly kind: "envelopeShape"; readonly shape: string };
+  | { readonly kind: "envelopeShape"; readonly shape: string }
+  /** The producer reported failure (`success: false`, or an `error` field). */
+  | { readonly kind: "failure"; readonly text: string | null }
+  /** The wrapper's own description of what it carries (`metadata.summary`). */
+  | { readonly kind: "note"; readonly text: string };
 
 /**
  * WHICH BRANCH DECIDED. Carried on every plan because a form with no recorded
@@ -261,12 +265,6 @@ export type FormDecisionSource =
   | "empty_preview"
   /** A human pinned this shape through `surfaceIntent`. The strongest evidence there is. */
   | "pin"
-  /**
-   * The form learner wrote this entry from exposure outcomes. Ranks below a
-   * human pin and above every heuristic; recorded distinctly so a learned
-   * choice is graded separately from a pinned one.
-   */
-  | "learned"
   /** Payload unwrapped from a command envelope inside a truncated preview. */
   | "truncated_envelope"
   /** A fragment. Classified conservatively and never rescued. */
@@ -293,7 +291,17 @@ export type FormDecisionSource =
    * an impulse — it is a decision about one field of one — so grading it as an
    * impulse-level form choice would double-count the record that contains it.
    */
-  | "nested_field";
+  | "nested_field"
+  /** `renderPolicy.learnedFormByShape`: a form a learner earned for this shape. */
+  | "learned"
+  /** `{success, shape, body}` — the resolver's reply wrapper; `body` is what is drawn. */
+  | "resolver_envelope"
+  /** `{success, content: "<json>"}` — content carried as an encoded string. */
+  | "content_envelope"
+  /** `{error}` / `{success:false, error}` — a failure reported instead of content. */
+  | "error_envelope"
+  /** A truncated preview of JSON: only the members received whole are drawn. */
+  | "partial_json";
 
 export interface RenderPlan {
   readonly form: ContentForm;
@@ -397,7 +405,7 @@ function envelopeMeta(
   payload: string,
 ): readonly MetaChip[] {
   const chips: MetaChip[] = [];
-  const code = o["exit_code"];
+  const code = o["exit_code"] ?? o["exitCode"];
   if (typeof code === "number" && Number.isFinite(code)) chips.push({ kind: "exit", code });
   const stderr = o["stderr"];
   // Only when stderr is not ITSELF what we are drawing — otherwise the same
@@ -473,14 +481,26 @@ function envelopeMeta(
  * reading a file — one of the most common things anybody asks for — still put
  * escaped JSON on the screen.
  */
+/*
+ * The declared shape may sit anywhere among the leading scalar pairs, not only
+ * first: the LLM resolver answers `{"resolved":true,"shape":"llmCompletion",
+ * "content":"…`. Requiring `shape` first meant the most common long output on
+ * the surface — a written report, cut at the 2,000-character preview — drew as
+ * `resolved true · shape llmCompletion · cut off here`, with the report itself
+ * nowhere on screen. The guard is unchanged: every byte before the payload
+ * quote is a complete scalar pair, and one of them must DECLARE a shape.
+ */
 const TRUNCATED_ENVELOPE =
-  /^\s*\{"shape"\s*:\s*"([^"\\]{1,80})"\s*,\s*(?:"[A-Za-z_][A-Za-z0-9_]*"\s*:\s*(?:"[^"\\]*"|-?\d+(?:\.\d+)?|true|false|null)\s*,\s*)*"(stdout|stderr|content|text|output)"\s*:\s*"/;
+  /^\s*\{\s*((?:"[A-Za-z_][A-Za-z0-9_]*"\s*:\s*(?:"[^"\\]*"|-?\d+(?:\.\d+)?|true|false|null)\s*,\s*)*)"(stdout|stderr|content|text|output)"\s*:\s*"/;
+const DECLARED_SHAPE = /"shape"\s*:\s*"([^"\\]{1,80})"/;
 
 export function truncatedEnvelopePayload(
   preview: string,
-): { text: string; envelopeShape: string } | null {
+): { text: string; envelopeShape: string; payloadKey: string } | null {
   const m = TRUNCATED_ENVELOPE.exec(preview);
   if (!m) return null;
+  const declared = DECLARED_SHAPE.exec(m[1] ?? "");
+  if (!declared) return null;
   const body = preview.slice(m[0].length);
   // A closing quote means the string ENDED inside what we can see, so the cut
   // fell somewhere later in the object and there is structure here this
@@ -488,7 +508,18 @@ export function truncatedEnvelopePayload(
   if (/(^|[^\\])"/.test(body)) return null;
   const text = decodeJsonStringBody(body);
   if (text.trim().length === 0) return null;
-  return { text, envelopeShape: m[1] ?? "" };
+  return { text, envelopeShape: declared[1] ?? "", payloadKey: m[2] ?? "" };
+}
+
+/**
+ * Only a command's streams are command output. `content`/`text` carry authored
+ * text — a report an LLM wrote — and are planned as text, exactly as the
+ * complete `{…, content}` envelope already is (`planText`). Treating them as
+ * command output drew a cut markdown report as a terminal block whose lines ran
+ * off the page.
+ */
+function isCommandOutputKey(key: string): boolean {
+  return key === "stdout" || key === "stderr" || key === "output";
 }
 
 /**
@@ -527,6 +558,309 @@ function decodeJsonStringBody(raw: string): string {
   return out;
 }
 
+/* ─────────────────────── partial JSON (truncated previews) ──────────────── */
+
+/**
+ * The key that marks where a truncated preview was cut.
+ *
+ * `parsePartialJson` keeps only what arrived WHOLE — every member whose value
+ * closed before the cut — and puts this key on the container the cut fell in,
+ * so the renderer can say "cut off here" at the exact place it happened. The
+ * earlier rule refused any read of a fragment because a half-parse presents a
+ * guess as a reading. This does not half-parse: a member is either complete and
+ * shown verbatim, or incomplete and dropped. Nothing is inferred about the part
+ * that did not arrive, and the frame still says how much of the whole this is.
+ */
+export const CUT_KEY = "\u22ef";
+export const CUT_NOTE = "cut off here \u2014 the rest is beyond the preview";
+
+class Cut {
+  constructor(
+    readonly partial: unknown,
+    readonly marked: boolean,
+  ) {}
+}
+
+class PartialReader {
+  private i = 0;
+  constructor(private readonly s: string) {}
+
+  private ws(): void {
+    while (this.i < this.s.length && /\s/.test(this.s[this.i] as string)) this.i++;
+  }
+  private eof(): boolean {
+    return this.i >= this.s.length;
+  }
+
+  read(): unknown {
+    this.ws();
+    if (this.eof()) throw new Cut(undefined, false);
+    const c = this.s[this.i];
+    if (c === "{") return this.object();
+    if (c === "[") return this.array();
+    if (c === '"') return this.string();
+    return this.atom();
+  }
+
+  private string(): string {
+    const start = this.i;
+    this.i++;
+    while (this.i < this.s.length) {
+      const c = this.s[this.i];
+      if (c === "\\") {
+        this.i += 2;
+        continue;
+      }
+      if (c === '"') {
+        this.i++;
+        return JSON.parse(this.s.slice(start, this.i)) as string;
+      }
+      this.i++;
+    }
+    throw new Cut(undefined, false);
+  }
+
+  private atom(): unknown {
+    const m = /^(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)/.exec(this.s.slice(this.i));
+    if (!m) throw new SyntaxError(`unexpected ${this.s[this.i]} at ${this.i}`);
+    this.i += m[0].length;
+    // A number running into the cut may be missing digits: not received whole.
+    if (this.eof()) throw new Cut(undefined, false);
+    return JSON.parse(m[0]);
+  }
+
+  private object(): Record<string, unknown> {
+    const o: Record<string, unknown> = {};
+    const cutHere = (): never => {
+      o[CUT_KEY] = CUT_NOTE;
+      throw new Cut(o, true);
+    };
+    this.i++;
+    for (;;) {
+      this.ws();
+      if (this.eof()) cutHere();
+      if (this.s[this.i] === "}") {
+        this.i++;
+        return o;
+      }
+      let key: string;
+      try {
+        key = this.string();
+      } catch (e) {
+        if (e instanceof Cut) cutHere();
+        throw e;
+      }
+      this.ws();
+      if (this.eof()) cutHere();
+      if (this.s[this.i] !== ":") throw new SyntaxError("expected :");
+      this.i++;
+      try {
+        o[key] = this.read();
+      } catch (e) {
+        if (!(e instanceof Cut)) throw e;
+        if (e.partial === undefined) cutHere();
+        o[key] = e.partial;
+        if (e.marked) throw new Cut(o, true);
+        cutHere();
+      }
+      this.ws();
+      if (this.eof()) cutHere();
+      if (this.s[this.i] === ",") this.i++;
+      else if (this.s[this.i] === "}") {
+        this.i++;
+        return o;
+      } else throw new SyntaxError("expected , or }");
+    }
+  }
+
+  private array(): unknown[] {
+    const a: unknown[] = [];
+    this.i++;
+    for (;;) {
+      this.ws();
+      if (this.eof()) throw new Cut(a, false);
+      if (this.s[this.i] === "]") {
+        this.i++;
+        return a;
+      }
+      try {
+        a.push(this.read());
+      } catch (e) {
+        if (!(e instanceof Cut)) throw e;
+        // An element cut part-way is kept only if it is a container with whole
+        // members in it; a cut scalar was never received and is dropped.
+        if (e.partial !== undefined) a.push(e.partial);
+        throw new Cut(a, e.marked);
+      }
+      this.ws();
+      if (this.eof()) throw new Cut(a, false);
+      if (this.s[this.i] === ",") this.i++;
+      else if (this.s[this.i] === "]") {
+        this.i++;
+        return a;
+      } else throw new SyntaxError("expected , or ]");
+    }
+  }
+}
+
+function hasContent(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === "object" && v !== null) return Object.keys(v).some((k) => k !== CUT_KEY);
+  return false;
+}
+
+/**
+ * Read the whole members of a truncated JSON preview, or null when it is not
+ * JSON, is malformed before the cut, or nothing arrived whole.
+ */
+export function parsePartialJson(preview: string): { value: unknown; cut: boolean } | null {
+  const t = preview.trim();
+  if (!t.startsWith("{") && !t.startsWith("[")) return null;
+  try {
+    const value = new PartialReader(t).read();
+    return { value, cut: false };
+  } catch (e) {
+    if (!(e instanceof Cut)) return null;
+    if (!hasContent(e.partial)) return null;
+    // A cut array with no object to carry the marker still gets one.
+    return { value: e.partial, cut: true };
+  }
+}
+
+/* ───────────────────────────────── the planner ───────────────────────────── */
+
+/** Keys a resolver reply wrapper may carry around its `body`. Closed, like the command list. */
+const RESOLVER_ENVELOPE_KEYS: ReadonlySet<string> = new Set(["success", "shape", "body", "error", "resolved", "metadata"]);
+/** Keys a content-string wrapper may carry. */
+// `resolved` is the LLM resolver's reply flag: {resolved, shape, content}.
+const CONTENT_ENVELOPE_KEYS: ReadonlySet<string> = new Set(["success", "shape", "content", "error", "metadata", "resolved"]);
+
+function failureChip(o: Readonly<Record<string, unknown>>): Extract<MetaChip, { kind: "failure" }> | null {
+  const err = o["error"];
+  const message =
+    typeof err === "string" ? err : err && typeof err === "object" ? JSON.stringify(err) : null;
+  if (o["success"] === false || message) return { kind: "failure", text: message };
+  return null;
+}
+
+function withMeta(plan: RenderPlan, extra: readonly MetaChip[], decidedBy: FormDecisionSource, envelopeShape?: string): RenderPlan {
+  const meta = [...extra, ...(plan.meta ?? [])];
+  return {
+    ...plan,
+    decidedBy,
+    ...(meta.length > 0 ? { meta } : {}),
+    ...(envelopeShape && !plan.envelopeShape ? { envelopeShape } : {}),
+  };
+}
+
+/** Plan a parsed value. `depth` bounds the wrapper unwraps; `partial` marks a cut preview. */
+function planValue(shape: string, v: unknown, text: string, depth: number, partial: boolean): RenderPlan {
+  if (Array.isArray(v)) {
+    if (v.length === 0) return { form: "empty", text: "", decidedBy: partial ? "partial_json" : "record" };
+    const objects = v.every((e) => typeof e === "object" && e !== null && !Array.isArray(e));
+    return { form: objects ? "record" : DEFAULT_CONTENT_FORM, text, decidedBy: partial ? "partial_json" : "record" };
+  }
+  if (typeof v !== "object" || v === null) {
+    return rescueBareScalar(heuristicForm(shape, text, false), text, "non_object");
+  }
+  const o = v as Record<string, unknown>;
+  const keys = Object.keys(o).filter((k) => k !== CUT_KEY);
+
+  if (!partial && keys.length === 2 && typeof o["producedBy"] === "string" && typeof o["executionId"] === "string") {
+    return { form: "stub", text, decidedBy: "stub" };
+  }
+
+  // The command envelope — exactly one unwrap; the payload is never re-parsed.
+  const stdout = typeof o["stdout"] === "string" ? o["stdout"] : null;
+  const stderr = typeof o["stderr"] === "string" ? o["stderr"] : null;
+  if (!partial && (stdout !== null || stderr !== null) && isCommandEnvelope(keys)) {
+    const payload = stdout !== null && stdout.length > 0 ? stdout : (stderr ?? "");
+    const meta = envelopeMeta(o, shape, payload);
+    const declared = typeof o["shape"] === "string" ? { envelopeShape: o["shape"] } : {};
+    if (payload.trim().length === 0) {
+      return { form: "empty", text: "", decidedBy: "envelope_empty", meta, ...declared };
+    }
+    return { form: heuristicForm(shape, payload, true), text: payload, decidedBy: "envelope", meta, ...declared };
+  }
+
+  const declaredShape = typeof o["shape"] === "string" ? (o["shape"] as string) : undefined;
+  const failure = failureChip(o);
+  const md = o["metadata"];
+  const mdKeys = md && typeof md === "object" && !Array.isArray(md) ? Object.keys(md).filter((k) => k !== "shape" && k !== "rowCount") : [];
+  const note: MetaChip | null =
+    mdKeys.length === 0
+      ? null
+      : { kind: "note", text: mdKeys.length === 1 && typeof (md as Record<string, unknown>)["summary"] === "string"
+          ? ((md as Record<string, unknown>)["summary"] as string)
+          : JSON.stringify(Object.fromEntries(mdKeys.map((k) => [k, (md as Record<string, unknown>)[k]]))) };
+  const failureMeta: MetaChip[] = [...(failure ? [failure] : []), ...(note ? [note] : [])];
+
+  // The resolver reply wrapper: `{success, shape, body}`. The wrapper is transport;
+  // `body` is what the resolver answered. Its facts ride as chips.
+  if (depth < 3 && "body" in o && keys.every((k) => RESOLVER_ENVELOPE_KEYS.has(k)) && o["body"] !== null && o["body"] !== undefined) {
+    const body = o["body"];
+    const bodyText = typeof body === "string" ? body : JSON.stringify(body, null, 2);
+    const inner =
+      typeof body === "string"
+        ? planText(shape, body, depth + 1)
+        : planValue(declaredShape ?? shape, body, bodyText, depth + 1, partial && o[CUT_KEY] === undefined);
+    return withMeta(inner, failureMeta, partial ? "partial_json" : "resolver_envelope", declaredShape !== shape ? declaredShape : undefined);
+  }
+
+  // `{success, content: "<encoded>"}` — the content travelled as a string.
+  if (depth < 3 && typeof o["content"] === "string" && keys.every((k) => CONTENT_ENVELOPE_KEYS.has(k)) && (o["content"] as string).trim().length > 0) {
+    const inner = planText(shape, o["content"] as string, depth + 1);
+    return withMeta(inner, failureMeta, "content_envelope", declaredShape !== shape ? declaredShape : undefined);
+  }
+
+  // A failure reported instead of content.
+  if (failure && failure.text && keys.every((k) => k === "error" || k === "success" || k === "shape")) {
+    return { form: "scalar", text: failure.text, label: "error", decidedBy: "error_envelope", meta: [{ kind: "failure", text: null }] };
+  }
+
+  // The single-key wrapper: `{"goal":"…"}`. The key is a label.
+  const only = keys.length === 1 ? keys[0] : undefined;
+  if (!partial && only !== undefined) {
+    const value = o[only];
+    if (typeof value === "string" && !value.includes("\n") && value.trim().length <= SCALAR_MAX_CHARS) {
+      return { form: "scalar", text: value, label: only, decidedBy: "wrapper" };
+    }
+  }
+
+  return { form: "record", text, decidedBy: partial ? "partial_json" : "record", ...(failureMeta.length ? { meta: failureMeta } : {}) };
+}
+
+/** Plan a complete (not truncated) string, parsing it when it is JSON. */
+function planText(shape: string, text: string, depth: number): RenderPlan {
+  if (text.trim().length === 0) return { form: "empty", text: "", decidedBy: "empty_preview" };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.trim());
+  } catch {
+    return rescueBareScalar(heuristicForm(shape, text, false), text, "unparsed");
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return rescueBareScalar(heuristicForm(shape, text, false), text, "non_object");
+  }
+  if (Array.isArray(parsed) && looksLikeRows(text)) return { form: "rows", text, decidedBy: "record" };
+  return planValue(shape, parsed, text, depth, false);
+}
+
+/**
+ * What to draw, and what to draw it as. The single decision point.
+ *
+ * Tier order, each load-bearing:
+ *
+ *   S0  empty short-circuits and is never overridable.
+ *   S1  the human pin (`formByShape`), whole-pipeline: no unwrap, no parse.
+ *   S2  the learned form (`learnedFormByShape`), same treatment, below the pin.
+ *   S3  truncated: a command envelope's cut payload, else the WHOLE members of
+ *       cut JSON (`parsePartialJson`), else the conservative guess.
+ *   S4  complete: parse, then classify — stub, command envelope (one unwrap,
+ *       never re-parsed), resolver wrapper (`body`), content wrapper, error,
+ *       single-key wrapper, record.
+ *   S5  the guess, on anything that is not JSON.
+ */
 export function planContent(
   shape: string,
   preview: string,
@@ -540,12 +874,6 @@ export function planContent(
   if (pinned !== undefined && isKnownForm(pinned) && isPinnable(pinned)) {
     return { form: pinned, text: preview, decidedBy: "pin" };
   }
-
-  // The LEARNED table, consulted only when no human pin exists for the shape.
-  // Order is the rule: a pin always wins; a learned entry sits above every
-  // heuristic below (including `rescueBareScalar` of the default) and below the
-  // pin. Recording `decidedBy: "learned"` distinctly is what lets a learned
-  // choice be graded separately from a pinned one.
   const learned = learnedFormByShape?.[shape];
   if (learned !== undefined && isKnownForm(learned) && isPinnable(learned)) {
     return { form: learned, text: preview, decidedBy: "learned" };
@@ -555,90 +883,24 @@ export function planContent(
     const prefix = truncatedEnvelopePayload(preview);
     if (prefix) {
       return {
-        form: heuristicForm(shape, prefix.text, true),
+        form: heuristicForm(shape, prefix.text, isCommandOutputKey(prefix.payloadKey)),
         text: prefix.text,
         decidedBy: "truncated_envelope",
         ...(prefix.envelopeShape ? { envelopeShape: prefix.envelopeShape } : {}),
       };
     }
+    const partial = parsePartialJson(preview);
+    if (partial) {
+      const text = JSON.stringify(partial.value, null, 2);
+      const plan = planValue(shape, partial.value, text, 0, true);
+      // A cut preview is never drawn as one complete value.
+      if (plan.form === "scalar" || plan.form === "stub") return { form: "record", text, decidedBy: "partial_json" };
+      return plan;
+    }
     return { form: heuristicForm(shape, preview, false), text: preview, decidedBy: "truncated" };
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(preview.trim());
-  } catch {
-    // Not JSON at all: a bare id, a score, a word. This is where the 35
-    // misrouted values lived.
-    return rescueBareScalar(heuristicForm(shape, preview, false), preview, "unparsed");
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    // Valid JSON that is not an object — a bare number, string or boolean. The
-    // preview is passed through unchanged rather than re-serialised from
-    // `parsed`, so a JSON string keeps its quotes: they came off the wire and
-    // inventing a de-quoted value here would be a second unwrap.
-    return rescueBareScalar(heuristicForm(shape, preview, false), preview, "non_object");
-  }
-
-  const o = parsed as Record<string, unknown>;
-  const keys = Object.keys(o);
-
-  // (a) the producer stub. An exact key set, because anything looser would
-  // claim "no content carried" over a record that carried some.
-  if (keys.length === 2 && typeof o["producedBy"] === "string" && typeof o["executionId"] === "string") {
-    return { form: "stub", text: preview, decidedBy: "stub" };
-  }
-
-  // (b) the command envelope. EXACTLY ONE unwrap — the payload is never
-  // re-parsed as JSON, because a second pass is how a shell that printed a
-  // JSON document ends up rendered as this surface's own structure.
-  //
-  // The membership test is what makes the unwrap SAFE. Testing only "has a
-  // string stdout or stderr key" is not a test for a command envelope, it is a
-  // test for one field an envelope happens to have: an object like
-  // `{"written":true,"path":"/tmp/x","stderr":""}` passed it, and unwrapping
-  // discarded `written` and `path` and then rendered the result as a positive
-  // claim that the impulse carried nothing. Requiring every key to be a known
-  // envelope key means an object with anything unrecognised on it falls to
-  // `record` instead, where all of its fields are shown. Losing a field is
-  // worse than declining to unwrap.
-  const stdout = typeof o["stdout"] === "string" ? o["stdout"] : null;
-  const stderr = typeof o["stderr"] === "string" ? o["stderr"] : null;
-  if ((stdout !== null || stderr !== null) && isCommandEnvelope(keys)) {
-    const payload = stdout !== null && stdout.length > 0 ? stdout : (stderr ?? "");
-    const meta = envelopeMeta(o, shape, payload);
-    const declared = typeof o["shape"] === "string" ? { envelopeShape: o["shape"] } : {};
-    // The command ran and printed nothing. NAME that — it is a different fact
-    // from "this impulse was empty", and both are different from a blank box.
-    if (payload.trim().length === 0) {
-      return { form: "empty", text: "", decidedBy: "envelope_empty", meta, ...declared };
-    }
-    return {
-      form: heuristicForm(shape, payload, true),
-      text: payload,
-      decidedBy: "envelope",
-      meta,
-      ...declared,
-    };
-  }
-
-  // (c) the single-key wrapper: `{"goal":"…"}`, `{"error":"…"}`. The key is a
-  // label, not a column heading, and the value is the content.
-  const only = keys.length === 1 ? keys[0] : undefined;
-  if (only !== undefined) {
-    const value = o[only];
-    if (
-      typeof value === "string" &&
-      !value.includes("\n") &&
-      value.trim().length <= SCALAR_MAX_CHARS
-    ) {
-      return { form: "scalar", text: value, label: only, decidedBy: "wrapper" };
-    }
-  }
-
-  // (d) every other object, recognised or not. This is where result envelopes,
-  // write receipts and each shape nobody has seen yet land.
-  return { form: "record", text: preview, decidedBy: "record" };
+  return planText(shape, preview, 0);
 }
 
 /**

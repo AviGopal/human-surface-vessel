@@ -32,7 +32,7 @@ import {
 } from "./discovery-registration.ts";
 import { impulsesRouter } from "./routes/impulses.ts";
 import { participationRouter } from "./routes/participation.ts";
-import { corsHeaders, proxyRouter } from "./routes/proxy.ts";
+import { corsHeaders, proxyRouter, refuseForeignOriginWrites } from "./routes/proxy.ts";
 import {
   counts,
   listPanels,
@@ -70,6 +70,9 @@ app.get("/health", (c) =>
 app.get("/shapes", (c) => c.json({ shapes: DISCOVERY_SHAPES }));
 
 // ─── Routers ────────────────────────────────────────────────────────────────
+
+// Before any route: a write from another site is refused (see proxy.ts).
+app.use("*", refuseForeignOriginWrites);
 
 app.route("/", impulsesRouter);
 app.route("/", participationRouter);

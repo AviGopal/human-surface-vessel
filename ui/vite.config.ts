@@ -37,6 +37,15 @@ export default defineConfig({
       "/api": {
         target: process.env.HSS_DEV_ORIGIN ?? "http://127.0.0.1:8270",
         changeOrigin: false,
+        // The vessel refuses writes carrying a foreign Origin (proxy.ts
+        // refuseForeignOriginWrites); the dev server's own port is foreign to
+        // it, so the dev proxy speaks as the vessel's origin. Dev-only.
+        configure: (proxy) => {
+          const target = process.env.HSS_DEV_ORIGIN ?? "http://127.0.0.1:8270";
+          proxy.on("proxyReq", (req) => {
+            if (req.getHeader("origin")) req.setHeader("origin", target);
+          });
+        },
       },
     },
   },

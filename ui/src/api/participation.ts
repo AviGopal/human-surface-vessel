@@ -34,6 +34,8 @@ export interface Question {
    */
   rank?: number;
   because?: string[];
+  /** What kind of solicitation this is (e.g. `gap_needs_human`); the ranker weights by it. */
+  kind?: string;
 }
 
 export interface Contribution {

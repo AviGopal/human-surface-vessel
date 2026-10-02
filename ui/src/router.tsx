@@ -1,12 +1,18 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { Surface } from "./Surface";
 
-const rootRoute = createRootRoute({ component: Outlet });
+/**
+ * The surface is the ROOT component, so moving between a run and a question
+ * keeps the rail, its scroll position and the question snapshot mounted. The
+ * child routes exist only to carry the open item in the URL.
+ */
+const rootRoute = createRootRoute({ component: Surface });
+const Empty = (): null => null;
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: Surface,
+  component: Empty,
 });
 
 /**
@@ -17,10 +23,16 @@ const indexRoute = createRoute({
 const runRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/run/$dispatchId",
-  component: Surface,
+  component: Empty,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, runRoute]);
+const questionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/question/$questionId",
+  component: Empty,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, runRoute, questionRoute]);
 
 export const router = createRouter({ routeTree });
 

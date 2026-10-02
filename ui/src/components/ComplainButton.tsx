@@ -15,9 +15,11 @@
  * would be asserting that the human saw nothing.
  */
 import { useState, type ReactNode } from "react";
+import { complaintPayload, type ComplaintKind } from "../lib/interaction";
+import { ChoiceInput, InteractionFooter, TextInput } from "./Interaction";
 import { useQueryClient } from "@tanstack/react-query";
 
-type Kind = "hard_to_see" | "hard_to_understand" | "wrong";
+type Kind = ComplaintKind;
 
 const KINDS: ReadonlyArray<{ id: Kind; label: string }> = [
   { id: "hard_to_see", label: "hard to see" },
@@ -30,11 +32,17 @@ const KINDS: ReadonlyArray<{ id: Kind; label: string }> = [
  * "filed"), never on open or on submit: an outcome record for a complaint that
  * failed to file would be a record of an act that did not land.
  */
+/** Ask the surface to open the Issues drawer on one issue. Surface listens for this. */
+export function showIssue(gapId: string): void {
+  window.dispatchEvent(new CustomEvent("sf:show-issue", { detail: gapId }));
+}
+
 export function ComplainButton({ region, onFiled }: { region: string; onFiled?: () => void }): ReactNode {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<Kind>("hard_to_understand");
   const [text, setText] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "filed" | "failed">("idle");
+  const [filedAs, setFiledAs] = useState<string | null>(null);
   const qc = useQueryClient();
 
   const send = async (): Promise<void> => {
@@ -45,16 +53,19 @@ export function ComplainButton({ region, onFiled }: { region: string; onFiled?: 
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ panel_id: region, kind, value: text.trim() }),
+        body: JSON.stringify(complaintPayload({ region, kind, text })),
       });
       if (!res.ok) throw new Error(String(res.status));
+      const j = (await res.json().catch(() => null)) as { body?: { filed_gap_id?: unknown } } | null;
+      setFiledAs(typeof j?.body?.filed_gap_id === "string" ? j.body.filed_gap_id : null);
       setState("filed");
       setText("");
       onFiled?.();
-      // The gap strip is the evidence that this landed; refresh it rather than
-      // claiming success on our own say-so.
+      // The issue list is the evidence that this landed; refresh it rather than
+      // claiming success on our own say-so. The gap is written just after this
+      // response returns, so read the list again once it has had time to land.
       void qc.invalidateQueries({ queryKey: ["interfaceGaps"] });
-      window.setTimeout(() => setOpen(false), 2200);
+      window.setTimeout(() => void qc.invalidateQueries({ queryKey: ["interfaceGaps"] }), 2500);
     } catch {
       setState("failed");
     }
@@ -63,52 +74,47 @@ export function ComplainButton({ region, onFiled }: { region: string; onFiled?: 
   if (!open) {
     return (
       <button type="button" className="sf-complain-open" onClick={() => setOpen(true)}>
-        something's wrong here
+        Report a problem
       </button>
     );
   }
 
   return (
-    <div className="sf-complain">
-      <div className="sf-complain-kinds" role="group" aria-label="what kind of problem">
-        {KINDS.map((k) => (
-          <button
-            key={k.id}
-            type="button"
-            className="sf-complain-kind"
-            aria-pressed={kind === k.id}
-            onClick={() => setKind(k.id)}
-          >
-            {k.label}
-          </button>
-        ))}
-      </div>
-      <textarea
-        className="sf-complain-text"
-        value={text}
-        placeholder={`what is wrong with “${region}”?`}
-        aria-label={`what is wrong with ${region}`}
-        onChange={(e) => setText(e.target.value)}
+    <form
+      className="sf-complain sf-interaction"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void send();
+      }}
+    >
+      <ChoiceInput
+        label="What kind of problem"
+        options={KINDS.map((k) => k.id)}
+        labels={Object.fromEntries(KINDS.map((k) => [k.id, k.label]))}
+        value={kind}
+        onChange={(v) => setKind(v as Kind)}
+        disabled={state === "sending"}
       />
-      <div className="sf-complain-actions">
-        <button type="button" className="sf-button sf-button-primary" onClick={() => void send()} disabled={state === "sending"}>
-          {state === "sending" ? "filing…" : "file it"}
-        </button>
-        <button type="button" className="sf-button sf-button-quiet" onClick={() => setOpen(false)}>
-          cancel
-        </button>
-        {state === "filed" ? (
-          <span className="sf-complain-note">
-            Filed as an open gap on this interface — it appears below, and the substrate's own
-            detector will never close it for you.
-          </span>
-        ) : null}
-        {state === "failed" ? (
-          <span className="sf-complain-note sf-complain-failed">
-            Not filed — the gap store did not accept it. Nothing was recorded.
-          </span>
-        ) : null}
-      </div>
-    </div>
+      <TextInput label={`What is wrong with ${region}`} placeholder={`What is wrong with “${region}”?`} value={text} onChange={setText} />
+      <InteractionFooter
+        state={state === "sending" ? "pending" : state === "filed" ? "sent" : state === "failed" ? "failed" : "idle"}
+        submitLabel="File"
+        canSubmit={text.trim().length > 0}
+        error={state === "failed" ? "Not filed" : null}
+        sentLabel={filedAs ? `Filed as ${filedAs}` : "Filed"}
+        receipt={
+          filedAs ? (
+            <button type="button" className="sf-link-button" onClick={() => showIssue(filedAs)}>
+              show
+            </button>
+          ) : undefined
+        }
+        secondary={
+          <button type="button" className="sf-button sf-button-quiet" onClick={() => setOpen(false)}>
+            Cancel
+          </button>
+        }
+      />
+    </form>
   );
 }

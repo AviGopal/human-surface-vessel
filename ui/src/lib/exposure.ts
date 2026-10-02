@@ -163,19 +163,11 @@ export interface OutcomeEvent {
   /** How many presentation ticks had this id in the visible slice when the act happened. */
   readonly exposureCount: number;
   /**
-   * The form that was on screen for this solicitation when the act happened,
-   * and the signature of the content it was drawn from — the join keys to the
-   * `form_decision` record the render produced. Read from the DOM by the
-   * reporter (never inferred here); absent for machine-inferred outcomes.
+   * The form the question was drawn in, READ OFF THE DOM at act time — the
+   * form learner's evidence. Absent when no drawn element for this id was on
+   * the page; never inferred.
    */
-  readonly form?: string | null;
-  readonly contentSignature?: string | null;
-}
-
-/** What the measured row published about its form; null when it published nothing. */
-export interface FormOnScreen {
-  readonly form: string | null;
-  readonly contentSignature: string | null;
+  readonly drawn?: { readonly form: string; readonly shape: string; readonly readFrom: "list_row" | "question_card" };
 }
 
 /**
@@ -226,12 +218,7 @@ export class ExposureLedger {
    * `shown_not_acted` inference for that id, because the person demonstrably
    * acted; the act's own scope stays in the record rather than being folded in.
    */
-  act(
-    solicitationId: string,
-    outcome: Exclude<ExposureOutcome, "shown_not_acted">,
-    askId?: string | null,
-    onScreen?: FormOnScreen | null,
-  ): OutcomeEvent {
+  act(solicitationId: string, outcome: Exclude<ExposureOutcome, "shown_not_acted">, askId?: string | null): OutcomeEvent {
     this.acted.add(solicitationId);
     const ask = askId && askId.length > 0 ? askId : null;
     return {
@@ -240,8 +227,6 @@ export class ExposureLedger {
       scope: ask ? "ask" : "panel",
       askId: ask,
       exposureCount: this.exposureCount(solicitationId),
-      form: onScreen?.form ?? null,
-      contentSignature: onScreen?.contentSignature ?? null,
     };
   }
 }
@@ -349,38 +334,42 @@ export function buildOutcomeRecord(
     renderer_bundle: conditions.rendererBundle,
     viewport: conditions.viewport,
     presentation_variant: conditions.presentationVariant,
-    /**
-     * Join keys to the form_decision record produced at render time, so a
-     * complaint or an answer can be attributed to the form that was on screen.
-     * `form_source` says where they came from; "unavailable" is recorded, never
-     * a guessed form — the same rule `rank_source` follows.
-     */
-    form: typeof event.form === "string" && event.form.length > 0 ? event.form : null,
-    content_signature: typeof event.contentSignature === "string" && event.contentSignature.length > 0 ? event.contentSignature : null,
-    form_source: typeof event.form === "string" && event.form.length > 0 && typeof event.contentSignature === "string" && event.contentSignature.length > 0 ? "dom" : "unavailable",
+    ...(event.drawn
+      ? { form: event.drawn.form, form_source: "dom", shape: event.drawn.shape, form_read_from: event.drawn.readFrom }
+      : {}),
   };
+}
+
+/**
+ * The form a solicitation was drawn in, from the page as it is now: its list
+ * row if that is mounted, else the open question card. Both carry the form
+ * `<Rendered>` planned for the body (see `planFor`). Null when neither is on
+ * the page — the record then says nothing about form rather than guessing.
+ */
+export function readDrawnForm(
+  root: ParentNode,
+  solicitationId: string,
+): { form: string; shape: string; readFrom: "list_row" | "question_card" } | null {
+  const id = CSS.escape(solicitationId);
+  const probes: [string, "list_row" | "question_card"][] = [
+    [`[${SOLICITATION_ATTR}="${id}"][data-form]`, "list_row"],
+    [`[data-question-body="${id}"] [data-form]`, "question_card"],
+  ];
+  for (const [selector, readFrom] of probes) {
+    const el = root.querySelector<HTMLElement>(selector);
+    const form = el?.getAttribute("data-form");
+    if (el && form) {
+      const shape = el.getAttribute("data-form-shape") ?? el.closest("[data-form-shape]")?.getAttribute("data-form-shape") ?? "human_question";
+      return { form, shape, readFrom };
+    }
+  }
+  return null;
 }
 
 // ─── DOM measurement ────────────────────────────────────────────────────────
 
 export const SOLICITATION_ATTR = "data-solicitation-id";
 export const MEASURED_SELECTOR = `[${SOLICITATION_ATTR}]`;
-export const CONTENT_FORM_ATTR = "data-content-form";
-export const CONTENT_SIGNATURE_ATTR = "data-content-signature";
-
-/**
- * Read what the measured row published about its form, the way rank is read:
- * from the DOM, at act time, with no fallback. A row that published nothing
- * yields null for both, and the record says "unavailable" rather than
- * inventing a form.
- */
-export function readFormOnScreen(root: ParentNode, solicitationId: string): FormOnScreen | null {
-  const element = root.querySelector(`[${SOLICITATION_ATTR}="${solicitationId.replace(/"/g, '\\"')}"]`);
-  if (!element) return null;
-  const form = element.getAttribute(CONTENT_FORM_ATTR);
-  const contentSignature = element.getAttribute(CONTENT_SIGNATURE_ATTR);
-  return { form: form && form.length > 0 ? form : null, contentSignature: contentSignature && contentSignature.length > 0 ? contentSignature : null };
-}
 
 /**
  * Rank and explanation are read from the DOM rather than imported, so this

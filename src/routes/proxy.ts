@@ -25,7 +25,7 @@
  *     never the sole path to a peer.
  */
 
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { getRenderPolicy, recentSurfaceIntents, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import {
@@ -39,19 +39,78 @@ import {
 /** The host maps container ports by convention 8xxx → 18xxx. */
 const HOST_PORT_OFFSET = 10_000;
 
-function allowedOrigin(requestOrigin: string | undefined): string {
-  const self = `http://127.0.0.1:${PORT}`;
-  if (!requestOrigin) return self;
+/** This vessel's own origin, whether reached on the container port or the conventionally mapped host port. */
+export function isOwnOrigin(requestOrigin: string): boolean {
   try {
     const u = new URL(requestOrigin);
     const p = parseInt(u.port || (u.protocol === "https:" ? "443" : "80"), 10);
-    // This vessel's own origin, whether reached on the container port or the
-    // conventionally mapped host port.
-    if (p === PORT || p === PORT + HOST_PORT_OFFSET) return requestOrigin;
+    return p === PORT || p === PORT + HOST_PORT_OFFSET;
   } catch {
-    /* malformed Origin — fall through */
+    return false; // malformed, or the literal "null" a sandboxed or file:// page sends
   }
-  return self;
+}
+
+function allowedOrigin(requestOrigin: string | undefined): string {
+  const self = `http://127.0.0.1:${PORT}`;
+  if (!requestOrigin) return self;
+  return isOwnOrigin(requestOrigin) ? requestOrigin : self;
+}
+
+/**
+ * A WRITE FROM ANOTHER SITE IS REFUSED BEFORE ANY ROUTE RUNS.
+ *
+ * CORS governs whether a page may READ a response, not whether its request is
+ * sent. A `text/plain` POST is a CORS "simple request": a browser sends it with
+ * no preflight, so any page open on this host could make this vessel act — and
+ * the proxy forwards to goal-host with the fleet key. Verified 10-02 with a
+ * read: `Origin: https://example.invalid` + `text/plain` to `/api/resolve`
+ * returned 200 and the dispatch list.
+ *
+ * Browsers always send `Origin` on a cross-origin POST, so refusing a foreign
+ * (or `null`) Origin closes that path. Service-to-service callers send no
+ * Origin and are unaffected. This is defence in depth, not authentication:
+ * REALIGNMENT §9.0 still requires route auth on every vessel.
+ */
+export const refuseForeignOriginWrites: MiddlewareHandler = async (c, next) => {
+  const method = c.req.method;
+  if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+    const origin = c.req.header("Origin");
+    if (origin !== undefined && !isOwnOrigin(origin)) {
+      return c.json({ error: "cross-origin write refused", origin }, 403);
+    }
+  }
+  await next();
+};
+
+/**
+ * The shapes this surface's UI resolves through `/api/resolve`, and no others.
+ *
+ * The route forwards to goal-host with the fleet key, and goal-host's
+ * `/resolve` EXECUTES ordinary shapes — `goalDispatchAsync`, any `*_write`.
+ * Forwarding any body made this vessel an open, fleet-authenticated executor
+ * for whatever reached it. Dispatch has its own route (`/api/run-goal`).
+ *
+ * Every caller found in the repo stays inside this list (10-02): the UI's own
+ * calls in `ui/src/api`, and the demo2 bring-up harness (`activeDispatches`).
+ */
+const UI_RESOLVE_TYPES: ReadonlySet<string> = new Set([
+  "activeDispatches",
+  "goalWalkState",
+  "vesselCapability",
+  "goal_verification_label_write",
+  "poolImpulse_write",
+  "solicitationResponse_write",
+  "interactorObservation",
+]);
+
+export function resolveTypeOf(raw: string): string | null {
+  try {
+    const body = JSON.parse(raw) as Record<string, unknown>;
+    const t = body["type"];
+    return typeof t === "string" && t.length > 0 ? t : null;
+  } catch {
+    return null;
+  }
 }
 
 function corsHeaders(requestOrigin: string | undefined): Record<string, string> {
@@ -669,10 +728,19 @@ proxyRouter.post("/api/run-goal", async (c) => {
 });
 
 proxyRouter.post("/api/resolve", async (c) => {
+  const raw = await rawBodyOf(c);
+  const type = resolveTypeOf(raw);
+  if (!type || !UI_RESOLVE_TYPES.has(type)) {
+    return c.json(
+      { error: "shape not resolvable through this surface", type, allowed: [...UI_RESOLVE_TYPES] },
+      403,
+      corsHeaders(c.req.header("Origin")),
+    );
+  }
   // The candidate's OWN path, and the answer unwrapped. This is the line that
   // was `${base}/resolve` with a streamed body.
   const cand = await resolveGoalHostEndpoint();
-  return resolveThrough(cand, await rawBodyOf(c), c.req.header("Origin"), unwrapFederated);
+  return resolveThrough(cand, raw, c.req.header("Origin"), unwrapFederated);
 });
 
 proxyRouter.get("/api/executions/:dispatchId", async (c) => {
@@ -1007,6 +1075,54 @@ proxyRouter.get("/api/gaps", async (c) => {
  * so a complaint travels the same path a complaint from anywhere else would —
  * one code path, one place for the gap-filing side effect to live.
  */
+/**
+ * One gap by id, from whichever vessel serves `substrateGap`.
+ *
+ * The question view reads the escalated gap back after a person answers, so the
+ * card can say whether the answer was applied (`human_disposition_record_id`
+ * equals the answer's response id), replaced by a later one, or not yet applied.
+ */
+proxyRouter.get("/api/gaps/:id", async (c) => {
+  const id = c.req.param("id");
+  const origin = c.req.header("Origin");
+  if (!id || id.length > 300) return c.json({ error: "gap id required" }, 400, corsHeaders(origin));
+  const body = JSON.stringify({ impulse: { pointer: { type: "substrateGap", id, limit: 1 } } });
+  const ask = async (base: string): Promise<{ found: boolean; gap: unknown } | null> => {
+    try {
+      const upstream = await fetch(`${base.replace(/\/+$/, "")}/v2/impulses/resolve`, {
+        method: "POST",
+        headers: upstreamHeaders(true),
+        body,
+        signal: AbortSignal.timeout(4_000),
+      });
+      if (!upstream.ok) return null;
+      const j = (await upstream.json()) as {
+        body?: { gaps?: unknown[] };
+        content?: { body?: { gaps?: unknown[] } };
+      };
+      const gaps = Array.isArray(j?.body?.gaps) ? j.body.gaps : Array.isArray(j?.content?.body?.gaps) ? j.content.body.gaps : null;
+      if (!gaps) return null;
+      const gap = gaps.find((g) => (g as { id?: unknown })?.id === id) ?? null;
+      return { found: gap !== null, gap };
+    } catch {
+      return null;
+    }
+  };
+  const bases = [
+    ...(await candidateEndpointsFor("substrateGap")).map((cand) => cand.base),
+    process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090",
+  ];
+  for (const base of bases) {
+    const answer = await ask(base);
+    if (answer) {
+      return answer.found
+        ? c.json({ gap: answer.gap }, 200, corsHeaders(origin))
+        : c.json({ gap: null, error: "no gap with that id" }, 404, corsHeaders(origin));
+    }
+  }
+  return c.json({ gap: null, error: "no vessel serving substrateGap answered" }, 502, corsHeaders(origin));
+});
+
 proxyRouter.post("/api/feedback", async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
   if (!body || typeof body["panel_id"] !== "string" || !body["value"]) {

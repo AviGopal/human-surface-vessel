@@ -100,22 +100,3 @@ export function detectSolicitation(walk: GoalWalkState): DetectedSolicitation | 
   return null;
 }
 
-/**
- * Counterfactual explanation, offered on failure only.
- *
- * Explanation sprayed across successes manufactures over-reliance; offered
- * after an acknowledged failure it demonstrably repairs trust. And it takes
- * counterfactual form — which path, over which other one, and on what evidence
- * — rather than a number.
- */
-export function pathExplanation(walk: GoalWalkState): string | null {
-  if (!walk.executionPath) return null;
-  const attempts = walk.attemptCount;
-  const template = walk.selectedTemplateId;
-  const parts: string[] = [];
-  if (template) parts.push(`it chose template ${template}`);
-  if (typeof attempts === "number" && attempts > 1) parts.push(`after ${attempts} attempts`);
-  if (walk.grounded === false) parts.push("and it was not grounded in anything it read");
-  if (walk.grounded === true) parts.push("grounded in what it read");
-  return parts.length > 0 ? parts.join(", ") : null;
-}

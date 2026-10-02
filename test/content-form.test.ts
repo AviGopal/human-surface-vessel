@@ -146,3 +146,41 @@ describe("NON-REGRESSION — the rescue runs last and takes from nothing", () =>
     expect(plan.form).toBe("text");
   });
 });
+
+describe("a cut envelope whose shape is not the first key", () => {
+  test("the LLM resolver's {resolved, shape, content} draws its content, not 'resolved true · cut off'", async () => {
+    const { truncatedEnvelopePayload } = await import("../ui/src/lib/ledger");
+    const cut = '{"resolved":true,"shape":"llmCompletion","content":"Today\\u2019s report:\\n1. Headline one';
+    const r = truncatedEnvelopePayload(cut);
+    expect(r?.envelopeShape).toBe("llmCompletion");
+    expect(r?.text.startsWith("Today’s report:\n1. Headline one")).toBe(true);
+  });
+  test("no declared shape among the leading pairs: declined, as before", async () => {
+    const { truncatedEnvelopePayload } = await import("../ui/src/lib/ledger");
+    expect(truncatedEnvelopePayload('{"resolved":true,"content":"text that was cut')).toBeNull();
+  });
+});
+
+describe("authored content inside an envelope is planned as text, command streams as a terminal", () => {
+  const report = "Here's a report on today.\n\n**Major Headlines and Commentary:**\n\n1. **Tensions rise.** Several outlets report that the situation escalated overnight, and analysts expect further moves this week.\n2. **Protests spread.** Schools closed across the country as demonstrations continued for a third day.";
+  test("a cut {resolved, shape, content} report is prose, not a terminal block", async () => {
+    const { planContent } = await import("../ui/src/lib/ledger");
+    const cut = JSON.stringify({ resolved: true, shape: "llmCompletion", content: report }).slice(0, 300);
+    const plan = planContent("llm_completion", cut, true);
+    expect(plan.form).not.toBe("terminal");
+    expect(plan.text.startsWith("Here's a report on today.")).toBe(true);
+  });
+  test("a cut {shape, stdout} listing stays a terminal block", async () => {
+    const { planContent } = await import("../ui/src/lib/ledger");
+    const listing = "UNIT                 LOAD   ACTIVE SUB     DESCRIPTION\nfoo.service          loaded active running Foo daemon that does things\nbar.service          loaded active running Bar daemon that does more";
+    const cut = JSON.stringify({ shape: "shellResult", stdout: listing }).slice(0, 180);
+    expect(planContent("shellResult", cut, true).form).toBe("terminal");
+  });
+  test("a whole {resolved, shape, content} unwraps to its content", async () => {
+    const { planContent } = await import("../ui/src/lib/ledger");
+    const whole = JSON.stringify({ resolved: true, shape: "llmCompletion", content: report });
+    const plan = planContent("llm_completion", whole, false);
+    expect(plan.form).not.toBe("record");
+    expect(plan.text.startsWith("Here's a report on today.")).toBe(true);
+  });
+});

@@ -14,7 +14,11 @@
  */
 
 import { useState, type ReactNode } from "react";
+import { fromText } from "../lib/content";
+import { Rendered } from "./Rendered";
 import { useAnswerSolicitation } from "../api/queries";
+import { solicitationPayload } from "../lib/interaction";
+import { ChoiceInput, InteractionFooter, TextInput, stateOf } from "./Interaction";
 import type { SolicitationOutcome } from "../api/types";
 import type { DetectedSolicitation } from "../lib/walk";
 
@@ -36,77 +40,39 @@ export function SolicitationPanel({
   return (
     <div className="sf-waiting-panel">
       <p className="sf-label" style={{ margin: 0 }}>
-        This run is waiting on you
+        Waiting on you
       </p>
-      <p className="sf-mono" style={{ fontSize: "var(--sf-text-sm)" }}>
-        {solicitation.evidenceLine}
-      </p>
+      <Rendered content={fromText("solicitation_evidence", solicitation.evidenceLine)} density="inline" header={false} />
 
       {solicitation.solicitationId === null ? (
-        <p className="sf-note">
-          The walk log says a question was asked but does not carry its id, and the question itself
-          lives in a separate impulse this surface cannot read. There is no way to answer it from
-          here — the run will time out on its own.
-        </p>
+        <p className="sf-note sf-muted">The question's id was not recorded, so it cannot be answered here.</p>
       ) : (
-        <>
-          <label className="sf-label" htmlFor="sf-solicit-answer">
-            Your answer
-          </label>
-          <textarea
-            id="sf-solicit-answer"
-            className="sf-textarea"
-            style={{ minHeight: "4.5rem", fontSize: "var(--sf-text-base)" }}
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+        <form
+          className="sf-interaction"
+          onSubmit={(e) => {
+            e.preventDefault();
+            mutation.mutate(
+              solicitationPayload({ solicitationId: solicitation.solicitationId as string, outcome, answer }),
+            );
+          }}
+        >
+          <ChoiceInput
+            label="Respond"
+            options={OUTCOMES.map((o) => o.value)}
+            labels={Object.fromEntries(OUTCOMES.map((o) => [o.value, o.label]))}
+            value={outcome}
+            onChange={(v) => setOutcome(v as SolicitationOutcome)}
+            disabled={mutation.isPending}
           />
-          <div
-            style={{
-              display: "flex",
-              gap: "var(--sf-space-2)",
-              alignItems: "center",
-              marginTop: "var(--sf-space-2)",
-              flexWrap: "wrap",
-            }}
-          >
-            <label className="sf-label" htmlFor="sf-solicit-outcome">
-              As
-            </label>
-            <select
-              id="sf-solicit-outcome"
-              className="sf-select"
-              value={outcome}
-              onChange={(e) => setOutcome(e.target.value as SolicitationOutcome)}
-            >
-              {OUTCOMES.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="sf-button sf-button-primary"
-              disabled={mutation.isPending || (outcome === "answered" && answer.trim().length === 0)}
-              onClick={() =>
-                mutation.mutate({
-                  solicitationId: solicitation.solicitationId as string,
-                  outcome,
-                  answer: answer.trim(),
-                })
-              }
-            >
-              {mutation.isPending ? "Sending…" : "Send to the walk"}
-            </button>
-          </div>
-          {mutation.isError ? (
-            <p className="sf-error">
-              The answer was not delivered: {(mutation.error as Error).message}. The walk is still
-              waiting.
-            </p>
-          ) : null}
-          {mutation.isSuccess ? <p className="sf-ok">Delivered. The walk resumes from where it stopped.</p> : null}
-        </>
+          <TextInput label="Answer" value={answer} onChange={setAnswer} disabled={mutation.isPending} />
+          <InteractionFooter
+            state={stateOf(mutation)}
+            submitLabel="Send"
+            canSubmit={!(outcome === "answered" && answer.trim().length === 0)}
+            error={mutation.isError ? `Not delivered: ${(mutation.error as Error).message}` : null}
+            sentLabel="Delivered"
+          />
+        </form>
       )}
     </div>
   );

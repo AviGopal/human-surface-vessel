@@ -88,75 +88,15 @@ function Chip({ starter, onInsert }: { starter: Starter; onInsert: (text: string
 
 export function StarterChips({ onInsert }: { onInsert: (text: string) => void }): ReactNode {
   const shapes = useFleetShapes();
-
-  // The self chip survives both of the degraded branches below on purpose: it
-  // does not depend on the fleet vocabulary, and the state where this surface
-  // cannot read the fleet is exactly the state in which "you can change this
-  // surface by asking" is most worth knowing.
-  if (shapes.isError) {
-    return (
-      <>
-        <p className="sf-note sf-muted" style={{ marginTop: "var(--sf-space-3)" }}>
-          The fleet's shape list could not be read, so there are no suggestions — not because the
-          system can do nothing, but because this surface cannot currently see what it does. Type
-          what you want; the walk does not depend on this list.
-        </p>
-        <div className="sf-chips">
-          <SelfChip onInsert={onInsert} />
-        </div>
-      </>
-    );
-  }
-
-  if (!shapes.data) {
-    return (
-      <>
-        <p className="sf-note sf-muted" style={{ marginTop: "var(--sf-space-3)" }}>
-          Reading what the fleet can produce…
-        </p>
-        <div className="sf-chips">
-          <SelfChip onInsert={onInsert} />
-        </div>
-      </>
-    );
-  }
-
-  const starters = deriveStarters(shapes.data, CHIP_LIMIT);
-
-  // Shapes were read, and none of them can be a human's goal. This is a real
-  // state, not a degraded one: the local registry alone advertises 16 shapes
-  // and all 16 are machine plumbing, so when the fleet leg cannot be read this
-  // is exactly what is left. Saying so beats offering `interactor assertion` as
-  // a suggestion — and beats an unexplained empty row, which reads as breakage.
-  if (starters.length === 0) {
-    return (
-      <>
-        <p className="sf-note sf-muted" style={{ marginTop: "var(--sf-space-3)" }}>
-          No suggestions are available right now. Describe what you want to accomplish in your own words.
-        </p>
-        <div className="sf-chips">
-          <SelfChip onInsert={onInsert} />
-        </div>
-      </>
-    );
-  }
-
+  // Suggestions only: the walk never depends on this list, so a failed or
+  // pending read degrades to the one self-edit chip rather than to an apology.
+  const starters = shapes.data ? deriveStarters(shapes.data, CHIP_LIMIT) : [];
   return (
-    <>
-      <div className="sf-chips">
-        {starters.map((starter) => (
-          // P4: keyed on the shape it was derived from, which is unique in the
-          // registry. Never the position in the list.
-          <Chip key={starter.id} starter={starter} onInsert={onInsert} />
-        ))}
-        <SelfChip onInsert={onInsert} />
-      </div>
-      <p className="sf-note sf-muted" style={{ marginTop: "var(--sf-space-2)" }}>
-        Derived from the {shapes.data.length} shapes the fleet is advertising right now · clicking
-        fills the box, it does not send · a dashed chip is one discovery confirmed has no producer,
-        a faded chip is one this surface could not check · the accented chip changes this page
-        itself
-      </p>
-    </>
+    <div className="sf-chips">
+      {starters.map((starter) => (
+        <Chip key={starter.id} starter={starter} onInsert={onInsert} />
+      ))}
+      <SelfChip onInsert={onInsert} />
+    </div>
   );
 }

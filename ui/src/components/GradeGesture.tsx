@@ -17,22 +17,10 @@
  */
 
 import { VERDICT_OPTIONS } from "@avigopal/design-tokens";
-import { useId, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useSubmitGrade } from "../api/queries";
-import type { OracleVerdict } from "../api/types";
-
-/**
- * Which corpus verdict each option means.
- *
- * Every option under a `reached` run disputes the reach, so all of them map to
- * `not_achieved`. Under a `not-reached` run, only "It actually worked" claims
- * the opposite. The option text travels verbatim in `notes`, so the corpus
- * keeps the granularity the mapping collapses.
- */
-function verdictFor(renderedState: "reached" | "not-reached", option: string): OracleVerdict {
-  if (renderedState === "reached") return "not_achieved";
-  return option === "It actually worked" ? "achieved" : "not_achieved";
-}
+import { gradePayload } from "../lib/interaction";
+import { ChoiceInput, InteractionFooter, TextInput, stateOf } from "./Interaction";
 
 export function GradeGesture({
   renderedState,
@@ -40,6 +28,7 @@ export function GradeGesture({
   goal,
   alreadyGraded,
   humanReachNotes,
+  appliesTo = null,
 }: {
   renderedState: "reached" | "not-reached";
   /** ABSENT when goal-host never recorded one — the key is not serialized. */
@@ -47,8 +36,9 @@ export function GradeGesture({
   goal: string;
   alreadyGraded: boolean;
   humanReachNotes: string | null;
+  /** Which attempt a grade lands on, when the run walked more than once. */
+  appliesTo?: string | null;
 }): ReactNode {
-  const groupId = useId();
   const [selected, setSelected] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const grade = useSubmitGrade();
@@ -57,10 +47,7 @@ export function GradeGesture({
   if (alreadyGraded) {
     return (
       <div className="sf-grade">
-        <p className="sf-note">
-          A human has already graded this run
-          {humanReachNotes ? `: “${humanReachNotes}”` : "."}
-        </p>
+        <p className="sf-note">Graded{humanReachNotes ? `: “${humanReachNotes}”` : ""}</p>
       </div>
     );
   }
@@ -72,79 +59,30 @@ export function GradeGesture({
   if (!executionId) {
     return (
       <div className="sf-grade">
-        <p className="sf-note">
-          This run cannot be graded: it carries no execution id, and the verdict corpus is keyed on
-          one. The run happened; the record needed to attach a verdict to it does not exist.
-        </p>
+        <p className="sf-note sf-muted">No execution id — cannot be graded</p>
       </div>
     );
   }
 
   return (
-    <div className="sf-grade">
-      <fieldset className="sf-grade-options">
-        <legend className="sf-label">
-          {renderedState === "reached"
-            ? "If this did not actually do what you asked, say which"
-            : "If this verdict is wrong, say how"}
-        </legend>
-        {options.map((option) => (
-          <label className="sf-grade-option" key={option}>
-            <input
-              type="radio"
-              name={groupId}
-              value={option}
-              checked={selected === option}
-              onChange={() => setSelected(option)}
-            />
-            <span>{option}</span>
-          </label>
-        ))}
-      </fieldset>
-
-      <label className="sf-label" htmlFor={`${groupId}-note`}>
-        What actually happened (optional)
-      </label>
-      <textarea
-        id={`${groupId}-note`}
-        className="sf-textarea"
-        style={{ minHeight: "3.5rem", fontSize: "var(--sf-text-base)" }}
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
+    <form
+      className="sf-grade sf-interaction"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!selected) return;
+        grade.mutate(gradePayload({ renderedState, option: selected, note, executionId, goal }));
+      }}
+    >
+      {appliesTo ? <p className="sf-note sf-muted sf-grade-applies">{appliesTo}</p> : null}
+      <ChoiceInput label="Disagree with the verdict?" options={options} value={selected} onChange={setSelected} disabled={grade.isPending} />
+      <TextInput label="Note" placeholder="Note (optional)" value={note} onChange={setNote} disabled={grade.isPending} />
+      <InteractionFooter
+        state={stateOf(grade)}
+        submitLabel="Record"
+        canSubmit={selected !== null}
+        error={grade.isError ? `Not recorded: ${(grade.error as Error).message}` : null}
+        sentLabel="Recorded"
       />
-
-      <div style={{ marginTop: "var(--sf-space-2)" }}>
-        <button
-          type="button"
-          className="sf-button sf-button-primary"
-          disabled={selected === null || grade.isPending}
-          onClick={() => {
-            if (!selected) return;
-            grade.mutate({
-              executionId,
-              goal,
-              verdict: verdictFor(renderedState, selected),
-              notes: note.trim() ? `${selected} — ${note.trim()}` : selected,
-            });
-          }}
-        >
-          {grade.isPending ? "Recording…" : "Record this verdict"}
-        </button>
-      </div>
-
-      {/* No optimistic green. If the write did not land, it did not land. */}
-      {grade.isError ? (
-        <p className="sf-error">
-          The verdict was NOT recorded: {(grade.error as Error).message}. Nothing about this run has
-          changed.
-        </p>
-      ) : null}
-      {grade.isSuccess ? (
-        <p className="sf-ok">
-          Recorded. A human verdict overrides the machine one and is not charged against the
-          pathway's posterior as an ordinary failure.
-        </p>
-      ) : null}
-    </div>
+    </form>
   );
 }

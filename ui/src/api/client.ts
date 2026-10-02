@@ -328,11 +328,7 @@ export async function submitGrade(g: GradeSubmission): Promise<void> {
 export interface RenderPolicy {
   readonly tokenOverrides: Readonly<Record<string, string>>;
   readonly formByShape: Readonly<Record<string, string>>;
-  /**
-   * Written only by the form learner from exposure outcomes; consulted by the
-   * planner beneath a human pin. Optional on the browser side: a vessel that
-   * predates the field must read as "no learned entries", not as a type error.
-   */
+  /** Forms a learner earned per shape; applied below a human pin. Absent on older policies. */
   readonly learnedFormByShape?: Readonly<Record<string, string>>;
   readonly maxPreviewChars: number | null;
   readonly ledgerDefaultExpanded: boolean;
@@ -351,4 +347,27 @@ export async function fetchRenderPolicy(): Promise<RenderPolicy> {
   const res = await fetch("/api/render-policy", { credentials: "same-origin" });
   if (!res.ok) throw new Error(`render policy unavailable (${res.status})`);
   return (await res.json()) as RenderPolicy;
+}
+
+/** A gap as the gap store returns it; only the fields the surface reads are typed. */
+export interface GapRecord {
+  readonly id: string;
+  readonly status?: string;
+  readonly summary?: string;
+  readonly classification_metadata?: Record<string, unknown>;
+  readonly updated_at?: string;
+}
+
+/** One gap by id. Null when the store answered and has no such gap. */
+export async function fetchGap(id: string): Promise<GapRecord | null> {
+  const res = await fetch(`/api/gaps/${encodeURIComponent(id)}`, { credentials: "same-origin" });
+  const body = (await res.json().catch(() => null)) as { gap?: GapRecord | null; error?: string } | null;
+  // Absence is a STATEMENT the route makes ({gap:null}), not any 404. A server
+  // missing this route answers 404 too, and reading that as "no longer in the
+  // store" told the reader every escalation's gap had vanished (10-02: the live
+  // server ran a proxy.ts without the route).
+  if (res.status === 404 && body !== null && "gap" in body && body.gap === null) return null;
+  if (!res.ok) throw new Error(body?.error ?? `not checked (${res.status})`);
+  if (!body || !("gap" in body)) throw new Error("not checked");
+  return body.gap ?? null;
 }

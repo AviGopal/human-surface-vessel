@@ -340,6 +340,19 @@ const DEV_VESSEL_ENDPOINT = (
 ).replace(/\/+$/, "");
 
 /**
+ * The gap id a complaint on `panelId` of `complaintKind` is filed under — the same
+ * `ui-feedback-<region>-<kind>` keyspace the substrate's legibility detector uses.
+ * Returned to the caller so a person can be shown the issue their report became.
+ */
+export function feedbackGapId(panelId: string, complaintKind: string): string {
+  const slug = String(panelId)
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return `ui-feedback-${slug}-${complaintKind}`;
+}
+
+/**
  * File a human complaint as a substrateGap, keyed exactly as the substrate's own
  * legibility detector keys its findings.
  *
@@ -354,10 +367,6 @@ async function fileFeedbackGap(entry: {
   complaintKind: string;
   value: unknown;
 }): Promise<void> {
-  const slug = String(entry.panelId)
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
   const text = typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value);
   await fetch(`${DEV_VESSEL_ENDPOINT}/v2/impulses/resolve`, {
     method: "POST",
@@ -370,7 +379,7 @@ async function fileFeedbackGap(entry: {
         pointer: {
           type: "substrateGap_write",
           gap: {
-            id: `ui-feedback-${slug}-${entry.complaintKind}`,
+            id: feedbackGapId(entry.panelId, entry.complaintKind),
             category: "ui_legibility",
             source: "human_reported",
             status: "open",
@@ -625,7 +634,12 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const complaintKind = optStr(pointer, "complaint_kind");
       // Answering or declining a question is not a complaint about the interface.
       if (complaintKind) void fileFeedbackGap({ ...entry, complaintKind }).catch(() => {});
-      return c.json({ resolved: true, success: true, shape: type, body: entry });
+      return c.json({
+        resolved: true,
+        success: true,
+        shape: type,
+        body: complaintKind ? { ...entry, filed_gap_id: feedbackGapId(entry.panelId, complaintKind) } : entry,
+      });
     }
 
     case "interactorObservation": {

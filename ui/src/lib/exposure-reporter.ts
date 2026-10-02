@@ -9,11 +9,11 @@
 import {
   ExposureLedger,
   MEASURED_SELECTOR,
-  readFormOnScreen,
   buildExposureRecord,
   buildOutcomeRecord,
   collectCandidates,
   readConditions,
+  readDrawnForm,
   visibleSlice,
   type ExposureOutcome,
   type Rect,
@@ -115,7 +115,7 @@ export function reportExposureAct(
   askId?: string | null,
 ): void {
   if (typeof window === "undefined") return;
-  // The form on screen is read from the measured row at act time, beside rank.
-  const onScreen = readFormOnScreen(window.document, solicitationId);
-  sendObservation(buildOutcomeRecord(ledger.act(solicitationId, outcome, askId, onScreen), readConditions(window)));
+  const event = ledger.act(solicitationId, outcome, askId);
+  const drawn = readDrawnForm(window.document, solicitationId);
+  sendObservation(buildOutcomeRecord(drawn ? { ...event, drawn } : event, readConditions(window)));
 }

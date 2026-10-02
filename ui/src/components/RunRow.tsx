@@ -100,43 +100,22 @@ export function RunRow({
       onFocus={() => onFocused(row.dispatchId)}
       onClick={() => onSelect(row.dispatchId)}
       aria-current={selected ? "true" : undefined}
+      title={
+        state === "not-reached" || state === "waiting" || state === "stalled"
+          ? state === "waiting" && solicitation
+            ? `Waiting on you — ${solicitation.evidenceLine}`
+            : reason
+          : undefined
+      }
     >
-      {/* 1. the verdict, first, always */}
-      <StateBadge state={state} />
-
-      {/* 2. what was asked */}
-      <span className="sf-run-goal" data-missing={goalText ? "false" : "true"} title={goalText ?? ""}>
-        {goalText ?? "goal text not recorded on this dispatch"}
+      <span className="sf-run-line">
+        <StateBadge state={state} />
+        <span className="sf-run-meta">{row.operator ?? row.trigger ?? "unattributed"}</span>
+        <span className="sf-run-elapsed">{formatElapsed(now - startedAtMs)}</span>
       </span>
-
-      {/* 3. elapsed — updates in place, never a sort key */}
-      <span className="sf-run-elapsed">{formatElapsed(now - startedAtMs)}</span>
-
-      {/* 4. attribution */}
-      <span className="sf-run-meta">
-        {row.operator ?? row.trigger ?? "unattributed"}
+      <span className="sf-run-goal" data-missing={goalText ? "false" : "true"}>
+        {goalText ?? "goal text not recorded"}
       </span>
-
-      {/* The reason, on the rows where it repairs something: a failure, a
-          question, or a run that has gone quiet. Explanation sprayed across
-          successes manufactures over-reliance. */}
-      {state === "not-reached" || state === "waiting" || state === "stalled" ? (
-        /* Clamped to one line in CSS, with the whole sentence on `title` and
-           in DETAIL — three not-reached rows repeating one byte-identical
-           sentence was consuming half the visible board. */
-        <span
-          className="sf-run-reason"
-          title={
-            state === "waiting" && solicitation
-              ? `Waiting on you — ${solicitation.evidenceLine}`
-              : reason
-          }
-        >
-          {state === "waiting" && solicitation
-            ? `Waiting on you — ${solicitation.evidenceLine.slice(0, 160)}`
-            : reason}
-        </span>
-      ) : null}
     </button>
   );
 }

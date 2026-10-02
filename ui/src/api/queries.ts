@@ -1,16 +1,18 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { streamAwareInterval, useStreamConnected } from "../state/stream";
 import {
   answerSolicitation,
   dispatchGoal,
   fetchActiveDispatches,
   fetchCapability,
   fetchFleetShapes,
+  fetchGap,
   fetchRenderPolicy,
   fetchWalkState,
   injectContext,
   submitGrade,
 } from "./client";
-import type { RenderPolicy } from "./client";
+import type { GapRecord, RenderPolicy } from "./client";
 import type { ActiveDispatch, GoalWalkState } from "./types";
 
 export const queryKeys = {
@@ -139,13 +141,29 @@ export function useRenderPolicy(opts: {
   enabled: boolean;
   intervalMs: number;
 }): UseQueryResult<RenderPolicy> {
+  const live = useStreamConnected();
   return useQuery({
     queryKey: queryKeys.renderPolicy,
     queryFn: fetchRenderPolicy,
     enabled: opts.enabled,
-    refetchInterval: opts.enabled ? opts.intervalMs : false,
+    refetchInterval: opts.enabled ? streamAwareInterval(opts.intervalMs, live) : false,
     refetchOnWindowFocus: false,
     staleTime: 0,
     placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * One gap, polled while a question card that escalated it is open, so the card
+ * can show what became of the answer. `intervalMs: false` reads once.
+ */
+export function useGap(id: string | null, opts: { enabled: boolean; intervalMs: number | false }): UseQueryResult<GapRecord | null> {
+  return useQuery({
+    queryKey: ["gap", id],
+    queryFn: () => fetchGap(id as string),
+    enabled: opts.enabled && id !== null,
+    refetchInterval: opts.enabled ? opts.intervalMs : false,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
 }
