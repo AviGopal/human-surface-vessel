@@ -31,3 +31,10 @@ node_modules/
 # `oven/bun:1` so nothing lands root-owned in the tree; bun wants a writable
 # HOME for its cache, and that cache is not a file git should carry.
 .container-home/
+
+# Compiled siblings of vite.config.ts. The build runs tsc --noEmit, but a bare `tsc`
+# would regenerate them, and a stale vite.config.js wins over the .ts for a bare `vite`.
+vite.config.js
+vite.config.js.map
+vite.config.d.ts
+vite.config.d.ts.map

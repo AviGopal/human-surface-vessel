@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* ui/dist is TRACKED (see ui/.gitignore), so Tailwind's automatic source
+   detection would scan the previous bundle and carry its class names into the
+   next one: the build would depend on whatever dist was on disk. Exclude it so
+   a clean checkout reproduces the committed bundle byte-for-byte. */
+@source not "../dist";
 
 /*
  * The tokens are consumed from the shared package, not re-authored here.
