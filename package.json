@@ -15,7 +15,9 @@
     "hono": "^4.6.0"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^18",
     "@types/bun": "^1.0.0",
+    "happy-dom": "^18",
     "typescript": "^5.4.0"
   }
 }

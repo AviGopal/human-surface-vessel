@@ -4,19 +4,17 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 /**
- * The design-token package lives in the super-repo's `packages/` tree, outside
- * this vite root. It is consumed by ALIAS rather than by a `file:` dependency:
- * the package's entry point is raw TypeScript (`index.ts`), and a symlinked
- * node_modules copy would sit behind vite's default node_modules transform
- * exclusion. Aliasing straight at the source file keeps it inside the normal
- * TS pipeline and keeps ONE copy of the tokens in the tree.
+ * The design tokens are vendored at `src/design-tokens/` so this repo builds,
+ * typechecks and tests with nothing but itself on disk (law 11): the vessel
+ * clones that pull-sync and the landing lane use carry no super-repo
+ * `packages/` tree. Consumed by ALIAS so the raw TypeScript entry stays in the
+ * normal TS pipeline.
  *
  * The npm scope is `@avigopal`. `@metabob` is deprecated and must not appear.
  */
 const DESIGN_TOKENS = fileURLToPath(
-  new URL("../../../packages/design-tokens/index.ts", import.meta.url),
+  new URL("./src/design-tokens/index.ts", import.meta.url),
 );
-const PACKAGES_ROOT = fileURLToPath(new URL("../../../packages", import.meta.url));
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -28,9 +26,6 @@ export default defineConfig({
     },
   },
   server: {
-    // The token package is outside the vite root, so dev-server file serving
-    // has to be told it is allowed. Build does not need this; dev does.
-    fs: { allow: [fileURLToPath(new URL(".", import.meta.url)), PACKAGES_ROOT] },
     proxy: {
       // Dev-only convenience. In production the vessel serves this bundle and
       // owns /api itself; nothing here is baked into the build (rule P12).

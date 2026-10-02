@@ -1,0 +1,273 @@
+/*
+ * @avigopal/design-tokens — the single source for the human surface's design values.
+ *
+ * THE CONTRACT: a colour literal written anywhere outside this file is a
+ * conformance violation (rule P11). Surfaces consume these custom properties;
+ * they do not re-author them.
+ *
+ * Theme resolution, in precedence order:
+ *   1. :root                                  — light is the base
+ *   2. @media (prefers-color-scheme: dark)    — the OS signal
+ *   3. :root[data-theme="dark"|"light"]       — an explicit toggle, which must
+ *                                               beat the media query IN BOTH
+ *                                               DIRECTIONS, hence both blocks.
+ *
+ * No @font-face, no webfont URL, by design. A surface that fetches a font from
+ * the public internet is not location-independent (law 11).
+ */
+
+:root {
+  /* ── ground ─────────────────────────────────────────────────────────────
+     Neutrals carry a slight cyan bias toward the accent so they read as
+     chosen rather than inherited. */
+  --sf-paper:        #F0F2F3;
+  --sf-panel:        #FBFCFC;
+  --sf-panel-alt:    #F5F7F8;
+
+  --sf-ink:          #14181B;
+  --sf-ink-2:        #454E55;
+  --sf-ink-3:        #6E7982;
+
+  --sf-rule:         #D6DCDF;
+  --sf-rule-strong:  #B9C2C7;
+
+  /* ── accent ─────────────────────────────────────────────────────────────
+     DELIBERATELY RECESSIVE. On a surface whose job is honest verdicts, the
+     loudest colour must be state, not brand. If the accent ever competes with
+     a state colour, the accent is wrong. */
+  --sf-accent:       #2A4C5E;
+  --sf-accent-soft:  #E2EAEE;
+  --sf-accent-ink:   #FBFCFC;
+
+  /* ── semantic state palette ─────────────────────────────────────────────
+     The load-bearing part of this package.
+
+     `reached` and `not-reached` are defined at EQUAL VISUAL WEIGHT — matched
+     lightness and chroma magnitude. Neither may be quieter than the other.
+     That pair is the entire design thesis encoded as two tokens: a surface
+     cannot render a hollow completion as a success if failure is as loud as
+     success.
+
+     Six states, all mutually distinguishable:
+       reached     the goal was met
+       not-reached the walk finished and did not meet it
+       running     in flight, emitting
+       waiting     blocked on a human answer
+       accepted    a dispatch id exists and nothing else does
+       stalled     accepted, then silent — a liveness failure, not a verdict
+
+     Every state also has a --*-label token. State is NEVER carried by colour
+     alone (rule P11 and basic accessibility). */
+  --sf-reached:          #1B6B47;
+  --sf-reached-bg:       #E1EFE8;
+  --sf-reached-label:    "reached";
+
+  --sf-not-reached:      #9E2B2B;
+  --sf-not-reached-bg:   #F6E4E3;
+  --sf-not-reached-label:"not reached";
+
+  --sf-running:          #8A5A12;
+  --sf-running-bg:       #F6EDDC;
+  --sf-running-label:    "running";
+
+  --sf-waiting:          #2F5C6E;
+  --sf-waiting-bg:       #E0EBEF;
+  --sf-waiting-label:    "waiting";
+
+  --sf-accepted:         #4A555E;
+  --sf-accepted-bg:      #E7EAEC;
+  --sf-accepted-label:   "accepted";
+
+  --sf-stalled:          #8A3E1B;
+  --sf-stalled-bg:       #F7E7DD;
+  --sf-stalled-label:    "stalled";
+
+  /* ── type ───────────────────────────────────────────────────────────────
+     Three roles, because this surface has three kinds of content and they
+     must not look alike: UI chrome, human prose rationale, and machine record.
+     System stacks only. */
+  --sf-font-sans:  ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --sf-font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, ui-serif, serif;
+  --sf-font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --sf-text-xs:   12px;
+  --sf-text-sm:   12.5px;
+  --sf-text-base: 14.5px;
+  --sf-text-lg:   17px;
+  --sf-text-xl:   21px;
+  --sf-text-2xl:  27px;
+
+  --sf-leading-tight:  1.2;
+  --sf-leading-normal: 1.5;
+  --sf-leading-prose:  1.62;
+
+  --sf-tracking-label: 0.11em;
+
+  /* ── space & shape ──────────────────────────────────────────────────────── */
+  --sf-space-1:  4px;
+  --sf-space-2:  7px;
+  --sf-space-3:  11px;
+  --sf-space-4:  14px;
+  --sf-space-5:  18px;
+  --sf-space-6:  26px;
+  --sf-space-7:  34px;
+
+  --sf-radius-sm: 2px;
+  --sf-radius-md: 3px;
+
+  --sf-shadow: 0 1px 2px rgba(20, 24, 27, 0.05), 0 6px 20px rgba(20, 24, 27, 0.05);
+
+  /* Live-region geometry. The runs region is fixed height so the layout does
+     not resize around its contents (rule P2/R2). */
+  --sf-live-region-height: 290px;
+}
+
+/* ── dark, via the OS signal ─────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sf-paper:       #0E1214;
+    --sf-panel:       #161B1E;
+    --sf-panel-alt:   #1B2225;
+
+    --sf-ink:         #E4E9EB;
+    --sf-ink-2:       #A8B2B8;
+    --sf-ink-3:       #7A858C;
+
+    --sf-rule:        #262E32;
+    --sf-rule-strong: #3A444A;
+
+    --sf-accent:      #84B6CE;
+    --sf-accent-soft: #1B2A33;
+    --sf-accent-ink:  #0E1214;
+
+    --sf-reached:        #63C692;
+    --sf-reached-bg:     #13291E;
+    --sf-not-reached:    #EC7B73;
+    --sf-not-reached-bg: #301917;
+    --sf-running:        #D9A24E;
+    --sf-running-bg:     #2B2113;
+    --sf-waiting:        #6FB3CB;
+    --sf-waiting-bg:     #12262E;
+    --sf-accepted:       #9CA7AE;
+    --sf-accepted-bg:    #1E2428;
+    --sf-stalled:        #E08A55;
+    --sf-stalled-bg:     #2E1B10;
+
+    --sf-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ── explicit toggle — must win over the media query in BOTH directions ──── */
+:root[data-theme="dark"] {
+  --sf-paper:       #0E1214;
+  --sf-panel:       #161B1E;
+  --sf-panel-alt:   #1B2225;
+
+  --sf-ink:         #E4E9EB;
+  --sf-ink-2:       #A8B2B8;
+  --sf-ink-3:       #7A858C;
+
+  --sf-rule:        #262E32;
+  --sf-rule-strong: #3A444A;
+
+  --sf-accent:      #84B6CE;
+  --sf-accent-soft: #1B2A33;
+  --sf-accent-ink:  #0E1214;
+
+  --sf-reached:        #63C692;
+  --sf-reached-bg:     #13291E;
+  --sf-not-reached:    #EC7B73;
+  --sf-not-reached-bg: #301917;
+  --sf-running:        #D9A24E;
+  --sf-running-bg:     #2B2113;
+  --sf-waiting:        #6FB3CB;
+  --sf-waiting-bg:     #12262E;
+  --sf-accepted:       #9CA7AE;
+  --sf-accepted-bg:    #1E2428;
+  --sf-stalled:        #E08A55;
+  --sf-stalled-bg:     #2E1B10;
+
+  --sf-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="light"] {
+  --sf-paper:       #F0F2F3;
+  --sf-panel:       #FBFCFC;
+  --sf-panel-alt:   #F5F7F8;
+
+  --sf-ink:         #14181B;
+  --sf-ink-2:       #454E55;
+  --sf-ink-3:       #6E7982;
+
+  --sf-rule:        #D6DCDF;
+  --sf-rule-strong: #B9C2C7;
+
+  --sf-accent:      #2A4C5E;
+  --sf-accent-soft: #E2EAEE;
+  --sf-accent-ink:  #FBFCFC;
+
+  --sf-reached:        #1B6B47;
+  --sf-reached-bg:     #E1EFE8;
+  --sf-not-reached:    #9E2B2B;
+  --sf-not-reached-bg: #F6E4E3;
+  --sf-running:        #8A5A12;
+  --sf-running-bg:     #F6EDDC;
+  --sf-waiting:        #2F5C6E;
+  --sf-waiting-bg:     #E0EBEF;
+  --sf-accepted:       #4A555E;
+  --sf-accepted-bg:    #E7EAEC;
+  --sf-stalled:        #8A3E1B;
+  --sf-stalled-bg:     #F7E7DD;
+
+  --sf-shadow: 0 1px 2px rgba(20, 24, 27, 0.05), 0 6px 20px rgba(20, 24, 27, 0.05);
+}
+
+/* ── Tailwind 4 theme mapping ────────────────────────────────────────────────
+   CSS-first config is why Tailwind 4 was chosen: the tokens live here, in CSS,
+   where a checker can read them — not in a JS config object. */
+@theme inline {
+  --color-paper:       var(--sf-paper);
+  --color-panel:       var(--sf-panel);
+  --color-panel-alt:   var(--sf-panel-alt);
+  --color-ink:         var(--sf-ink);
+  --color-ink-2:       var(--sf-ink-2);
+  --color-ink-3:       var(--sf-ink-3);
+  --color-rule:        var(--sf-rule);
+  --color-rule-strong: var(--sf-rule-strong);
+
+  --color-accent:      var(--sf-accent);
+  --color-accent-soft: var(--sf-accent-soft);
+  --color-accent-ink:  var(--sf-accent-ink);
+
+  --color-reached:        var(--sf-reached);
+  --color-reached-bg:     var(--sf-reached-bg);
+  --color-not-reached:    var(--sf-not-reached);
+  --color-not-reached-bg: var(--sf-not-reached-bg);
+  --color-running:        var(--sf-running);
+  --color-running-bg:     var(--sf-running-bg);
+  --color-waiting:        var(--sf-waiting);
+  --color-waiting-bg:     var(--sf-waiting-bg);
+  --color-accepted:       var(--sf-accepted);
+  --color-accepted-bg:    var(--sf-accepted-bg);
+  --color-stalled:        var(--sf-stalled);
+  --color-stalled-bg:     var(--sf-stalled-bg);
+
+  --font-sans:  var(--sf-font-sans);
+  --font-serif: var(--sf-font-serif);
+  --font-mono:  var(--sf-font-mono);
+
+  --radius-sm: var(--sf-radius-sm);
+  --radius-md: var(--sf-radius-md);
+}
+
+/* Motion is opt-out by default. The only motion this contract wants is an
+   in-place cell change; nothing may move a row. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

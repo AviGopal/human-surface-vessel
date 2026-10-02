@@ -24,7 +24,7 @@
 
     "baseUrl": ".",
     "paths": {
-      "@avigopal/design-tokens": ["../../../packages/design-tokens/index.ts"]
+      "@avigopal/design-tokens": ["./src/design-tokens/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

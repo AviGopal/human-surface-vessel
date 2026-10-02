@@ -11,7 +11,7 @@
  *
  * The scope is @avigopal. @metabob is deprecated.
  */
-@import "../../../../packages/design-tokens/tokens.css";
+@import "./design-tokens/tokens.css";
 
 .sf-participation-actions { display: flex; flex-wrap: wrap; gap: var(--sf-space-2); }
 

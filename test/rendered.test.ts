@@ -2,7 +2,7 @@
  * <Rendered> in a DOM: the frame survives a renderer that throws, the three
  * densities draw one form, and only reading densities record a decision.
  */
-import { GlobalRegistrator } from "../ui/node_modules/@happy-dom/global-registrator";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";

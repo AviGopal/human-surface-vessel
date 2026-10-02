@@ -6,7 +6,7 @@
  * Before the row carried `data-form`, this chain broke at the first link and
  * every learning pass reported "no exposure outcome carried a form".
  */
-import { GlobalRegistrator } from "../ui/node_modules/@happy-dom/global-registrator";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 const registeredHere = !GlobalRegistrator.isRegistered;
 if (registeredHere) GlobalRegistrator.register({ url: "http://surface.test/" });
 
