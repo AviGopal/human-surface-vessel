@@ -265,42 +265,55 @@ app.post("/resolve", async (c) => {
  */
 const SERVER_IDLE_TIMEOUT_S = 30;
 
-const server = Bun.serve({
-  port: PORT,
-  hostname: HOST,
-  idleTimeout: SERVER_IDLE_TIMEOUT_S,
-  fetch: app.fetch,
-});
+/**
+ * Listening, registering with discovery and owning the process signals are
+ * what RUNNING the vessel means, not what importing its app means. A test that
+ * imports `app` to call `app.request` must not bind PORT: on a node whose live
+ * vessel already holds that port (every substrate, during pull-sync's test
+ * gate) the import died EADDRINUSE as an unhandled error, which the load-error
+ * gate counts as a file that no longer loads. It would also have registered a
+ * test process with discovery. The unit runs this file directly, so it is main.
+ */
+function startServer(): void {
+  const server = Bun.serve({
+    port: PORT,
+    hostname: HOST,
+    idleTimeout: SERVER_IDLE_TIMEOUT_S,
+    fetch: app.fetch,
+  });
 
-console.log(
-  `[human-surface-vessel] listening on ${HOST}:${PORT} | discovery=${config.DISCOVERY_ENDPOINT} | shapes=${DISCOVERY_SHAPES.length}`,
-);
+  console.log(
+    `[human-surface-vessel] listening on ${HOST}:${PORT} | discovery=${config.DISCOVERY_ENDPOINT} | shapes=${DISCOVERY_SHAPES.length}`,
+  );
 
-// Fire-and-forget: a discovery outage must not block or fail startup.
-startDiscoveryRegistration();
+  // Fire-and-forget: a discovery outage must not block or fail startup.
+  startDiscoveryRegistration();
 
-let shuttingDown = false;
-async function shutdown(signal: string): Promise<void> {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  console.log(`[human-surface-vessel] ${signal} — deregistering`);
-  await deregisterFromDiscovery();
-  try {
-    await server.stop();
-  } catch {
-    /* already stopped */
+  let shuttingDown = false;
+  async function shutdown(signal: string): Promise<void> {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[human-surface-vessel] ${signal} — deregistering`);
+    await deregisterFromDiscovery();
+    try {
+      await server.stop();
+    } catch {
+      /* already stopped */
+    }
+    process.exit(0);
   }
-  process.exit(0);
+
+  process.on("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+  process.on("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
 }
 
-process.on("SIGTERM", () => {
-  void shutdown("SIGTERM");
-});
-process.on("SIGINT", () => {
-  void shutdown("SIGINT");
-});
+if (import.meta.main) startServer();
 
 // NOT a default export: Bun auto-serves a default-exported Hono app as a server
-// config, which collides with the explicit Bun.serve above and dies EADDRINUSE
+// config, which collides with the explicit Bun.serve in startServer and dies EADDRINUSE
 // against its own listener. Named export only.
 export { app };
