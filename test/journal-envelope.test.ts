@@ -19,11 +19,25 @@
  *      would turn a human's decline into an answer
  */
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { recordFeedback } from "../src/store.ts";
-import { parseDisposition } from "../../development-vessel/src/resolvers/escalation-disposition-apply.ts";
+
+/**
+ * The REAL consumer's parser lives in development-vessel. In the super-repo layout it sits
+ * beside this repo; a standalone clone of this repo does not have it. Clause (b2) runs the real
+ * parser when it is present and is reported as SKIPPED — not passed — when it is not, so its
+ * absence stays visible in the summary.
+ */
+const DISPOSITION_PARSER = new URL(
+  "../../development-vessel/src/resolvers/escalation-disposition-apply.ts",
+  import.meta.url,
+).pathname;
+const parserPresent = existsSync(DISPOSITION_PARSER);
+const parseDisposition: ((text: string) => unknown) | null = parserPresent
+  ? ((await import(DISPOSITION_PARSER)) as { parseDisposition: (text: string) => unknown }).parseDisposition
+  : null;
 
 const journal = () =>
   readFileSync(join(process.env.WORKSPACE_ROOT!, "interactor-log", "uiFeedback_write.jsonl"), "utf8");
@@ -75,9 +89,16 @@ describe("participation journal records are readable by the interactor-log consu
     // RAW, not JSON.stringify'd: escalation-disposition-apply.ts:182 copies this straight into
     // gap metadata, and :168 regexes it. A quoted/escaped value would poison both.
     expect(extracted!.value).toBe(answer);
-    expect(parseDisposition(extracted!.value)).toBe("drop");
     // escalation-disposition-apply.ts:171 keys idempotence on this id.
     expect(extracted!.recordId).toBe(entry.id);
+  });
+
+  test.skipIf(!parserPresent)("(b2) the real parseDisposition reads the verb from the extracted text", () => {
+    const panelId = `needs-human-envelope-b2-${crypto.randomUUID()}`;
+    const answer = "Disposition: drop. Not worth closing — no caller can be named.";
+    recordFeedback({ panelId, kind: "answer", value: answer });
+    const extracted = answersByPanel(journal()).get(panelId);
+    expect(parseDisposition!(extracted!.value)).toBe("drop");
   });
 
   test("(d) a dismissal stays out of the answered set", () => {
