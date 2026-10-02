@@ -108,11 +108,11 @@ describe("BLOCKER 4 — defaulted satisfier write over a live panel", () => {
   // "absence preserves" would be indistinguishable from "creation is broken".
   test("a fresh id still CREATES with the literal defaults", async () => {
     const id = "b4r-fresh-id-defaults";
-    const created = await resolve({ type: "uiQuestion_write", id });
+    const created = await resolve({ type: "uiQuestion_write", id, title: "Which branch?" });
     console.log("CREATED status=%d %j", created.status, created.json.body);
     expect(created.status).toBe(200);
     const stored = live(id)!;
-    expect(stored.title).toBe("Untitled");
+    expect(stored.title).toBe("Which branch?");
     expect(stored.body).toBe("");
     expect(stored.kind).toBe("question");
     expect(stored.importance).toBe("medium");
@@ -124,5 +124,17 @@ describe("BLOCKER 4 — defaulted satisfier write over a live panel", () => {
     const asPanel = await resolve({ type: "uiPanel_write", id: panelId });
     expect(asPanel.status).toBe(200);
     expect(live(panelId)!.kind).toBe("info");
+    expect(live(panelId)!.title).toBe("Untitled");
+  });
+
+  // A new question with nothing in it is refused — what goal c9e4b774's
+  // goal-only bridge wrote twice: {type:"uiQuestion_write"} and no content.
+  test("must-fail: a fresh id with no title, body or asks is not a question", async () => {
+    for (const pointer of [{}, { title: "" }, { body: "   " }, { asks: [] }]) {
+      const id = `b4r-empty-question-${JSON.stringify(pointer).length}`;
+      const r = await resolve({ type: "uiQuestion_write", id, ...pointer });
+      expect(r.status).toBe(422);
+      expect(live(id)).toBeUndefined();
+    }
   });
 });

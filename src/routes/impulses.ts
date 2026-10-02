@@ -92,6 +92,13 @@ function optPosition(p: Pointer): { x: number; y: number } | undefined {
  */
 const PANEL_CONTENT_KEYS = ["title", "body", "kind", "importance", "asks", "visibility"] as const;
 
+function hasQuestionContent(pointer: Record<string, unknown>): boolean {
+  const filled = (v: unknown): boolean =>
+    typeof v === "string" ? v.trim() !== "" : v !== null && v !== undefined && !(typeof v === "object" && Object.keys(v as object).length === 0);
+  const asksList = pointer["asks"];
+  return filled(pointer["title"]) || filled(pointer["body"]) || (Array.isArray(asksList) && asksList.length > 0);
+}
+
 /**
  * `exposure` and `exposure_outcome` are the exposure corpus — what the surface
  * put on screen and what became of it. They arrive on `interactorObservation`
@@ -454,6 +461,18 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           shape: type,
           error: `contentless write refused: panel '${id}' already exists and this ${type} carried no content-bearing field (${PANEL_CONTENT_KEYS.join(", ")}). Nothing was changed. Supply the field(s) you intend to write, or read the panel instead of rewriting it.`,
         }, 409);
+      }
+
+      // (3) A new question must ask something. A blank panel is a placeholder;
+      // a blank question is a demand on a person's attention with nothing in it,
+      // and goal-host reads a 200 as "asked". Refusing makes the writer fail.
+      if (!existing && type === "uiQuestion_write" && !hasQuestionContent(pointer)) {
+        return c.json({
+          resolved: false,
+          success: false,
+          shape: type,
+          error: "empty question refused: a new uiQuestion_write needs a non-empty title, body or asks. Nothing was created.",
+        }, 422);
       }
 
       // (1) ABSENCE PRESERVES. `Object.hasOwn` is the only form that tells
