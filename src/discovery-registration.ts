@@ -118,12 +118,17 @@ export function stopDiscoveryRegistration(): void {
 }
 
 /** Best-effort withdrawal on SIGTERM. Swallows everything. */
+export const DEREGISTER_TIMEOUT_MS = 3_000;
+
 export async function deregisterFromDiscovery(): Promise<void> {
   stopDiscoveryRegistration();
   try {
     await fetch(`${DISCOVERY_ENDPOINT}/vessels/${encodeURIComponent(VESSEL_ID)}`, {
       method: "DELETE",
       headers: authHeaders(),
+      // Bounded: this runs inside SIGTERM handling, and an unanswered DELETE held
+      // the unit in stop-sigterm until systemd's 90 s SIGKILL on every restart.
+      signal: AbortSignal.timeout(DEREGISTER_TIMEOUT_MS),
     });
   } catch (err) {
     console.warn(

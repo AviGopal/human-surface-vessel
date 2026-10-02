@@ -289,14 +289,24 @@ function startServer(): void {
   // Fire-and-forget: a discovery outage must not block or fail startup.
   startDiscoveryRegistration();
 
+  const SHUTDOWN_DEADLINE_MS = 8_000;
   let shuttingDown = false;
   async function shutdown(signal: string): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
+    // A hard backstop well inside systemd's stop timeout: whatever stalls below, the
+    // process exits on its own instead of waiting 90 s for SIGKILL.
+    setTimeout(() => {
+      console.log(`[human-surface-vessel] ${signal} — shutdown overran ${SHUTDOWN_DEADLINE_MS}ms; exiting`);
+      process.exit(0);
+    }, SHUTDOWN_DEADLINE_MS).unref();
     console.log(`[human-surface-vessel] ${signal} — deregistering`);
     await deregisterFromDiscovery();
+    console.log(`[human-surface-vessel] ${signal} — stopping server`);
     try {
-      await server.stop();
+      // `true` closes active connections. The workbench holds /api/stream (SSE) open
+      // for as long as a page is up, so a graceful stop waited on every open tab.
+      await server.stop(true);
     } catch {
       /* already stopped */
     }
