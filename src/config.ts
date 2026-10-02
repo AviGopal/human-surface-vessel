@@ -71,6 +71,9 @@ export const DISCOVERY_SHAPES = [
   // use time — not by a switch compiled into the bundle. `renderPolicy` is that
   // impulse: the surface reads it every poll and lets it override the built-in
   // form heuristic, which is demoted from a decision to a prior.
+  // A run asking its human, delivered to the surface the human reads, so the
+  // question appears on the run that asked it (goal-host's WS5 solicitation).
+  "human_input",
   "renderPolicy",
   "renderPolicy_write",
   // Prose from a human, parsed into a `renderPolicy` patch. Advertised as its

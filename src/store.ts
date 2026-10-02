@@ -42,6 +42,18 @@ export interface Panel {
   visibility: Visibility;
   createdAt: number;
   updatedAt: number;
+  /** Set when a run asked this question (`human_input`); see routes/impulses.ts. */
+  run?: RunLink;
+}
+
+export interface RunLink {
+  dispatchId: string | null;
+  solicitationId: string;
+  /** ms epoch; null when the asker sent none. */
+  deadlineAt: number | null;
+  /** The surface READ the run's walk state and found it running (and, when goal-host
+   *  reports one, waiting on this solicitation). Only a linked question is shown on the run. */
+  linked: boolean;
 }
 
 export interface Feedback {
@@ -254,7 +266,7 @@ export function upsertPanel(
     createdAt: existing?.createdAt ?? p.createdAt ?? now,
     updatedAt: now,
   };
-  if (existing && ["title", "body", "kind", "importance", "asks", "visibility"].every(key =>
+  if (existing && ["title", "body", "kind", "importance", "asks", "visibility", "run"].every(key =>
     JSON.stringify(existing[key as keyof Panel]) === JSON.stringify(stored[key as keyof Panel]))) return existing;
   appendParticipation("uiPanel_write", stored);
   panels.set(p.id, stored);

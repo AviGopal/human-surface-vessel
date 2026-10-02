@@ -80,6 +80,7 @@ export function QuestionsList({
                     <span className="sf-qrow-meta">
                       {status !== "open" ? <span className="sf-qrow-status">{status}</span> : null}
                       {gapId ? <span className="sf-mono">{gapId}</span> : null}
+                      {question.run?.linked ? <span className="sf-chip sf-chip-quiet" title={question.run.dispatchId ?? undefined}>run</span> : null}
                     </span>
                   </button>
                 </li>

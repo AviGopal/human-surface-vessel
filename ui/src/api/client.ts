@@ -215,6 +215,11 @@ export function answerSolicitation(args: {
   });
 }
 
+/** Keep a run's question open while a person has it on screen; returns the new deadline. */
+export function heartbeatSolicitation(solicitationId: string): Promise<{ deadlineAt?: number }> {
+  return resolveShape<{ deadlineAt?: number }>({ type: "solicitationHeartbeat_write", solicitationId });
+}
+
 /**
  * The salvage path: push context into a walk that is already running rather
  * than killing it and re-typing the goal. 409 when the dispatch is no longer

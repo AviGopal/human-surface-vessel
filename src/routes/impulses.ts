@@ -38,6 +38,7 @@ import {
 } from "../store.ts";
 import { explainRanking, rankPanels, type ImportanceWeights } from "../importance.ts";
 import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.ts";
+import { readWalkState } from "./proxy.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 
@@ -480,6 +481,43 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           : (existing?.visibility ?? "public"),
       });
       return c.json({ resolved: true, success: true, shape: type, body: panel });
+    }
+
+    case "human_input": {
+      // A run asking its human (goal-host WS5). Stored as an ordinary question —
+      // journaled, ranked, answerable like any other — carrying the run it came
+      // from, so the run view can show it where the run is.
+      const solicitationId = optStr(pointer, "solicitation_id") ?? optStr(pointer, "solicitationId");
+      if (!solicitationId) {
+        return c.json({ resolved: false, success: false, shape: type, error: "solicitation_id is required" }, 400);
+      }
+      const dispatchId = optStr(pointer, "dispatch_id") ?? optStr(pointer, "dispatchId") ?? null;
+      // The brief is what the asker wrote (a shaped brief, or goal-host's markdown today).
+      const brief = Object.hasOwn(pointer, "brief") ? pointer["brief"] : (pointer["question_markdown"] ?? "");
+      const deadlineAt =
+        optNum(pointer, "deadline_at") ??
+        (optNum(pointer, "timeout_ms") !== undefined ? Date.now() + (optNum(pointer, "timeout_ms") as number) : null);
+      // Linked only after a READ of the run: it must exist and be running, and when
+      // goal-host reports its pending solicitation, it must be this one.
+      let linked = false;
+      if (dispatchId) {
+        const walk = await readWalkState(dispatchId);
+        const pending = walk?.["pendingSolicitation"] as { solicitationId?: unknown } | undefined;
+        linked =
+          walk !== null &&
+          walk["status"] === "running" &&
+          (pending === undefined || pending === null || pending.solicitationId === solicitationId);
+      }
+      const firstLine = typeof brief === "string" ? (brief.split("\n").find((l) => l.trim()) ?? "").replace(/^#+\s*/, "").trim() : "";
+      const panel = upsertPanel({
+        id: `solicitation-${solicitationId}`,
+        title: firstLine.slice(0, 160) || "Question",
+        body: brief,
+        kind: "question",
+        importance: "high",
+        run: { dispatchId, solicitationId, deadlineAt, linked },
+      });
+      return c.json({ resolved: true, success: true, shape: type, body: { panelId: panel.id, linked } });
     }
 
     case "uiQuestion": {

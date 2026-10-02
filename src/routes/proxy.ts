@@ -100,6 +100,8 @@ const UI_RESOLVE_TYPES: ReadonlySet<string> = new Set([
   "goal_verification_label_write",
   "poolImpulse_write",
   "solicitationResponse_write",
+  // Sent while a run's question is on screen, so the walk waits while a person is there.
+  "solicitationHeartbeat_write",
   "interactorObservation",
 ]);
 
@@ -1326,6 +1328,30 @@ proxyRouter.get("/api/surface-intent/grammar", (c) =>
     corsHeaders(c.req.header("Origin")),
   ),
 );
+
+/**
+ * READ a run's walk state from goal-host — never a write. Used to verify that a
+ * question claiming to come from a run really belongs to a running walk before
+ * the surface links the two (this vessel's write routes are unauthenticated, so
+ * a forged `dispatch_id` must not be able to put a question on a run).
+ * Null when goal-host does not answer or does not know the dispatch.
+ */
+export async function readWalkState(dispatchId: string): Promise<Record<string, unknown> | null> {
+  try {
+    const cand = await resolveGoalHostEndpoint();
+    const res = await fetch(resolveUrl(cand), {
+      method: "POST",
+      headers: upstreamHeaders(true),
+      body: JSON.stringify({ type: "goalWalkState", dispatchId }),
+      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const j = JSON.parse(unwrapFederated(await res.text())) as { resolved?: boolean; body?: unknown };
+    return j.resolved === true && j.body && typeof j.body === "object" ? (j.body as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
 
 export { corsHeaders, resolveGoalHostEndpoint };
 export default proxyRouter;

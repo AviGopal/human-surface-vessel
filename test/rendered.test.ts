@@ -203,3 +203,49 @@ describe("<AnswerBody>", () => {
     expect(el.textContent).toContain("There are 12 vessels.");
   });
 });
+
+describe("<RunQuestion>", () => {
+  const question = {
+    id: "solicitation-s-dom",
+    revision: 1,
+    title: "The substrate needs your input",
+    body: "## The substrate needs your input\n\n**Goal**\n\n> What is happening today?",
+    createdAt: 0,
+    updatedAt: 0,
+    responses: [],
+    answered: false,
+    declined: false,
+    kind: "question",
+    run: { dispatchId: "d-dom", solicitationId: "s-dom", deadlineAt: Date.now() + 9 * 60_000, linked: true },
+  };
+
+  test("the brief is drawn as written, the surface adds no heading, and the run is kept waiting while it is on screen", async () => {
+    const { RunQuestion } = await import("../ui/src/components/RunQuestion");
+    const { QuestionsProvider } = await import("../ui/src/state/questions");
+    posted.length = 0;
+    const el = await mount(
+      React.createElement(QuestionsProvider, null, React.createElement(RunQuestion, { question, running: true })),
+    );
+    const section = el.querySelector("section.sf-run-question");
+    expect(section).not.toBeNull();
+    expect(section?.textContent).toContain("What is happening today?");
+    // No surface-added heading or label beyond the controls.
+    expect(section?.querySelector(".sf-view-label")).toBeNull();
+    expect([...(section?.querySelectorAll("button") ?? [])].map((b) => b.textContent)).toEqual(["Send", "Need more", "Decline"]);
+    expect(section?.querySelector(".sf-run-question-deadline")?.textContent).toMatch(/^\d+m$/);
+    const beats = posted.filter((p) => p.url.includes("/api/resolve") && p.body.includes("solicitationHeartbeat_write"));
+    expect(beats.length).toBeGreaterThanOrEqual(1);
+    expect(beats[0]!.body).toContain('"solicitationId":"s-dom"');
+  });
+
+  test("an answered question shows the answer in place of the controls", async () => {
+    const { RunQuestion } = await import("../ui/src/components/RunQuestion");
+    const { QuestionsProvider } = await import("../ui/src/state/questions");
+    const answered = { ...question, answered: true, answers: [{ id: "r1", kind: "answer", value: "Use the AP feed." }] };
+    const el = await mount(
+      React.createElement(QuestionsProvider, null, React.createElement(RunQuestion, { question: answered, running: true })),
+    );
+    expect(el.querySelector(".sf-run-question-answer")?.textContent).toBe("Use the AP feed.");
+    expect(el.querySelector("form")).toBeNull();
+  });
+});

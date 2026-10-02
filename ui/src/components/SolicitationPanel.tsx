@@ -44,9 +44,7 @@ export function SolicitationPanel({
       </p>
       <Rendered content={fromText("solicitation_evidence", solicitation.evidenceLine)} density="inline" header={false} />
 
-      {solicitation.solicitationId === null ? (
-        <p className="sf-note sf-muted">The question's id was not recorded, so it cannot be answered here.</p>
-      ) : (
+      {solicitation.solicitationId === null ? null : (
         <form
           className="sf-interaction"
           onSubmit={(e) => {

@@ -21,6 +21,8 @@ import { useLiveControls } from "../state/liveControls";
 import { segmentAttempts } from "../lib/attempts";
 import { AnswerBody } from "./Answer";
 import { Chain } from "./Chain";
+import { RunQuestion } from "./RunQuestion";
+import { useQuestions } from "../state/questions";
 import { Rendered } from "./Rendered";
 import { GradeGesture } from "./GradeGesture";
 import { SolicitationPanel } from "./SolicitationPanel";
@@ -162,6 +164,9 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   // run that stopped updating while the top bar says "Live" would be lying.
   // The global pause is the reader's lever.
   const query = useWalk(dispatchId, { enabled: !paused, intervalMs });
+  // The LIVE question list, not the rail's accepted snapshot: a run's question must
+  // appear while the run waits, without the reader accepting an update first.
+  const liveQuestions = useQuestions().query.data?.questions;
   const walk = query.data;
   const quietForMs = useProgressWatch(walk ? progressFingerprint(walk) : "", now);
 
@@ -173,7 +178,11 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
     );
   }
 
-  const solicitation = detectSolicitation(walk);
+  // A question this run asked, delivered to this surface and verified against the run.
+  const runQuestion =
+    liveQuestions?.find((q) => q.run?.linked === true && q.run.dispatchId === walk.dispatchId) ?? null;
+  // The walk-log fallback is only for asks delivered somewhere else.
+  const solicitation = runQuestion ? null : detectSolicitation(walk);
   const terminal = walk.status !== "running";
   const state: RunState = deriveRunState({
     status: walk.status,
@@ -227,6 +236,8 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
       </header>
 
       {walk.status === "running" ? <WalkNeeds walk={walk} /> : null}
+
+      {runQuestion ? <RunQuestion question={runQuestion} running={walk.status === "running"} /> : null}
 
       {solicitation ? (
         <section className="sf-view-section">

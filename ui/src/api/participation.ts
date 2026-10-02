@@ -17,6 +17,8 @@ export interface Question {
   updatedAt: number;
   asks?: { id: string; prompt: string; type: string; choices?: string[] }[];
   responses: ParticipationResponse[];
+  /** The current revision's answers (the server's questionView). */
+  answers?: ParticipationResponse[];
   answered: boolean;
   declined: boolean;
   /**
@@ -36,6 +38,13 @@ export interface Question {
   because?: string[];
   /** What kind of solicitation this is (e.g. `gap_needs_human`); the ranker weights by it. */
   kind?: string;
+  /** Set when a run asked this question; `linked` only after the server read the run back. */
+  run?: {
+    dispatchId: string | null;
+    solicitationId: string;
+    deadlineAt: number | null;
+    linked: boolean;
+  };
 }
 
 export interface Contribution {
