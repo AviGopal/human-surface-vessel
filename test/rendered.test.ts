@@ -249,3 +249,42 @@ describe("<RunQuestion>", () => {
     expect(el.querySelector("form")).toBeNull();
   });
 });
+
+describe("<Prose> pipe tables", () => {
+  test("a GitHub pipe table renders as a table, cells keep inline formatting", async () => {
+    const { Prose } = await import("../ui/src/components/Prose");
+    const src = "**What was tried**\n\n| # | approach tried | outcome |\n|---|---|---|\n| 1 | `web_search` | not reached |\n| 2 | floor | stalled |";
+    const el = await mount(React.createElement(Prose, { source: src }));
+    const table = el.querySelector("table.sf-prose-table");
+    expect(table).not.toBeNull();
+    expect([...(table?.querySelectorAll("th") ?? [])].map((t) => t.textContent)).toEqual(["#", "approach tried", "outcome"]);
+    expect(table?.querySelectorAll("tbody tr").length).toBe(2);
+    expect(table?.querySelector("tbody td code")?.textContent).toBe("web_search");
+    expect(el.textContent).not.toContain("|---|");
+  });
+
+  test("a table straight after a paragraph line is still a table", async () => {
+    const { Prose } = await import("../ui/src/components/Prose");
+    const el = await mount(React.createElement(Prose, { source: "Tried:\n| a | b |\n|---|---|\n| 1 | 2 |" }));
+    expect(el.querySelector("table")).not.toBeNull();
+    expect(el.querySelector("p")?.textContent).toBe("Tried:");
+  });
+
+  test("pipes without a separator row stay prose", async () => {
+    const { Prose } = await import("../ui/src/components/Prose");
+    const el = await mount(React.createElement(Prose, { source: "use a | b to pipe\nnot a table" }));
+    expect(el.querySelector("table")).toBeNull();
+  });
+});
+
+describe("isWriteShape", () => {
+  test("matches goal-host's rule: write actions, not data", async () => {
+    const { isWriteShape } = await import("../ui/src/lib/shapes");
+    for (const s of ["obsidian:write_note", "memoryNote_write", "uiPanel_write", "fs_write", "fs_edit", "fileWriteResult", "fileEditResult"]) {
+      expect(isWriteShape(s)).toBe(true);
+    }
+    for (const s of ["web_search", "llm_completion", "json_path_extract", "shellResult", "memoryNote", "writer_notes"]) {
+      expect(isWriteShape(s)).toBe(false);
+    }
+  });
+});

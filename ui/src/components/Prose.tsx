@@ -60,7 +60,16 @@ type Block =
   | { kind: "ol"; items: string[] }
   | { kind: "quote"; lines: string[] }
   | { kind: "code"; lines: string[]; lang: string }
+  | { kind: "table"; header: string[]; rows: string[][] }
   | { kind: "hr" };
+
+/** `| a | b |` → ["a", "b"]. Outer pipes are optional, as in GitHub tables. */
+function tableCells(line: string): string[] {
+  const t = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return t.split("|").map((c) => c.trim());
+}
+
+const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
 
 function parseBlocks(source: string): Block[] {
   const lines = source.replace(/\r\n/g, "\n").split("\n");
@@ -93,6 +102,19 @@ function parseBlocks(source: string): Block[] {
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
       blocks.push({ kind: "hr" });
       i += 1;
+      continue;
+    }
+
+    // A GitHub pipe table: a header row, then a separator row of dashes.
+    if (line.includes("|") && TABLE_SEPARATOR.test((lines[i + 1] ?? "").trimEnd())) {
+      const header = tableCells(line);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && (lines[i] ?? "").includes("|") && (lines[i] ?? "").trim() !== "") {
+        rows.push(tableCells(lines[i] ?? ""));
+        i += 1;
+      }
+      blocks.push({ kind: "table", header, rows });
       continue;
     }
 
@@ -138,6 +160,7 @@ function parseBlocks(source: string): Block[] {
       const next = (lines[i] ?? "").trimEnd();
       if (next.trim() === "") break;
       if (/^(#{1,6}\s|[-*+]\s|\d+\.\s|>\s?|```)/.test(next)) break;
+      if (next.includes("|") && TABLE_SEPARATOR.test((lines[i + 1] ?? "").trimEnd())) break;
       para.push(next);
       i += 1;
     }
@@ -212,6 +235,27 @@ export function Prose({ source }: { source: string }): ReactNode {
               <pre key={key} className="sf-verbatim" data-lang={block.lang}>
                 {block.lines.join("\n")}
               </pre>
+            );
+          case "table":
+            return (
+              <table key={key} className="sf-prose-table">
+                <thead>
+                  <tr>
+                    {block.header.map((cell, j) => (
+                      <th key={`${key}-h${j}`}>{renderInline(cell, `${key}-h${j}`)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, r) => (
+                    <tr key={`${key}-r${r}`}>
+                      {block.header.map((_, j) => (
+                        <td key={`${key}-r${r}-${j}`}>{renderInline(row[j] ?? "", `${key}-r${r}-${j}`)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             );
           case "hr":
             return <hr key={key} />;

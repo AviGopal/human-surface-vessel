@@ -21,6 +21,7 @@ import { useLiveControls } from "../state/liveControls";
 import { segmentAttempts } from "../lib/attempts";
 import { AnswerBody } from "./Answer";
 import { Chain } from "./Chain";
+import { isWriteShape } from "../lib/shapes";
 import { RunQuestion } from "./RunQuestion";
 import { useQuestions } from "../state/questions";
 import { Rendered } from "./Rendered";
@@ -85,12 +86,13 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
 
   return (
     <section className="sf-view-section sf-walk-needs" aria-label="What the walk is missing">
-      <h3 className="sf-view-label">The walk is missing</h3>
+      <h3 className="sf-view-label">Missing</h3>
       {missing.length > 0 ? (
         <ul className="sf-needs-list">
           {missing.map((s) => (
             <li key={s}>
               <span className="sf-shape-badge">{s}</span>
+              {isWriteShape(s) ? null : (
               <button
                 type="button"
                 className="sf-button sf-button-quiet"
@@ -102,6 +104,7 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
               >
                 Provide
               </button>
+              )}
             </li>
           ))}
         </ul>
@@ -132,9 +135,7 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
       ) : null}
       {sent ? (
         <p className="sf-outcome-strip" data-outcome={stillMissing ? "waiting" : "applied"}>
-          {stillMissing
-            ? `… ${sent} is in the pool — waiting for the walk's next step to take it in.`
-            : `✓ ${sent} is no longer missing.`}
+          {stillMissing ? `${sent} · in the pool` : `${sent} · taken`}
         </p>
       ) : null}
     </section>

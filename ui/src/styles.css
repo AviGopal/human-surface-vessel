@@ -208,6 +208,20 @@ body {
   margin-bottom: var(--sf-space-1);
 }
 
+.sf-prose-table {
+  border-collapse: collapse;
+  margin: 0 0 var(--sf-space-3);
+  font-size: var(--sf-text-sm);
+}
+.sf-prose-table th,
+.sf-prose-table td {
+  border: 1px solid var(--sf-rule);
+  padding: var(--sf-space-1) var(--sf-space-2);
+  text-align: left;
+  vertical-align: top;
+}
+.sf-prose-table th { font-family: var(--sf-font-sans); font-weight: 600; }
+
 .sf-prose blockquote {
   margin: 0 0 var(--sf-space-3);
   padding-left: var(--sf-space-3);
