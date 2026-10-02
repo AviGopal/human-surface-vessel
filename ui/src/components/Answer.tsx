@@ -194,11 +194,24 @@ function Segments({
 export function AnswerBody({
   answerBody,
   goal,
+  dispatchId,
 }: {
   answerBody: string;
   goal?: string;
+  /** The run's own id. The answer builder pastes it into the basis; the header already shows it. */
+  dispatchId?: string;
 }): ReactNode {
-  const { main, basis } = splitAnswer(answerBody, goal);
+  const { main, basis: rawBasis } = splitAnswer(answerBody, goal);
+  const basis = rawBasis && dispatchId ? dropLine(rawBasis, dispatchId) : rawBasis;
+  // When the builder wrote no prose, the basis IS the answer: folding it left a
+  // card that showed only "Basis" and hid the value (a registry count of 12).
+  if (!main && basis) {
+    return (
+      <div className="sf-answer">
+        <Segments text={basis} />
+      </div>
+    );
+  }
   return (
     <div className="sf-answer">
       {main ? <Segments text={main} /> : null}
@@ -210,4 +223,13 @@ export function AnswerBody({
       ) : null}
     </div>
   );
+}
+
+function dropLine(text: string, line: string): string | null {
+  const kept = text
+    .split("\n")
+    .filter((l) => l.trim() !== line)
+    .join("\n")
+    .trim();
+  return kept.length > 0 ? kept : null;
 }

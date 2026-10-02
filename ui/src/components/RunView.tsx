@@ -237,10 +237,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
       {answer ? (
         <section className="sf-view-section" aria-label="Answer">
           <h3 className="sf-view-label">Answer</h3>
-          <AnswerBody
-            answerBody={answer}
-            goal={walk.goal}
-          />
+          <AnswerBody answerBody={answer} goal={walk.goal} dispatchId={walk.dispatchId} />
         </section>
       ) : null}
 

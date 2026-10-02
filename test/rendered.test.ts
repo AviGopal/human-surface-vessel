@@ -174,3 +174,32 @@ describe("<Chain>", () => {
     expect(el.textContent).toContain("Not retained");
   });
 });
+
+describe("<AnswerBody>", () => {
+  const registry =
+    "# How many vessels are registered?\n## Basis\n\n6823a741-738c-40f9-bc70-efaaf9d0bc18\n\n" +
+    '{"shape":"shellResult","stdout":"12\\n","stderr":""}';
+
+  test("when the basis is the whole answer it is shown, not folded, and the run id is not repeated", async () => {
+    const { AnswerBody } = await import("../ui/src/components/Answer");
+    const el = await mount(
+      React.createElement(AnswerBody, {
+        answerBody: registry,
+        goal: "How many vessels are registered?",
+        dispatchId: "6823a741-738c-40f9-bc70-efaaf9d0bc18",
+      }),
+    );
+    expect(el.querySelector("details.sf-answer-basis")).toBeNull();
+    expect(el.textContent).toContain("12");
+    expect(el.textContent).not.toContain("6823a741-738c-40f9-bc70-efaaf9d0bc18");
+  });
+
+  test("when there is prose, the basis stays folded beneath it", async () => {
+    const { AnswerBody } = await import("../ui/src/components/Answer");
+    const el = await mount(
+      React.createElement(AnswerBody, { answerBody: "There are 12 vessels.\n\n## Basis\n\nregistry stats", goal: "x" }),
+    );
+    expect(el.querySelector("details.sf-answer-basis")).not.toBeNull();
+    expect(el.textContent).toContain("There are 12 vessels.");
+  });
+});
