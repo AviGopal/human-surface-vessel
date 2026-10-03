@@ -83,11 +83,14 @@ export function TopBar({
   openIssues,
   onToggleIssues,
   issuesOpen,
+  calibration = null,
 }: {
   onDispatched: (dispatchId: string) => void;
   openIssues: number | null;
   onToggleIssues: () => void;
   issuesOpen: boolean;
+  /** An open, attested calibration window; absent otherwise. */
+  calibration?: { count: number; open: () => void } | null;
 }): ReactNode {
   const [goal, setGoal] = useState("");
   const [focused, setFocused] = useState(false);
@@ -196,6 +199,11 @@ export function TopBar({
         >
           Issues{openIssues !== null ? <span className="sf-count">{openIssues}</span> : null}
         </button>
+        {calibration ? (
+          <button type="button" className="sf-button sf-button-quiet" onClick={calibration.open}>
+            Calibrate<span className="sf-count">{calibration.count}</span>
+          </button>
+        ) : null}
       </div>
 
       {dispatch.isError ? (

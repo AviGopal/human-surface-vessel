@@ -1911,3 +1911,15 @@ body { overflow: hidden; }
 .sf-attempt-verdict[data-verdict="reached"] { color: var(--sf-reached); }
 .sf-attempt[data-reported="true"] { box-shadow: inset 3px 0 0 var(--sf-accent); padding-left: var(--sf-space-3); }
 .sf-grade-applies { margin: 0; }
+
+/* ── calibration (blind grading) ───────────────────────────────────────────── */
+.sf-calibration { display: flex; flex-direction: column; min-height: 100dvh; background: var(--sf-paper); }
+.sf-calibration-head { position: sticky; top: 0; z-index: 2; background: var(--sf-paper); display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-2) var(--sf-space-3); padding: var(--sf-space-3) var(--sf-space-4); border-bottom: 1px solid var(--sf-rule); }
+.sf-calibration-head .sf-view-label { margin: 0; }
+.sf-calibration-actions { display: flex; gap: var(--sf-space-2); margin-left: auto; }
+.sf-calibration-list { display: flex; flex-wrap: wrap; gap: var(--sf-space-2); list-style: none; margin: 0; padding: var(--sf-space-3) var(--sf-space-4); border-bottom: 1px solid var(--sf-rule); }
+.sf-calibration-list button { min-width: 2.5rem; padding: var(--sf-space-1) var(--sf-space-2); border: 1px solid var(--sf-rule); border-radius: 2px; background: var(--sf-panel); color: var(--sf-ink-2); font-variant-numeric: tabular-nums; cursor: pointer; }
+.sf-calibration-list button[aria-pressed="true"] { border-color: var(--sf-rule-strong); color: var(--sf-ink); }
+.sf-calibration-body { flex: 1; min-width: 0; padding: var(--sf-space-4); }
+.sf-calibration-run { max-width: 72rem; margin: 0 auto; min-width: 0; overflow-wrap: anywhere; }
+.sf-calibration-grade { display: grid; gap: var(--sf-space-2); }

@@ -32,7 +32,14 @@ const questionRoute = createRoute({
   component: Empty,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, runRoute, questionRoute]);
+/** Blind grading of a declared sample; replaces the board so no verdict is in view. */
+const calibrateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/calibrate/$windowId",
+  component: Empty,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, runRoute, questionRoute, calibrateRoute]);
 
 export const router = createRouter({ routeTree });
 

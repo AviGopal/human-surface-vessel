@@ -11,7 +11,9 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { useCalibrationWindows } from "./api/calibration";
 import { useBoard, useRenderPolicy } from "./api/queries";
+import { CalibrationPage } from "./components/Calibration";
 import { IssuesDrawer, useInterfaceGaps } from "./components/IssuesDrawer";
 import { QuestionsList } from "./components/QuestionsList";
 import { QuestionView } from "./components/QuestionView";
@@ -80,6 +82,7 @@ function Workbench(): ReactNode {
   const questions = useQuestions();
   const gaps = useInterfaceGaps();
   const openGaps = gaps.data ? gaps.data.filter((g) => g.status !== "closed").length : null;
+  const calibration = useCalibrationWindows().data?.windows[0] ?? null;
 
   const openRun = (dispatchId: string): void => {
     setIssuesOpen(false);
@@ -98,6 +101,14 @@ function Workbench(): ReactNode {
         openIssues={openGaps}
         issuesOpen={issuesOpen}
         onToggleIssues={() => setIssuesOpen((v) => !v)}
+        calibration={
+          calibration
+            ? {
+                count: calibration.dispatch_ids.length,
+                open: () => void navigate({ to: "/calibrate/$windowId", params: { windowId: calibration.window_id } }),
+              }
+            : null
+        }
       />
 
       <nav className="sf-rail" aria-label="Runs and questions">
@@ -146,6 +157,13 @@ function Workbench(): ReactNode {
 }
 
 export function Surface(): ReactNode {
+  const params = useParams({ strict: false }) as { windowId?: string };
+  const navigate = useNavigate();
+  // Calibration replaces the whole board: the rail shows verdicts, and a blind
+  // grade must not have one in view.
+  if (params.windowId) {
+    return <CalibrationPage windowId={params.windowId} onExit={() => void navigate({ to: "/" })} />;
+  }
   return (
     <QuestionsProvider>
       <Workbench />

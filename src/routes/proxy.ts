@@ -28,6 +28,7 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { getRenderPolicy, recentSurfaceIntents, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
+import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
   DISCOVERY_ENDPOINT,
   GOAL_HOST_ENDPOINT,
@@ -1328,6 +1329,104 @@ proxyRouter.get("/api/surface-intent/grammar", (c) =>
     corsHeaders(c.req.header("Origin")),
   ),
 );
+
+// ─── calibration (blind grading of a declared sample) ────────────────────────
+
+/**
+ * Open calibration windows from THIS substrate's standing pool. Each row is
+ * re-validated on every read (see `parseWindow`) and nothing is cached, so a
+ * window that closes or is retired stops being gradable at once.
+ */
+async function readCalibrationWindows(now = Date.now()): Promise<{ windows: CalibrationWindow[]; reason: string | null }> {
+  const body = JSON.stringify({ impulse: { pointer: { type: "poolImpulse", shape: "calibrationWindow", status: "open" } } });
+  const candidates = (await candidateEndpointsFor("poolImpulse")).filter((cand) => isOwnSubstrate(cand.base));
+  if (candidates.length === 0) return { windows: [], reason: "no producer" };
+  for (const cand of candidates) {
+    try {
+      const res = await fetch(resolveUrl(cand), {
+        method: "POST",
+        headers: upstreamHeaders(true),
+        body,
+        signal: AbortSignal.timeout(4_000),
+      });
+      if (!res.ok) continue;
+      const j = JSON.parse(unwrapFederated(await res.text())) as { body?: { impulses?: unknown[] } };
+      const rows = Array.isArray(j.body?.impulses) ? j.body.impulses : [];
+      const windows: CalibrationWindow[] = [];
+      let reason: string | null = rows.length === 0 ? "no window" : null;
+      for (const row of rows) {
+        const parsed = parseWindow(row, now);
+        if (parsed.ok) windows.push(parsed.window);
+        else reason ??= parsed.reason;
+      }
+      return { windows, reason: windows.length > 0 ? null : reason };
+    } catch {
+      /* next candidate */
+    }
+  }
+  return { windows: [], reason: "unreadable" };
+}
+
+proxyRouter.get("/api/calibration/windows", async (c) => {
+  const { windows, reason } = await readCalibrationWindows();
+  return c.json({
+    windows: windows.map((w) => ({
+      window_id: w.windowId,
+      sample_draw_id: w.sampleDrawId,
+      seed: w.seed,
+      label_sink: w.labelSink,
+      closes_at: w.closesAt,
+      dispatch_ids: w.dispatchIds,
+    })),
+    reason,
+  });
+});
+
+/**
+ * A calibration grade. Re-checked here against a fresh read of the window,
+ * whatever the browser believes: the dispatch must be in an attested open
+ * window whose sink is "system". Anything else writes nothing.
+ */
+proxyRouter.post("/api/calibration/grade", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
+  const windowId = typeof body?.["window_id"] === "string" ? body["window_id"] : null;
+  const dispatchId = typeof body?.["dispatch_id"] === "string" ? body["dispatch_id"] : null;
+  const grade = body?.["grade"];
+  if (!windowId || !dispatchId || !isGrade(grade)) {
+    return c.json({ error: "window_id, dispatch_id and grade are required" }, 400);
+  }
+  const { windows } = await readCalibrationWindows();
+  const w = windows.find((x) => x.windowId === windowId);
+  if (!w) return c.json({ error: "no open window" }, 404);
+  if (!w.dispatchIds.includes(dispatchId)) return c.json({ error: "not in the sample" }, 403);
+  if (w.labelSink !== "system") return c.json({ error: "report only" }, 409);
+  const walk = await readWalkState(dispatchId);
+  const executionId = typeof walk?.["executionId"] === "string" ? (walk["executionId"] as string) : null;
+  if (!executionId) return c.json({ error: "no execution id" }, 409);
+  const notes = typeof body?.["notes"] === "string" && body["notes"].trim() ? body["notes"].trim() : null;
+  return passthrough({
+    url: `${ACTIVITY_API_ENDPOINT}/v2/impulses/resolve`,
+    method: "POST",
+    rawBody: JSON.stringify({
+      impulse: {
+        pointer: {
+          type: "goal_verification_label_write",
+          goal: typeof walk?.["goal"] === "string" ? walk["goal"] : null,
+          execution_id: executionId,
+          activity_id: "unattributed",
+          verdict: corpusVerdict(grade),
+          confidence: 1,
+          notes,
+          labeler: "human",
+          purpose: "calibration",
+          window_id: w.windowId,
+          sample_draw_id: w.sampleDrawId,
+        },
+      },
+    }),
+    origin: c.req.header("Origin"),
+  });
+});
 
 /**
  * READ a run's walk state from goal-host — never a write. Used to verify that a
