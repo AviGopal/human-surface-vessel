@@ -207,9 +207,30 @@ describe("/api/calibration/grade", () => {
     expect(l["notes"]).toBe("missing the chart");
   });
 
+  test("absent notes are sent as an empty string, never null (option<string> rejects NULL)", async () => {
+    withSink("system");
+    await grade({ window_id: "w1", dispatch_id: "run-a", grade: "reached" });
+    expect(labelWrites.length).toBe(1);
+    expect((labelWrites[0] as Record<string, unknown>)["notes"]).toBe("");
+  });
+
   test("a grade outside the vocabulary is refused", async () => {
     withSink("system");
     expect((await grade({ window_id: "w1", dispatch_id: "run-a", grade: "achieved" })).status).toBe(400);
     expect(labelWrites).toEqual([]);
+  });
+});
+
+describe("/api/grade", () => {
+  test("absent notes are sent as an empty string, never null", async () => {
+    labelWrites.length = 0;
+    const res = await app.request("/api/grade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ execution_id: "exec_a", verdict: "achieved" }),
+    });
+    expect(res.status).toBe(200);
+    expect(labelWrites.length).toBe(1);
+    expect((labelWrites[0] as Record<string, unknown>)["notes"]).toBe("");
   });
 });

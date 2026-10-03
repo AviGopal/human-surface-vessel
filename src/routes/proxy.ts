@@ -982,7 +982,10 @@ proxyRouter.post("/api/grade", async (c) => {
           // ground truth this corpus exists to hold — 1 is the honest default,
           // and a caller that means something else can still say so.
           confidence: typeof body["confidence"] === "number" ? body["confidence"] : 1,
-          notes: body["notes"] ?? null,
+          // A string, never null: the label store types `notes` as
+          // option<string>, and SurrealDB rejects NULL there, so the whole
+          // label is lost. Absent notes are "".
+          notes: typeof body["notes"] === "string" ? body["notes"] : "",
           labeler: "human",
         },
       },
@@ -1403,7 +1406,8 @@ proxyRouter.post("/api/calibration/grade", async (c) => {
   const walk = await readWalkState(dispatchId);
   const executionId = typeof walk?.["executionId"] === "string" ? (walk["executionId"] as string) : null;
   if (!executionId) return c.json({ error: "no execution id" }, 409);
-  const notes = typeof body?.["notes"] === "string" && body["notes"].trim() ? body["notes"].trim() : null;
+  // "" not null: the label store rejects NULL in option<string> (see /api/grade).
+  const notes = typeof body?.["notes"] === "string" ? body["notes"].trim() : "";
   return passthrough({
     url: `${ACTIVITY_API_ENDPOINT}/v2/impulses/resolve`,
     method: "POST",
