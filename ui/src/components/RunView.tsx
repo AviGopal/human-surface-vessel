@@ -13,8 +13,8 @@ import { injectPayload } from "../lib/interaction";
 import { InteractionFooter, TextInput, stateOf } from "./Interaction";
 import type { ExecutionPath, GoalWalkState } from "../api/types";
 import type { RunState } from "@avigopal/design-tokens";
-import { deriveRunState, stateIsTerminal } from "../lib/runState";
-import { detectSolicitation, hasProgress, progressFingerprint } from "../lib/walk";
+import { deriveRunState, stalledForMs, stateIsTerminal, type RunFacts } from "../lib/runState";
+import { hasProgress, openRunQuestion, progressFingerprint } from "../lib/walk";
 import { useNow } from "../lib/useNow";
 import { useProgressWatch } from "../lib/useProgressWatch";
 import { useLiveControls } from "../state/liveControls";
@@ -26,7 +26,6 @@ import { RunQuestion } from "./RunQuestion";
 import { useQuestions } from "../state/questions";
 import { Rendered } from "./Rendered";
 import { GradeGesture } from "./GradeGesture";
-import { SolicitationPanel } from "./SolicitationPanel";
 import { StateBadge } from "./StateBadge";
 import { Trace } from "./Trace";
 
@@ -182,18 +181,17 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   // A question this run asked, delivered to this surface and verified against the run.
   const runQuestion =
     liveQuestions?.find((q) => q.run?.linked === true && q.run.dispatchId === walk.dispatchId) ?? null;
-  // The walk-log fallback is only for asks delivered somewhere else.
-  const solicitation = runQuestion ? null : detectSolicitation(walk);
   const terminal = walk.status !== "running";
-  const state: RunState = deriveRunState({
+  const facts: RunFacts = {
     status: walk.status,
     reached: walk.reached,
-    awaitingAnswer: solicitation !== null,
+    awaitingAnswer: !terminal && openRunQuestion(liveQuestions, walk.dispatchId, null) !== null,
     hasProgress: hasProgress(walk),
     quietForMs: terminal ? null : quietForMs,
     // goalWalkState carries no startedAt; the board row judges accept-silence.
     acceptedForMs: null,
-  });
+  };
+  const state: RunState = deriveRunState(facts);
   const span = spanMs(walk);
   const reason = state === "not-reached" ? (walk.goalReachReason?.trim() || walk.error || null) : null;
   const who = walk.operator ?? walk.trigger;
@@ -216,7 +214,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
           {walk.goal ?? <span className="sf-muted">goal text not recorded</span>}
         </h2>
         <p className="sf-view-facts">
-          <StateBadge state={state} />
+          <StateBadge state={state} quietForMs={stalledForMs(facts)} />
           {span !== null ? <span>{duration(span)}</span> : null}
           {who ? <span>{who}</span> : null}
           {walk.executionPath ? <span className="sf-chip">{PATH_LABEL[walk.executionPath]}</span> : null}
@@ -239,12 +237,6 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
       {walk.status === "running" ? <WalkNeeds walk={walk} /> : null}
 
       {runQuestion ? <RunQuestion question={runQuestion} running={walk.status === "running"} /> : null}
-
-      {solicitation ? (
-        <section className="sf-view-section">
-          <SolicitationPanel solicitation={solicitation} />
-        </section>
-      ) : null}
 
       {answer ? (
         <section className="sf-view-section" aria-label="Answer">

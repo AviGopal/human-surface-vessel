@@ -14,7 +14,7 @@
  * byte-for-byte by test/interaction.test.ts.
  */
 
-import type { OracleVerdict, SolicitationOutcome } from "../api/types";
+import type { OracleVerdict } from "../api/types";
 
 export type Question =
   | { readonly kind: "choice"; readonly options: readonly string[] }
@@ -62,15 +62,6 @@ export function gradePayload(args: {
     verdict,
     notes: args.note.trim() ? `${args.option} — ${args.note.trim()}` : args.option,
   };
-}
-
-/** Answering a walk that is waiting on a person → `solicitationResponse_write`. */
-export function solicitationPayload(args: {
-  solicitationId: string;
-  outcome: SolicitationOutcome;
-  answer: string;
-}): { solicitationId: string; outcome: SolicitationOutcome; answer: string } {
-  return { solicitationId: args.solicitationId, outcome: args.outcome, answer: args.answer.trim() };
 }
 
 /** Pushing context into a running walk → `poolImpulse_write`. */

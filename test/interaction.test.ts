@@ -11,7 +11,6 @@ import {
   humanChoice,
   injectPayload,
   questionForAsk,
-  solicitationPayload,
 } from "../ui/src/lib/interaction";
 
 describe("payload parity", () => {
@@ -35,10 +34,6 @@ describe("payload parity", () => {
     const other = gradePayload({ renderedState: "not-reached", option: "Failed for a different reason", note: "   ", executionId: "e", goal: "g" });
     expect(other.verdict).toBe("not_achieved");
     expect(other.notes).toBe("Failed for a different reason");
-  });
-
-  test("waiting walk: the answer is trimmed, nothing else changes", () => {
-    expect(solicitationPayload({ solicitationId: "s1", outcome: "answered", answer: " yes \n" })).toEqual({ solicitationId: "s1", outcome: "answered", answer: "yes" });
   });
 
   test("add context: shape and content trimmed", () => {

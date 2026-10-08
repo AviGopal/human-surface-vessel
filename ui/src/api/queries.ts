@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { streamAwareInterval, useStreamConnected } from "../state/stream";
 import {
-  answerSolicitation,
   dispatchGoal,
   fetchActiveDispatches,
   fetchCapability,
@@ -111,16 +110,6 @@ export function useSubmitGrade() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: submitGrade,
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: queryKeys.board });
-    },
-  });
-}
-
-export function useAnswerSolicitation() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: answerSolicitation,
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.board });
     },

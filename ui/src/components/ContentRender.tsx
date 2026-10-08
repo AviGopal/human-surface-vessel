@@ -474,15 +474,15 @@ function Stub({ text }: { text: string }): ReactNode {
   const executionId = typeof o["executionId"] === "string" ? o["executionId"] : null;
   if (producedBy === null || executionId === null) return <Verbatim text={text} />;
   return (
-    // A POINTER, not an absence. The step ran and its output lives with its
-    // execution; this run carried only the reference (goal-host's horizontal
-    // bundle pools `{producedBy, executionId}` without reading the content).
-    // Saying "no content" here claimed a fact nobody measured. Nothing is
-    // clickable, on the Prose.tsx precedent: an execution id is untrusted text.
+    // What is known, and nothing more: this run holds a reference
+    // `{producedBy, executionId}` and no content. goal-host pools that both when
+    // a parallel branch's output was never read and when a step declared a
+    // shape it may not have produced, so whether content exists elsewhere is
+    // not claimed. Nothing is clickable, on the Prose.tsx precedent: an
+    // execution id is untrusted text.
     <p className="sf-stub">
-      Pointer only — <span className="sf-mono">{activityLabel(producedBy)}</span>'s output was not carried into
-      this run · execution <span className="sf-mono">{executionId}</span>{" "}
-      <CopyButton text={executionId} what="the execution id" />
+      <span className="sf-mono">{activityLabel(producedBy)}</span> · no content · execution{" "}
+      <span className="sf-mono">{executionId}</span> <CopyButton text={executionId} what="the execution id" />
     </p>
   );
 }

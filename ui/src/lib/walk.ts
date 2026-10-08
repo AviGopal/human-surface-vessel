@@ -18,6 +18,7 @@
  */
 
 import type { GoalWalkState, WalkLogEntry } from "../api/types";
+import type { Question } from "../api/participation";
 
 export function walkLogText(entry: WalkLogEntry | null | undefined): string {
   if (entry === null || entry === undefined) return "";
@@ -77,26 +78,29 @@ export function hasProgress(walk: GoalWalkState): boolean {
   );
 }
 
-const SOLICITATION_MARKER = /(solicit|awaiting (a )?(human|your) (answer|input)|human_input|asked you)/i;
-const SOLICITATION_ID = /\b(sol[-_][A-Za-z0-9-]{4,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/;
-
-export interface DetectedSolicitation {
-  /** null when the log names a question but not its id — say so, do not guess. */
-  readonly solicitationId: string | null;
-  /** The log line the detection came from. Shown verbatim; it is the only text there is. */
-  readonly evidenceLine: string;
-}
-
-export function detectSolicitation(walk: GoalWalkState): DetectedSolicitation | null {
-  if (walk.status !== "running") return null;
-  const lines = [...walk.walkLog].map(walkLogText).reverse();
-  const current = walkLogText(walk.currentStep);
-  if (current) lines.unshift(current);
-  for (const line of lines) {
-    if (!SOLICITATION_MARKER.test(line)) continue;
-    const match = SOLICITATION_ID.exec(line);
-    return { solicitationId: match?.[0] ?? null, evidenceLine: line };
-  }
-  return null;
+/**
+ * The question this run has open on this surface: delivered here, linked to the
+ * run after the server read the run back, not yet answered or declined, and not
+ * past its stored deadline. This is the only source of `waiting`. The walk log
+ * is not one: goal-host logs a solicitation only after it has ended.
+ *
+ * `now` null skips the deadline: an open run view heartbeats the question, so
+ * goal-host's deadline moves while the stored one does not.
+ */
+export function openRunQuestion(
+  questions: readonly Question[] | undefined,
+  dispatchId: string,
+  now: number | null,
+): Question | null {
+  return (
+    questions?.find(
+      (q) =>
+        q.run?.linked === true &&
+        q.run.dispatchId === dispatchId &&
+        !q.answered &&
+        !q.declined &&
+        (now === null || q.run.deadlineAt === null || q.run.deadlineAt > now),
+    ) ?? null
+  );
 }
 

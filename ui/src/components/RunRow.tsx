@@ -16,10 +16,11 @@ import type { RunState } from "@avigopal/design-tokens";
 import type { ReactNode } from "react";
 import { useWalk } from "../api/queries";
 import type { ActiveDispatch } from "../api/types";
-import { deriveRunState, verdictSentence } from "../lib/runState";
+import { deriveRunState, rowReason, stalledForMs, type RunFacts } from "../lib/runState";
 import { formatElapsed } from "../lib/time";
 import { useProgressWatch } from "../lib/useProgressWatch";
-import { boardFingerprint, detectSolicitation, hasProgress, progressFingerprint } from "../lib/walk";
+import { boardFingerprint, hasProgress, openRunQuestion, progressFingerprint } from "../lib/walk";
+import { useQuestions } from "../state/questions";
 import { StateBadge } from "./StateBadge";
 
 export interface RunRowProps {
@@ -29,7 +30,7 @@ export interface RunRowProps {
   readonly selected: boolean;
   /**
    * Whether this row may hold its own live walk query. The board carries too
-   * few fields to tell `waiting` from `running`, so the newest handful of
+   * few fields to tell progress from silence, so the newest handful of
    * in-flight rows read their own walk state; the rest fall back to what the
    * board gives.
    */
@@ -67,25 +68,20 @@ export function RunRow({
 
   const fingerprint = walk ? progressFingerprint(walk) : boardFingerprint(row);
   const quietForMs = useProgressWatch(fingerprint, now);
-  const solicitation = walk ? detectSolicitation(walk) : null;
+  const questions = useQuestions().query.data?.questions;
+  const asking = terminal ? null : openRunQuestion(questions, row.dispatchId, now);
 
-  const state: RunState = deriveRunState({
+  const facts: RunFacts = {
     status: row.status,
     reached: row.reached,
-    awaitingAnswer: solicitation !== null,
+    awaitingAnswer: asking !== null,
     hasProgress: walk ? hasProgress(walk) : Boolean(row.executionId ?? row.selectedTemplateId),
     quietForMs: terminal ? null : quietForMs,
     acceptedForMs: terminal ? null : Math.max(0, now - startedAtMs),
-  });
-
-  const reason = verdictSentence({
-    state,
-    status: row.status,
-    reached: row.reached,
-    goalReachReason: walk?.goalReachReason ?? null,
-    ...(walk?.error !== undefined ? { error: walk.error } : {}),
-    humanGraded: walk?.humanGraded ?? false,
-  });
+  };
+  const state: RunState = deriveRunState(facts);
+  const reason =
+    state === "not-reached" ? rowReason({ goalReachReason: walk?.goalReachReason ?? null, ...(walk?.error !== undefined ? { error: walk.error } : {}) }) : null;
 
   const goalText = row.goal?.trim();
 
@@ -100,16 +96,10 @@ export function RunRow({
       onFocus={() => onFocused(row.dispatchId)}
       onClick={() => onSelect(row.dispatchId)}
       aria-current={selected ? "true" : undefined}
-      title={
-        state === "not-reached" || state === "waiting" || state === "stalled"
-          ? state === "waiting" && solicitation
-            ? `Waiting on you — ${solicitation.evidenceLine}`
-            : reason
-          : undefined
-      }
+      title={reason ?? undefined}
     >
       <span className="sf-run-line">
-        <StateBadge state={state} />
+        <StateBadge state={state} quietForMs={stalledForMs(facts)} />
         <span className="sf-run-meta">{row.operator ?? row.trigger ?? "unattributed"}</span>
         <span className="sf-run-elapsed">{formatElapsed(now - startedAtMs)}</span>
       </span>
