@@ -44,7 +44,10 @@ describe("activity → question → browser contribution → activity read", () 
     const retried = await respond(panel, "retained", { response_id });
     expect((await retried.json()).body.id).toBe(response_id);
     expect(questionView(listPanels().find(p => p.id === panel.id)!).responses).toHaveLength(1);
-  });
+    // 501 journal appends, each opened, fsynced and closed (participation-journal.ts), to push past
+    // MAX_HISTORY. ~4.6s idle, against bun's 5s default; on the gate's loaded host it timed out and
+    // read as a suite-only flake. The budget is for the durable writes, not for slowness under test.
+  }, 30_000);
   test("retains structured content and false, zero, null answers without interpreting them", async () => {
     for (const value of [false, 0, null, { distinction: ["suspected", "established"], reference: { type: "artifact", id: "evidence-1" } }]) {
       const body = { evidence: [false, 0, null], unfamiliar: { nested: "<script>not executable</script>" } };
