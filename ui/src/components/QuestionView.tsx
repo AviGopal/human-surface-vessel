@@ -24,34 +24,45 @@ import { bodyLead } from "../lib/questionClass";
 /** The pin key a question body is planned under. */
 export const QUESTION_CONTENT_SHAPE = "human_question";
 
-/**
- * The body as written, except that a gap question's `Summary:` clause (cut at
- * 300 characters by its writer) gives way to the gap's own summary and edit
- * site once the gap is read. Unread or absent: the body as written.
- */
-function QuestionBody({ question, gapId }: { question: Question; gapId: string | null }): ReactNode {
+/** A gap question's gap, once read: its summary and edit site. Null until then. */
+function useQuestionGap(gapId: string | null): { summary: string; editSite: string | null } | null {
   const gap = useGap(gapId, { enabled: gapId !== null, intervalMs: false });
   const summary = gap.data?.summary?.trim() ?? "";
+  if (!summary) return null;
   const site = gap.data?.classification_metadata?.["edit_site"];
-  const editSite = typeof site === "string" && site.trim() ? site.trim() : null;
-  const lead = summary ? bodyLead(question) : null;
+  return { summary, editSite: typeof site === "string" && site.trim() ? site.trim() : null };
+}
+
+/**
+ * The ask. A gap question's `Summary:` clause (its writer cuts it at 300
+ * characters) is dropped once the gap is read, since GapDetail carries the
+ * whole summary below the response. Unread or absent gap: the body as written.
+ */
+function QuestionBody({ question, gapId }: { question: Question; gapId: string | null }): ReactNode {
+  const gap = useQuestionGap(gapId);
   return (
-    <>
-      <div data-question-body={question.id} data-form-shape={QUESTION_CONTENT_SHAPE}>
-        <Rendered
-          content={fromPanel(QUESTION_CONTENT_SHAPE, lead ?? question.body)}
-          density="full"
-          header={false}
-          region="question_card"
-        />
-      </div>
-      {summary ? (
-        <div className="sf-question-gap" aria-label="Gap">
-          {editSite ? <p className="sf-view-facts"><span className="sf-mono">{editSite}</span></p> : null}
-          <Rendered content={fromText("gap_summary", summary)} density="full" header={false} region="question_gap" />
-        </div>
-      ) : null}
-    </>
+    <div data-question-body={question.id} data-form-shape={QUESTION_CONTENT_SHAPE}>
+      <Rendered
+        content={fromPanel(QUESTION_CONTENT_SHAPE, gap ? bodyLead(question) : question.body)}
+        density="full"
+        header={false}
+        region="question_card"
+      />
+    </div>
+  );
+}
+
+/** The gap's own summary and edit site, folded under the response. */
+function GapDetail({ gapId }: { gapId: string | null }): ReactNode {
+  const gap = useQuestionGap(gapId);
+  if (!gap) return null;
+  return (
+    <details className="sf-view-section sf-question-gap" aria-label="Gap">
+      <summary>
+        Gap{gap.editSite ? <> <span className="sf-mono">{gap.editSite}</span></> : null}
+      </summary>
+      <Rendered content={fromText("gap_summary", gap.summary)} density="full" header={false} region="question_gap" />
+    </details>
   );
 }
 
@@ -118,18 +129,13 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
     <article className="sf-question" aria-labelledby={`${id}-title`}>
       <header className="sf-view-head">
         <p className="sf-view-eyebrow">{question.title}</p>
-        <h2 id={`${id}-title`} className="sf-view-title sf-question-subject">
+        <h2 id={`${id}-title`} className="sf-view-title sf-question-subject" title={questionSubject(question)}>
           {questionSubject(question)}
         </h2>
         <p className="sf-view-facts">
           {gapId ? <span className="sf-mono">{gapId}</span> : null}
           {question.answered ? <span className="sf-chip">answered</span> : null}
           {question.declined ? <span className="sf-chip">declined</span> : null}
-          {question.because?.map((reason) => (
-            <span key={reason} className="sf-chip sf-chip-quiet">
-              {reason}
-            </span>
-          ))}
         </p>
       </header>
 
@@ -258,6 +264,8 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
           {reader === "docs_decision" ? <UnreadNote /> : null}
         </>
       )}
+
+      <GapDetail gapId={gapId} />
 
       <details className="sf-view-section sf-history">
         <summary>

@@ -17,6 +17,7 @@ const question = {
   body: `Gap route-edit-e8797240 (edit_intent_route) had a single substrate-authored landing. Please confirm: did the landed change actually fix this? Summary: ${CUT}`,
   createdAt: 0,
   updatedAt: 0,
+  because: ["a repair is waiting for someone to confirm it worked", "the substrate declared importance \"medium\""],
   responses: [],
   answered: false,
   declined: false,
@@ -91,6 +92,18 @@ describe("a gap question's card", () => {
     expect(el.querySelector("[aria-label='Gap'] .sf-mono")?.textContent).toBe("repos/development-vessel/src/resolvers/feature-compose.ts");
     expect(text).toContain("Please confirm");
     expect(text).not.toContain("Summary:");
+  });
+
+  test("the ask and its response come before the gap; the ranker's reasons are not shown", async () => {
+    gap = { id: "route-edit-e8797240", summary: FULL, classification_metadata: {} };
+    const el = await mount();
+    const order = [...el.querySelectorAll("[data-question-body], form, [aria-label='Gap']")].map((n) =>
+      n.hasAttribute("data-question-body") ? "ask" : n.tagName === "FORM" ? "form" : "gap",
+    );
+    expect(order[0]).toBe("ask");
+    expect(order.indexOf("form")).toBeGreaterThan(0);
+    expect(order.indexOf("form")).toBeLessThan(order.indexOf("gap"));
+    expect(el.textContent).not.toContain("the substrate declared importance");
   });
 
   test("must-fail: an unread gap leaves the body as written", async () => {
