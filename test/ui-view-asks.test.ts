@@ -18,7 +18,8 @@ upsertPanel({ id: "uiv-panel-empty", title: "Remove 'continue' statement", body:
 upsertPanel({ id: "{{goal.id}}", title: "{{goal.title}}", body: "How are you?", kind: "{{goal.kind}}", importance: "medium" });
 
 describe("buildAsksView", () => {
-  const view = buildAsksView();
+  // Every malformed write, not the newest five: other test files share this store.
+  const view = buildAsksView(Number.POSITIVE_INFINITY);
   const kind = (k: string) => view.by_kind.find((r) => r.kind === k);
 
   test("counts each kind as the rail presents it, with its answer reader", () => {

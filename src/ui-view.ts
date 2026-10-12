@@ -50,7 +50,7 @@ export interface AsksView {
  * What the questions rail holds right now and how people have responded, per
  * kind: the part of this report a question WRITER can read before it writes.
  */
-export function buildAsksView(): AsksView {
+export function buildAsksView(malformedLimit = 5): AsksView {
   const panels = listPanels().filter((pn) => isSolicitation(pn)).map(questionView) as unknown as (ClassifiableQuestion & { kind?: string; answered: boolean; declined: boolean; createdAt: number })[];
   const evidence = new Map(aggregateByKind(readExposureCorpus()).evidence.map((e) => [e.kind, e] as const));
   const byKind = new Map<string, { count: number; open: number; presented_as: Partial<Record<QuestionClass, number>>; answer_readers: Record<string, number> }>();
@@ -87,8 +87,8 @@ export function buildAsksView(): AsksView {
       })
       .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind)),
     malformed: malformed
-      .sort((a, b) => b.at - a.at)
-      .slice(0, 5)
+      .sort((a, b) => b.at - a.at || a.id.localeCompare(b.id))
+      .slice(0, malformedLimit)
       .map(({ at: _at, ...m }) => m),
   };
 }
