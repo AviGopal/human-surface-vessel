@@ -122,8 +122,11 @@ describe("<Chain>", () => {
 
   test("the output leads, with the impulses it consumed under it; unused output is set aside", async () => {
     const { Chain } = await import("../ui/src/components/Chain");
+    // A reached run: its outputs lead in full (a not-reached one is collapsed, chain-dom.test.ts).
     const walk = {
       ...base,
+      status: "completed",
+      reached: true,
       poolProvenance: [
         entry("g", "goal", "seed", '{"goal":"What is happening today?"}'),
         entry("s", "web_search", "satisfier:web_search", '{"shape":"webSearchResult","results":[]}'),

@@ -23,11 +23,11 @@ const { Chain } = await import("../ui/src/components/Chain");
 
 const stub = (by: string, exec: string): string => JSON.stringify({ producedBy: by, executionId: exec });
 
-function walk(provenance: unknown[]): GoalWalkState {
+function walk(provenance: unknown[], reached: boolean | null = true): GoalWalkState {
   return {
     dispatchId: "d",
     status: "completed",
-    reached: false,
+    reached,
     goalReachReason: null,
     poolShapes: [],
     poolProvenance: provenance,
@@ -51,13 +51,13 @@ function walk(provenance: unknown[]): GoalWalkState {
   } as unknown as GoalWalkState;
 }
 
-async function mount(w: GoalWalkState): Promise<HTMLElement> {
+async function mount(w: GoalWalkState, blind = false): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     createRoot(el).render(
-      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(Chain, { walk: w }))),
+      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(Chain, { walk: w, blind }))),
     );
   });
   await act(async () => {
@@ -99,5 +99,23 @@ describe("Chain outputs", () => {
       ]),
     );
     expect(el.querySelector(".sf-chain-output")?.textContent).toContain("Found: project 507 results.");
+  });
+
+  const search = { id: "s", shape: "webSearchResult", producedBy: "satisfier:webSearchResult", contentPreview: "About — Project 507 CIC", chars: 2969, consumedIds: ["g"] };
+  const seed = { id: "g", shape: "goal", producedBy: "seed", contentPreview: "What is project 507?", chars: 20, consumedIds: [] };
+
+  test("a finished run that did not reach shows its outputs one line each", async () => {
+    const el = await mount(walk([seed, search, ...refs], false));
+    expect(el.querySelector(".sf-chain-output")).toBeNull();
+    const row = el.querySelector(".sf-chain-collapsed summary")?.textContent ?? "";
+    expect(row).toContain("webSearchResult");
+    expect(row).toContain("About — Project 507 CIC");
+  });
+
+  test("must-fail: the blind view's layout does not depend on the verdict", async () => {
+    const reachedEl = await mount(walk([seed, search], true), true);
+    const notEl = await mount(walk([seed, search], false), true);
+    expect(notEl.querySelector(".sf-chain-collapsed")).toBeNull();
+    expect(notEl.querySelectorAll(".sf-chain-output").length).toBe(reachedEl.querySelectorAll(".sf-chain-output").length);
   });
 });

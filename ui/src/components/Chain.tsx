@@ -177,16 +177,28 @@ export function Chain({ walk, blind = false }: { walk: GoalWalkState; blind?: bo
   const lead = chains.outputs.length > 0 ? chains.outputs : produced.slice(0, 1);
   const withContent = chains.outputs.length > 0 ? produced : produced.slice(1);
   const references = chains.unused.filter((n) => n.placeholder);
+  // A finished run that did not reach: its outputs are what it tried, not an
+  // answer, so each is one line until opened. Never in the blind view, where
+  // the layout must not carry the verdict.
+  const collapsed = !blind && terminal && walk.reached !== true;
   return (
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
 
-      {lead.map((n) => (
-        <article key={n.id} className="sf-chain-output">
-          <NodeContent n={n} density="full" credit={credit} />
-          <Inputs n={n} chains={chains} depth={0} seen={new Set()} credit={credit} />
-        </article>
-      ))}
+      {collapsed ? (
+        <ul className="sf-chain-collapsed">
+          {lead.map((n) => (
+            <InputRow key={n.id} n={n} chains={chains} depth={0} seen={new Set()} credit={credit} />
+          ))}
+        </ul>
+      ) : (
+        lead.map((n) => (
+          <article key={n.id} className="sf-chain-output">
+            <NodeContent n={n} density="full" credit={credit} />
+            <Inputs n={n} chains={chains} depth={0} seen={new Set()} credit={credit} />
+          </article>
+        ))
+      )}
 
       {withContent.length + references.length > 0 ? (
         <details className="sf-chain-unused" open={lead.length === 0}>
