@@ -204,6 +204,25 @@ export function useQuestions(): QuestionsValue {
   return ctx;
 }
 
+/** Words gap ids spell in lower case that read as acronyms. */
+const ACRONYMS: Readonly<Record<string, string>> = {
+  ui: "UI",
+  db: "DB",
+  id: "ID",
+  ids: "IDs",
+  api: "API",
+  llm: "LLM",
+  http: "HTTP",
+  url: "URL",
+  sql: "SQL",
+  json: "JSON",
+  mcp: "MCP",
+  cli: "CLI",
+  ci: "CI",
+  ias: "IAS",
+  ttl: "TTL",
+};
+
 /**
  * A gap id as words, when it is a phrase: gap ids are written as sentences
  * ("cold-boot-silently-skips-twenty-two-unparseable-migration-files"), which
@@ -215,7 +234,7 @@ export function gapTitle(gapId: string): string | null {
     .split(/[-_\s]+/)
     .filter((w) => w.length > 0 && !/\d/.test(w));
   if (words.length < 4) return null;
-  const text = words.join(" ");
+  const text = words.map((w) => ACRONYMS[w.toLowerCase()] ?? w).join(" ");
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 

@@ -83,8 +83,15 @@ describe("question titles", () => {
     expect(gapTitle("route-edit-03902f38")).toBeNull();
     expect(gapTitle("reach-gap-docs")).toBeNull();
     // Dated parts drop; the phrase left still titles it.
-    expect(gapTitle("db_performance_slow_queries_2026-10-01T06")).toBe("Db performance slow queries");
+    expect(gapTitle("db_performance_slow_queries_2026-10-01T06")).toBe("DB performance slow queries");
     expect(questionSubject(reland)).toBe("In repos/x");
+  });
+
+  test("acronyms read as acronyms", () => {
+    expect(gapTitle("ui-legibility-gap-id-collides-across-audited-surfaces")).toBe("UI legibility gap ID collides across audited surfaces");
+    expect(gapTitle("landing-gates-read-diffs-and-never-run-them-cited-trace-ids-is-accepted")).toBe(
+      "Landing gates read diffs and never run them cited trace IDs is accepted",
+    );
   });
 
   test("a question with no gap keeps its title", () => {
