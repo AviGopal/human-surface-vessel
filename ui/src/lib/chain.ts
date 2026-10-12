@@ -26,13 +26,15 @@ export interface ChainNode {
   readonly producerExecutionId: string | null;
   readonly consumedIds: readonly string[];
   readonly chars: number;
+  /** The pool holds only `{producedBy, executionId}` for this shape: a reference, no content. */
+  readonly placeholder: boolean;
   readonly raw: RawProvenance;
 }
 
 export interface RunChains {
-  /** Terminal derivations: consumed something, consumed by nothing. Largest first. */
+  /** Terminal derivations with content: consumed something, consumed by nothing. Largest first. */
   readonly outputs: readonly ChainNode[];
-  /** Produced by a step, consumed by nothing, consuming nothing. */
+  /** Produced by a step and consumed by nothing, but not an output: consuming nothing, or a reference with no content. Content first. */
   readonly unused: readonly ChainNode[];
   /** Every node by id, seeds included, for resolving `consumedIds`. */
   readonly byId: ReadonlyMap<string, ChainNode>;
@@ -44,6 +46,19 @@ export interface RunChains {
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/** goal-host pools `{producedBy, executionId}` where it did not read (or there was no) content. */
+export function isPlaceholder(raw: RawProvenance): boolean {
+  if (typeof raw.contentPreview !== "string") return false;
+  try {
+    const v = JSON.parse(raw.contentPreview) as unknown;
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+    const keys = Object.keys(v);
+    return keys.length === 2 && keys.includes("producedBy") && keys.includes("executionId");
+  } catch {
+    return false;
+  }
 }
 
 function node(raw: RawProvenance, index: number): ChainNode | null {
@@ -59,6 +74,7 @@ function node(raw: RawProvenance, index: number): ChainNode | null {
     producerExecutionId: str(r.producerExecutionId),
     consumedIds: consumed,
     chars: typeof raw.chars === "number" && Number.isFinite(raw.chars) ? raw.chars : 0,
+    placeholder: isPlaceholder(raw),
     raw,
   };
 }
@@ -90,10 +106,14 @@ export function buildChains(walk: GoalWalkState): RunChains {
   const fromRequest = (n: ChainNode): boolean =>
     isSeed(n) || (n.producedBy === "goal-host-walk" && seeded.has(n.shape));
   const produced = nodes.filter((n) => !fromRequest(n));
-  const outputs = produced
-    .filter((n) => n.consumedIds.length > 0 && !consumedSomewhere.has(n.id))
+  const terminal = produced.filter((n) => !consumedSomewhere.has(n.id));
+  const outputs = terminal
+    .filter((n) => n.consumedIds.length > 0 && !n.placeholder)
     .sort((a, b) => b.chars - a.chars);
-  const unused = produced.filter((n) => n.consumedIds.length === 0 && !consumedSomewhere.has(n.id));
+  // Content first, largest first; references with no content last.
+  const unused = terminal
+    .filter((n) => n.consumedIds.length === 0 || n.placeholder)
+    .sort((a, b) => Number(a.placeholder) - Number(b.placeholder) || b.chars - a.chars);
   const edgesRecorded = walk.poolProvenance.some((p) => "consumedIds" in (p as object));
   return { outputs, unused, byId, retained: walk.poolProvenance.length > 0, edgesRecorded };
 }

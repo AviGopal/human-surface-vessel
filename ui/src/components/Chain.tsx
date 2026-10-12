@@ -69,9 +69,9 @@ function InputRow({ n, chains, depth, seen, credit }: { n: ChainNode; chains: Ru
         <summary>
           <span className="sf-shape-badge">{n.shape}</span>
           {isSeed(n) ? <span className="sf-muted">request</span> : producer ? <span className="sf-mono sf-muted">{producer}</span> : null}
-          <span className="sf-muted">{n.chars > 0 ? `${count(n.chars)} chars` : "no content"}</span>
+          <span className="sf-muted">{n.chars > 0 && !n.placeholder ? `${count(n.chars)} chars` : "no content"}</span>
           <CreditBadge row={creditFor(n.producedBy, credit)} />
-          {content ? <Rendered content={content} density="row" /> : null}
+          {content && !n.placeholder ? <Rendered content={content} density="row" /> : null}
         </summary>
         <div className="sf-chain-input-body">
           <NodeContent n={n} density="inline" credit={credit} />
@@ -171,7 +171,12 @@ export function Chain({ walk, blind = false }: { walk: GoalWalkState; blind?: bo
     ) : null;
   }
 
-  const lead = chains.outputs;
+  // No terminal derivation: the largest thing the run did produce leads instead,
+  // so a run that found something shows it before its bookkeeping.
+  const produced = chains.unused.filter((n) => !n.placeholder);
+  const lead = chains.outputs.length > 0 ? chains.outputs : produced.slice(0, 1);
+  const withContent = chains.outputs.length > 0 ? produced : produced.slice(1);
+  const references = chains.unused.filter((n) => n.placeholder);
   return (
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
@@ -183,16 +188,26 @@ export function Chain({ walk, blind = false }: { walk: GoalWalkState; blind?: bo
         </article>
       ))}
 
-      {chains.unused.length > 0 ? (
+      {withContent.length + references.length > 0 ? (
         <details className="sf-chain-unused" open={lead.length === 0}>
           <summary>
-            {lead.length === 0 ? "Produced" : "Unused"} · {chains.unused.length}
+            {chains.outputs.length === 0 ? "Produced" : "Unused"} · {withContent.length + references.length}
           </summary>
           <ul>
-            {chains.unused.map((n) => (
+            {withContent.map((n) => (
               <InputRow key={n.id} n={n} chains={chains} depth={MAX_DEPTH} seen={new Set()} credit={credit} />
             ))}
           </ul>
+          {references.length > 0 ? (
+            <details className="sf-chain-references">
+              <summary>No content · {references.length}</summary>
+              <ul>
+                {references.map((n) => (
+                  <InputRow key={n.id} n={n} chains={chains} depth={MAX_DEPTH} seen={new Set()} credit={credit} />
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </details>
       ) : null}
 

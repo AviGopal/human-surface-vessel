@@ -7,7 +7,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import type { GoalWalkState } from "../ui/src/api/types";
-import { buildChains, inputsOf } from "../ui/src/lib/chain";
+import { buildChains, inputsOf, isPlaceholder } from "../ui/src/lib/chain";
 import fixture from "./fixtures/chain-fb068805.json";
 
 function walk(over: Partial<GoalWalkState>): GoalWalkState {
@@ -128,5 +128,35 @@ describe("buildChains edge cases", () => {
     );
     expect(c.outputs.map((n) => n.id)).toEqual(["r"]);
     expect(inputsOf(c.outputs[0]!, c).inputs.map((n) => n.id)).toEqual(["m"]);
+  });
+});
+
+describe("references with no content (the project-507 run, 10-12)", () => {
+  const stub = (by: string, exec: string): string => JSON.stringify({ producedBy: by, executionId: exec });
+  const w = walk({
+    poolProvenance: [
+      { id: "g", shape: "goal", producedBy: "seed", contentPreview: "What is project 507?", chars: 20, consumedIds: [] },
+      { id: "s", shape: "webSearchResult", producedBy: "satisfier:webSearchResult", contentPreview: '{"query":"project 507","results":[]}', chars: 2969, consumedIds: ["g"] },
+      { id: "m", shape: "memoryNote_write", producedBy: "activity:⟨learned⟩", contentPreview: stub("activity:⟨learned⟩", "exec_a"), chars: 127, consumedIds: ["g"] },
+      { id: "c", shape: "concept", producedBy: "activity:x", contentPreview: stub("activity:x", "exec_b"), chars: 132, consumedIds: [] },
+    ] as unknown as GoalWalkState["poolProvenance"],
+  });
+  const chains = buildChains(w);
+
+  test("a reference is never an output, even when it consumed something", () => {
+    expect(chains.outputs.map((n) => n.shape)).toEqual(["webSearchResult"]);
+  });
+
+  test("references are marked and listed after content", () => {
+    expect(chains.unused.map((n) => [n.shape, n.placeholder])).toEqual([
+      ["concept", true],
+      ["memoryNote_write", true],
+    ]);
+  });
+
+  test("must-fail: content that merely mentions producedBy is not a reference", () => {
+    expect(isPlaceholder({ contentPreview: '{"producedBy":"x","executionId":"y","body":"real"}' })).toBe(false);
+    expect(isPlaceholder({ contentPreview: "not json" })).toBe(false);
+    expect(isPlaceholder({})).toBe(false);
   });
 });
