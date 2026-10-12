@@ -1923,3 +1923,8 @@ body { overflow: hidden; }
 .sf-calibration-body { flex: 1; min-width: 0; padding: var(--sf-space-4); }
 .sf-calibration-run { max-width: 72rem; margin: 0 auto; min-width: 0; overflow-wrap: anywhere; }
 .sf-calibration-grade { display: grid; gap: var(--sf-space-2); }
+
+/* A gap question's own summary, under the ask. */
+.sf-question-gap { margin-top: var(--sf-space-3); padding-top: var(--sf-space-3); border-top: 1px solid var(--sf-rule); }
+/* Not asks: folded below them and quieter. */
+.sf-qgroup[data-folded="true"] > .sf-qgroup-head { color: var(--sf-ink-3); }

@@ -50,7 +50,7 @@ export function QuestionsList({
       ) : null}
 
       {groups.map((group) => (
-        <details key={group.kind} className="sf-qgroup" open>
+        <details key={group.kind} className="sf-qgroup" data-folded={group.folded} open={!group.folded}>
           <summary className="sf-qgroup-head">
             <span>{group.label}</span>
             <span className="sf-qgroup-count">{group.questions.length}</span>

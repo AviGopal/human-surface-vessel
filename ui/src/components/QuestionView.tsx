@@ -13,14 +13,47 @@ import { reportExposureAct } from "../lib/exposure-reporter";
 import { questionGapId, questionSubject, useQuestions } from "../state/questions";
 import { contributionContent, questionForAsk } from "../lib/interaction";
 import { ChoiceInput, InteractionFooter, TextInput, stateOf } from "./Interaction";
-import { fromPanel, fromResponse } from "../lib/content";
+import { fromPanel, fromResponse, fromText } from "../lib/content";
 import { ComplainButton } from "./ComplainButton";
 import { answerReaderFor, gapIdForPanel } from "../lib/disposition";
 import { EscalationForm, EscalationOutcome, LocalizationForm, UnreadNote, VerificationForm } from "./ResponseForms";
 import { Rendered } from "./Rendered";
+import { useGap } from "../api/queries";
+import { bodyLead } from "../lib/questionClass";
 
 /** The pin key a question body is planned under. */
 export const QUESTION_CONTENT_SHAPE = "human_question";
+
+/**
+ * The body as written, except that a gap question's `Summary:` clause (cut at
+ * 300 characters by its writer) gives way to the gap's own summary and edit
+ * site once the gap is read. Unread or absent: the body as written.
+ */
+function QuestionBody({ question, gapId }: { question: Question; gapId: string | null }): ReactNode {
+  const gap = useGap(gapId, { enabled: gapId !== null, intervalMs: false });
+  const summary = gap.data?.summary?.trim() ?? "";
+  const site = gap.data?.classification_metadata?.["edit_site"];
+  const editSite = typeof site === "string" && site.trim() ? site.trim() : null;
+  const lead = summary ? bodyLead(question) : null;
+  return (
+    <>
+      <div data-question-body={question.id} data-form-shape={QUESTION_CONTENT_SHAPE}>
+        <Rendered
+          content={fromPanel(QUESTION_CONTENT_SHAPE, lead ?? question.body)}
+          density="full"
+          header={false}
+          region="question_card"
+        />
+      </div>
+      {summary ? (
+        <div className="sf-question-gap" aria-label="Gap">
+          {editSite ? <p className="sf-view-facts"><span className="sf-mono">{editSite}</span></p> : null}
+          <Rendered content={fromText("gap_summary", summary)} density="full" header={false} region="question_gap" />
+        </div>
+      ) : null}
+    </>
+  );
+}
 
 function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
   const { recordReceipt } = useQuestions();
@@ -101,9 +134,7 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
       </header>
 
       <section className="sf-view-section">
-        <div data-question-body={question.id} data-form-shape={QUESTION_CONTENT_SHAPE}>
-          <Rendered content={fromPanel(QUESTION_CONTENT_SHAPE, question.body)} density="full" header={false} region="question_card" />
-        </div>
+        <QuestionBody question={question} gapId={gapId} />
       </section>
 
       {revised ? (

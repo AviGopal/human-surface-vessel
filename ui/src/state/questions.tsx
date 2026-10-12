@@ -13,6 +13,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { fetchQuestions, type ParticipationResponse, type Question, type QuestionPage, type Ranking } from "../api/participation";
 import { reportExposureAct } from "../lib/exposure-reporter";
 import { sortRuns } from "../lib/sort";
+import { FOLDED, classifyQuestion } from "../lib/questionClass";
 import { useLiveControls } from "./liveControls";
 import { streamAwareInterval, useStreamConnected } from "./stream";
 
@@ -20,6 +21,8 @@ export interface QuestionGroup {
   readonly kind: string;
   readonly label: string;
   readonly questions: readonly Question[];
+  /** Not asks (lib/questionClass): drawn closed, below the asks, and not counted as waiting. */
+  readonly folded: boolean;
 }
 
 interface QuestionsValue {
@@ -88,19 +91,33 @@ function orderQuestions(visible: readonly Question[]): readonly Question[] {
 }
 
 /** Groups keep the importance order: a group sits where its best row would. */
-function groupQuestions(ordered: readonly Question[]): readonly QuestionGroup[] {
+export function groupQuestions(ordered: readonly Question[]): readonly QuestionGroup[] {
   const byKind = new Map<string, Question[]>();
+  const byClass = new Map<string, Question[]>();
   for (const q of ordered) {
-    const kind = q.kind ?? "other";
-    const list = byKind.get(kind);
+    const cls = classifyQuestion(q);
+    const key = cls === "ask" ? q.kind ?? "other" : cls;
+    const into = cls === "ask" ? byKind : byClass;
+    const list = into.get(key);
     if (list) list.push(q);
-    else byKind.set(kind, [q]);
+    else into.set(key, [q]);
   }
-  return [...byKind.entries()].map(([kind, questions]) => ({
+  const asks = [...byKind.entries()].map(([kind, questions]) => ({
     kind,
     label: kindLabel(kind === "other" ? undefined : kind),
     questions,
+    folded: false,
   }));
+  const folded = FOLDED.flatMap(({ cls, label }) => {
+    const questions = byClass.get(cls);
+    return questions ? [{ kind: cls, label, questions, folded: true }] : [];
+  });
+  return [...asks, ...folded];
+}
+
+/** Open asks: what the count beside "Questions" means. */
+export function waitingCount(questions: readonly Question[]): number {
+  return questions.filter((q) => !q.answered && !q.declined && classifyQuestion(q) === "ask").length;
 }
 
 export function QuestionsProvider({ children }: { children: ReactNode }): ReactNode {
@@ -170,7 +187,7 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
       ordered,
       groups: groupQuestions(ordered),
       ranking,
-      waiting: visible.filter((q) => !q.answered && !q.declined).length,
+      waiting: waitingCount(visible),
       changed: snapshot !== null && query.data !== undefined && contentOf(query.data.questions) !== contentOf(visible),
       acceptedTicks,
       accept,
