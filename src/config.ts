@@ -83,6 +83,10 @@ export const DISCOVERY_SHAPES = [
   // is the whole point of a human surface (a person sends language; the system
   // does the translation, not the person).
   "surfaceIntent",
+  // What this surface looks like to a person: typography, drawn forms, and the
+  // questions rail per kind (presentation, answer reader, outcomes). Read it
+  // before writing a question here.
+  "human_surface:ui_view",
 ] as const;
 
 export type DiscoveryShape = (typeof DISCOVERY_SHAPES)[number];

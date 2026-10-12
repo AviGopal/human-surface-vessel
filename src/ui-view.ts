@@ -18,6 +18,82 @@
  */
 
 import { buildFormCensus, type FormCensus } from "./form-census.ts";
+import { aggregateByKind, readExposureCorpus } from "./importance-learn.ts";
+import { isSolicitation } from "./solicitation.ts";
+import { listPanels, questionView } from "./store.ts";
+import type { Question } from "../ui/src/api/participation.ts";
+import { answerReaderFor } from "../ui/src/lib/disposition.ts";
+import { classifyQuestion, malformedReason, type QuestionClass } from "../ui/src/lib/questionClass.ts";
+
+/** One kind of question, as a person meets it here, and what people have done with it. */
+export interface AskKindView {
+  readonly kind: string;
+  readonly count: number;
+  /** Not answered and not declined. */
+  readonly open: number;
+  /** How the rail presents them (ui/src/lib/questionClass): `ask` leads; the rest are folded. */
+  readonly presented_as: Partial<Record<QuestionClass, number>>;
+  /** Which reader takes the answers (ui/src/lib/disposition), by panel count. `unknown`: none this surface knows of. */
+  readonly answer_readers: Record<string, number>;
+  /** From the exposure corpus (importance-learn aggregateByKind): distinct panels. Null when no outcome is recorded. */
+  readonly outcomes: { answered: number; declined: number; ignored: number; complained: number } | null;
+}
+
+export interface AsksView {
+  readonly total: number;
+  /** What the "Questions" count shows: open questions presented as asks. */
+  readonly open_asks: number;
+  readonly by_kind: readonly AskKindView[];
+  /** Up to five, newest first: what a writer sent that gives a person nothing to act on. */
+  readonly malformed: readonly { id: string; kind: string; title: string; reason: string }[];
+}
+
+/**
+ * What the questions rail holds right now and how people have responded, per
+ * kind: the part of this report a question WRITER can read before it writes.
+ */
+export function buildAsksView(): AsksView {
+  const panels = listPanels().filter((pn) => isSolicitation(pn)).map(questionView) as unknown as Question[];
+  const evidence = new Map(aggregateByKind(readExposureCorpus()).evidence.map((e) => [e.kind, e] as const));
+  const byKind = new Map<string, { count: number; open: number; presented_as: Partial<Record<QuestionClass, number>>; answer_readers: Record<string, number> }>();
+  let openAsks = 0;
+  const malformed: { id: string; kind: string; title: string; reason: string; at: number }[] = [];
+  for (const q of panels) {
+    const kind = q.kind ?? "question";
+    const row = byKind.get(kind) ?? { count: 0, open: 0, presented_as: {}, answer_readers: {} };
+    const cls = classifyQuestion(q);
+    const open = !q.answered && !q.declined;
+    row.count += 1;
+    if (open) row.open += 1;
+    row.presented_as[cls] = (row.presented_as[cls] ?? 0) + 1;
+    const reader = answerReaderFor(q.id);
+    row.answer_readers[reader] = (row.answer_readers[reader] ?? 0) + 1;
+    byKind.set(kind, row);
+    if (open && cls === "ask") openAsks += 1;
+    const why = malformedReason(q);
+    if (why) malformed.push({ id: q.id, kind, title: q.title, reason: why, at: q.createdAt });
+  }
+  return {
+    total: panels.length,
+    open_asks: openAsks,
+    by_kind: [...byKind.entries()]
+      .map(([kind, r]) => {
+        const e = evidence.get(kind);
+        return {
+          kind,
+          ...r,
+          outcomes: e
+            ? { answered: e.answeredPanels, declined: e.declinedPanels, ignored: e.ignoredPanels, complained: e.complainedPanels }
+            : null,
+        };
+      })
+      .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind)),
+    malformed: malformed
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 5)
+      .map(({ at: _at, ...m }) => m),
+  };
+}
 
 /** Effective font sizes this surface renders with, in px. */
 export const FONT_SCALE_PX = {
@@ -57,6 +133,8 @@ export interface UiViewReport {
    * numbers cannot be derived here.
    */
   content_forms: FormCensus;
+  /** The questions rail: what is asked of people here, how it is presented, and what they did with it. */
+  asks: AsksView;
 }
 
 /**
@@ -98,5 +176,6 @@ export function buildUiView(overrides: Record<string, string> = {}): UiViewRepor
     },
     surface: "human-surface-vessel",
     content_forms: buildFormCensus(),
+    asks: buildAsksView(),
   };
 }

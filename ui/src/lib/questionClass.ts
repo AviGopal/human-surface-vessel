@@ -21,10 +21,17 @@ function bodyText(question: Question): string {
   return JSON.stringify(question.body);
 }
 
+/** Why a question gives a person nothing to act on, or null when it does not fail that way. */
+export function malformedReason(question: Pick<Question, "id" | "title" | "kind" | "body" | "asks" | "run">): "unrendered_template" | "empty" | null {
+  if (UNRENDERED.test(question.id) || UNRENDERED.test(question.title) || UNRENDERED.test(question.kind ?? "")) return "unrendered_template";
+  const text = bodyText(question as Question).trim();
+  const empty = text === "" || text === "{}";
+  if (empty && !(question.asks && question.asks.length > 0) && question.run?.linked !== true) return "empty";
+  return null;
+}
+
 export function classifyQuestion(question: Question): QuestionClass {
-  if (UNRENDERED.test(question.id) || UNRENDERED.test(question.title) || UNRENDERED.test(question.kind ?? "")) return "malformed";
-  const empty = bodyText(question).trim() === "" || bodyText(question).trim() === "{}";
-  if (empty && !(question.asks && question.asks.length > 0) && question.run?.linked !== true) return "malformed";
+  if (malformedReason(question) !== null) return "malformed";
   if (question.kind === "notice") return "notice";
   if (answersAreUnread(answerReaderFor(question.id))) return "unread";
   return "ask";

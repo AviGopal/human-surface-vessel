@@ -41,6 +41,7 @@ import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.
 import { readWalkState } from "./proxy.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
+import { buildUiView } from "../ui-view.ts";
 
 type Pointer = Record<string, unknown>;
 
@@ -891,6 +892,14 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         visibility: asVisibility(pointer["visibility"], "operator_only"),
       });
       return c.json({ resolved: true, success: true, shape: type, body: entry });
+    }
+
+    case "human_surface:ui_view": {
+      // What this surface looks like to a person, measured where it can be:
+      // typography, the forms content was drawn in, and the questions rail
+      // (how each kind is presented, who reads its answers, what people did).
+      // A question writer reads this by shape before it asks.
+      return c.json({ resolved: true, success: true, shape: type, body: buildUiView(getRenderPolicy().tokenOverrides) });
     }
 
     case "renderPolicy": {

@@ -238,9 +238,10 @@ app.post("/resolve", async (c) => {
   const pointer = body?.["impulse"]?.["pointer"] ?? body?.["pointer"] ?? {};
   const type = pointer?.["type"];
 
-  if (type === "obsidian:ui_view") {
+  // `human_surface:ui_view` is the name ui_legibility_scan asks for first; same report.
+  if (type === "obsidian:ui_view" || type === "human_surface:ui_view") {
     // `.content` as a JSON STRING is the detector's expected envelope.
-    return c.json({ content: JSON.stringify(buildUiView(getRenderPolicy().tokenOverrides)), metadata: { shape: "obsidian:ui_view" } });
+    return c.json({ content: JSON.stringify(buildUiView(getRenderPolicy().tokenOverrides)), metadata: { shape: type } });
   }
   if (type === "obsidian:note") {
     // No theme-override note on this surface: tokens are the single source and
