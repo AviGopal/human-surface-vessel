@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Question } from "../ui/src/api/participation";
 import { bodyLead, classifyQuestion } from "../ui/src/lib/questionClass";
-import { groupQuestions, waitingCount } from "../ui/src/state/questions";
+import { gapTitle, groupQuestions, questionSubject, waitingCount } from "../ui/src/state/questions";
 
 function q(id: string, kind: string, body: unknown, extra: Partial<Question> = {}): Question {
   return { id, revision: 1, title: "t", body, createdAt: 0, updatedAt: 0, responses: [], answered: false, declined: false, kind, ...extra };
@@ -69,5 +69,25 @@ describe("bodyLead", () => {
   test("drops the writer's truncated Summary clause, keeps the ask", () => {
     expect(bodyLead(verify)).toBe("Gap route-edit-e8797240 (edit_intent_route) had a single landing. Please confirm.");
     expect(bodyLead(notice)).toBe(notice.body as string);
+  });
+});
+
+describe("question titles", () => {
+  test("a gap id that is a phrase titles its question, not the agent-written summary", () => {
+    const q2 = q("needs-human-cold-boot-silently-skips-twenty-two-unparseable-migration-files", "gap_needs_human",
+      "Gap cold-boot-silently-skips-twenty-two-unparseable-migration-files (x) failed. Summary: REOPENED 2026-09-22. This gap was CLOSED WITHOUT ITS FIX");
+    expect(questionSubject(q2)).toBe("Cold boot silently skips twenty two unparseable migration files");
+  });
+
+  test("must-fail: an id that is not a phrase keeps the summary", () => {
+    expect(gapTitle("route-edit-03902f38")).toBeNull();
+    expect(gapTitle("reach-gap-docs")).toBeNull();
+    // Dated parts drop; the phrase left still titles it.
+    expect(gapTitle("db_performance_slow_queries_2026-10-01T06")).toBe("Db performance slow queries");
+    expect(questionSubject(reland)).toBe("In repos/x");
+  });
+
+  test("a question with no gap keeps its title", () => {
+    expect(questionSubject(withAsks)).toBe("Revised");
   });
 });

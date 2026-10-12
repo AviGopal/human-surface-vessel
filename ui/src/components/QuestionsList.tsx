@@ -13,7 +13,7 @@ import { reportExposureTick } from "../lib/exposure-reporter";
 import { useRenderPolicy } from "../api/queries";
 import { fromPanel } from "../lib/content";
 import { useLiveControls } from "../state/liveControls";
-import { questionGapId, questionSubject, useQuestions } from "../state/questions";
+import { gapTitle, questionGapId, questionSubject, useQuestions } from "../state/questions";
 import { planFor } from "./Rendered";
 import { QUESTION_CONTENT_SHAPE } from "./QuestionView";
 
@@ -79,7 +79,7 @@ export function QuestionsList({
                     <span className="sf-qrow-subject">{questionSubject(question)}</span>
                     <span className="sf-qrow-meta">
                       {status !== "open" ? <span className="sf-qrow-status">{status}</span> : null}
-                      {gapId ? <span className="sf-mono">{gapId}</span> : null}
+                      {gapId && !gapTitle(gapId) ? <span className="sf-mono">{gapId}</span> : null}
                       {question.run?.linked ? <span className="sf-chip sf-chip-quiet" title={question.run.dispatchId ?? undefined}>run</span> : null}
                     </span>
                   </button>

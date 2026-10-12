@@ -204,13 +204,36 @@ export function useQuestions(): QuestionsValue {
   return ctx;
 }
 
-/** The one-line subject a gap question is actually about: its `Summary:` clause. */
-export function questionSubject(question: Question): string {
+/**
+ * A gap id as words, when it is a phrase: gap ids are written as sentences
+ * ("cold-boot-silently-skips-twenty-two-unparseable-migration-files"), which
+ * read better as a title than a summary written for agents. Ids that are not
+ * phrases (`route-edit-03902f38`, a timestamped detector id) give null.
+ */
+export function gapTitle(gapId: string): string | null {
+  const words = gapId
+    .split(/[-_\s]+/)
+    .filter((w) => w.length > 0 && !/\d/.test(w));
+  if (words.length < 4) return null;
+  const text = words.join(" ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The text a gap question's summary carries: its `Summary:` clause. */
+export function questionSummary(question: Question): string {
   const body = typeof question.body === "string" ? question.body : "";
   const at = body.indexOf("Summary:");
   const raw = at >= 0 ? body.slice(at + "Summary:".length) : body;
-  const subject = raw.replace(/^\s*\[narrowed from [^\]]*\]\s*/, "").trim();
-  return subject.length > 0 ? subject : question.title;
+  return raw.replace(/^\s*\[narrowed from [^\]]*\]\s*/, "").trim();
+}
+
+/** The one-line subject a question is about: its gap as words when the id is a phrase, else its summary, else its title. */
+export function questionSubject(question: Question): string {
+  const gapId = questionGapId(question);
+  const fromId = gapId ? gapTitle(gapId) : null;
+  if (fromId) return fromId;
+  const summary = questionSummary(question);
+  return summary.length > 0 ? summary : question.title;
 }
 
 /** The gap id a gap question names, if it names one. */
