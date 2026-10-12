@@ -17,7 +17,7 @@ import { CalibrationPage } from "./components/Calibration";
 import { IssuesDrawer, useInterfaceGaps } from "./components/IssuesDrawer";
 import { QuestionsList } from "./components/QuestionsList";
 import { QuestionView } from "./components/QuestionView";
-import { RunsList, type RunFilter } from "./components/RunsList";
+import { RunsList, initialFilter, latestMine, rememberFilter, type RunFilter } from "./components/RunsList";
 import { RunView } from "./components/RunView";
 import { TopBar } from "./components/TopBar";
 import { useTokenOverrides } from "./lib/useTokenOverrides";
@@ -34,8 +34,8 @@ const PRESENTATION = "workbench";
 type Tab = "runs" | "questions";
 
 const FILTERS: readonly { id: RunFilter; label: string }[] = [
-  { id: "all", label: "All" },
   { id: "mine", label: "Mine" },
+  { id: "all", label: "All" },
   { id: "system", label: "System" },
 ];
 
@@ -59,7 +59,11 @@ function Workbench(): ReactNode {
     else if (runId) setTab("runs");
   }, [questionId, runId]);
 
-  const [filter, setFilter] = useState<RunFilter>("all");
+  const [filter, setFilterState] = useState<RunFilter>(initialFilter);
+  const setFilter = (f: RunFilter): void => {
+    setFilterState(f);
+    rememberFilter(f);
+  };
   const [issuesOpen, setIssuesOpen] = useState(false);
   const [highlightIssue, setHighlightIssue] = useState<string | null>(null);
   const closeIssues = useCallback(() => {
@@ -83,6 +87,9 @@ function Workbench(): ReactNode {
   const gaps = useInterfaceGaps();
   const openGaps = gaps.data ? gaps.data.filter((g) => g.status !== "closed").length : null;
   const calibration = useCalibrationWindows().data?.windows[0] ?? null;
+
+  // Nothing selected: the newest run asked from here, so the first screen shows an answer, not an empty pane.
+  const latest = latestMine(board.data);
 
   const openRun = (dispatchId: string): void => {
     setIssuesOpen(false);
@@ -147,6 +154,8 @@ function Workbench(): ReactNode {
           <RunView key={runId} dispatchId={runId} />
         ) : questionId ? (
           <QuestionView questionId={questionId} />
+        ) : latest ? (
+          <RunView key={latest} dispatchId={latest} />
         ) : (
           <p className="sf-main-empty">Select a run or a question</p>
         )}

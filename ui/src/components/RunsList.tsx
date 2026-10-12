@@ -34,6 +34,38 @@ export function isMine(row: ActiveDispatch): boolean {
   return row.operator === "human-surface";
 }
 
+/** The newest run asked from this surface, or null: what the main pane shows before anything is selected. */
+export function latestMine(rows: readonly ActiveDispatch[] | undefined): string | null {
+  let best: { id: string; at: number } | null = null;
+  for (const row of rows ?? []) {
+    if (!isMine(row)) continue;
+    const at = parseStartedAt(row.startedAt, 0);
+    if (!best || at > best.at) best = { id: row.dispatchId, at };
+  }
+  return best?.id ?? null;
+}
+
+const FILTER_KEY = "sf-run-filter";
+
+/** The reader's last filter; their own runs until they choose otherwise. */
+export function initialFilter(): RunFilter {
+  try {
+    const v = window.localStorage.getItem(FILTER_KEY);
+    if (v === "all" || v === "mine" || v === "system") return v;
+  } catch {
+    /* storage unavailable */
+  }
+  return "mine";
+}
+
+export function rememberFilter(f: RunFilter): void {
+  try {
+    window.localStorage.setItem(FILTER_KEY, f);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 interface Positioned {
   readonly row: ActiveDispatch;
   readonly dispatchId: string;
