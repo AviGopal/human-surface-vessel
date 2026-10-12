@@ -21,9 +21,7 @@ import { buildFormCensus, type FormCensus } from "./form-census.ts";
 import { aggregateByKind, readExposureCorpus } from "./importance-learn.ts";
 import { isSolicitation } from "./solicitation.ts";
 import { listPanels, questionView } from "./store.ts";
-import type { Question } from "../ui/src/api/participation.ts";
-import { answerReaderFor } from "../ui/src/lib/disposition.ts";
-import { classifyQuestion, malformedReason, type QuestionClass } from "../ui/src/lib/questionClass.ts";
+import { answerReaderFor, classifyQuestion, malformedReason, type ClassifiableQuestion, type QuestionClass } from "./question-class.ts";
 
 /** One kind of question, as a person meets it here, and what people have done with it. */
 export interface AskKindView {
@@ -53,7 +51,7 @@ export interface AsksView {
  * kind: the part of this report a question WRITER can read before it writes.
  */
 export function buildAsksView(): AsksView {
-  const panels = listPanels().filter((pn) => isSolicitation(pn)).map(questionView) as unknown as Question[];
+  const panels = listPanels().filter((pn) => isSolicitation(pn)).map(questionView) as unknown as (ClassifiableQuestion & { kind?: string; answered: boolean; declined: boolean; createdAt: number })[];
   const evidence = new Map(aggregateByKind(readExposureCorpus()).evidence.map((e) => [e.kind, e] as const));
   const byKind = new Map<string, { count: number; open: number; presented_as: Partial<Record<QuestionClass, number>>; answer_readers: Record<string, number> }>();
   let openAsks = 0;

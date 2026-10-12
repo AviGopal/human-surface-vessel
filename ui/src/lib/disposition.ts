@@ -84,27 +84,14 @@ export function checkEscalationAnswer(a: EscalationAnswer): AnswerProblem | null
   return readAs === a.verb ? null : { kind: "verb_flip", readAs };
 }
 
-/** Which reader, if any, consumes answers to this panel. Keyed on the panel id prefix the writers use. */
-export type AnswerReader = "escalation" | "pending_verification" | "localization" | "docs_decision" | "unknown";
-
-export function answerReaderFor(panelId: string): AnswerReader {
-  if (panelId.startsWith("needs-human-") || panelId.startsWith("reland-needs-human-")) return "escalation";
-  if (panelId.startsWith("pending-verify-")) return "pending_verification";
-  if (panelId.startsWith("needs-localization-")) return "localization";
-  if (panelId.startsWith("docs-decision-")) return "docs_decision";
-  return "unknown";
-}
+// Shared with the server (src/question-class.ts): the reader each answer goes to.
+export { answerReaderFor, answersAreUnread, type AnswerReader } from "../../../src/question-class";
 
 /** The gap an escalation panel is about — the reader's own `gapIdFromPanelId` rule. */
 export function gapIdForPanel(panelId: string): string | null {
   if (panelId.startsWith("reland-needs-human-")) return panelId.slice("reland-needs-human-".length);
   if (panelId.startsWith("needs-human-")) return panelId.slice("needs-human-".length);
   return null;
-}
-
-/** Kinds whose answers are stored but read by nothing on this surface's path. */
-export function answersAreUnread(reader: AnswerReader): boolean {
-  return reader === "pending_verification" || reader === "localization" || reader === "docs_decision";
 }
 
 /** Choices for "did the fix work?" — typed now so answers are machine-readable when a reader lands. */
