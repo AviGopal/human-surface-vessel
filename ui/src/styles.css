@@ -1939,3 +1939,8 @@ body { overflow: hidden; }
 .sf-attempt-line[data-outcome="reached"] .sf-attempt-outcome { color: var(--sf-reached); }
 .sf-attempt-n { font-weight: 600; }
 .sf-attempt-outcome { flex: 1 1 20rem; min-width: 0; }
+
+/* Nested bullets: depth from the item's indent (Prose.tsx). */
+.sf-prose li[data-depth="1"] { margin-left: 1.25rem; }
+.sf-prose li[data-depth="2"] { margin-left: 2.5rem; }
+.sf-prose li[data-depth="3"] { margin-left: 3.75rem; }

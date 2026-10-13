@@ -53,10 +53,16 @@ function isCodeRecord(text: string): boolean {
   return /^\s*`[^`]+`\s*$/.test(text);
 }
 
+const BULLET = /^\s*[-*+]\s+/;
+
+function indentOf(line: string): number {
+  return (/^\s*/.exec(line)?.[0] ?? "").replace(/\t/g, "  ").length;
+}
+
 type Block =
   | { kind: "p"; lines: string[] }
   | { kind: "h"; level: number; text: string }
-  | { kind: "ul"; items: string[] }
+  | { kind: "ul"; items: string[]; depths: number[] }
   | { kind: "ol"; items: string[] }
   | { kind: "quote"; lines: string[] }
   | { kind: "code"; lines: string[]; lang: string }
@@ -125,13 +131,19 @@ function parseBlocks(source: string): Block[] {
       continue;
     }
 
-    if (/^[-*+]\s+/.test(line)) {
+    // Bullets may be indented (models indent them under a heading) and nested:
+    // each item keeps its depth, counted from the first item's indent.
+    if (BULLET.test(line)) {
       const items: string[] = [];
-      while (i < lines.length && /^[-*+]\s+/.test((lines[i] ?? "").trimEnd())) {
-        items.push((lines[i] ?? "").trimEnd().replace(/^[-*+]\s+/, ""));
+      const depths: number[] = [];
+      const base = indentOf(line);
+      while (i < lines.length && BULLET.test((lines[i] ?? "").trimEnd())) {
+        const l = (lines[i] ?? "").trimEnd();
+        items.push(l.replace(BULLET, ""));
+        depths.push(Math.max(0, Math.floor((indentOf(l) - base) / 2)));
         i += 1;
       }
-      blocks.push({ kind: "ul", items });
+      blocks.push({ kind: "ul", items, depths });
       continue;
     }
 
@@ -159,7 +171,7 @@ function parseBlocks(source: string): Block[] {
     while (i < lines.length) {
       const next = (lines[i] ?? "").trimEnd();
       if (next.trim() === "") break;
-      if (/^(#{1,6}\s|[-*+]\s|\d+\.\s|>\s?|```)/.test(next)) break;
+      if (/^(#{1,6}\s|\d+\.\s|>\s?|```)/.test(next) || BULLET.test(next)) break;
       if (next.includes("|") && TABLE_SEPARATOR.test((lines[i + 1] ?? "").trimEnd())) break;
       para.push(next);
       i += 1;
@@ -216,7 +228,7 @@ export function Prose({ source }: { source: string }): ReactNode {
             return (
               <ul key={key}>
                 {block.items.map((item, j) => (
-                  <li key={`${key}-${j}`}>{renderInline(item, `${key}-${j}`)}</li>
+                  <li key={`${key}-${j}`} data-depth={block.depths[j] ?? 0}>{renderInline(item, `${key}-${j}`)}</li>
                 ))}
               </ul>
             );
