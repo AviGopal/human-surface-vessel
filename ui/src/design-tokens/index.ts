@@ -13,6 +13,8 @@
 export const RUN_STATES = [
   "reached",
   "not-reached",
+  /** Finished with no reach verdict: the judge abstained (or none was recorded). Not a failure. */
+  "ungraded",
   "running",
   "waiting",
   "accepted",
@@ -39,7 +41,7 @@ export const NON_TERMINAL_STATES = [
 ] as const satisfies readonly RunState[];
 
 /** Only these two are verdicts. Everything else is a stage. */
-export const TERMINAL_STATES = ["reached", "not-reached"] as const satisfies readonly RunState[];
+export const TERMINAL_STATES = ["reached", "not-reached", "ungraded"] as const satisfies readonly RunState[];
 
 export function isTerminal(state: RunState): boolean {
   return (TERMINAL_STATES as readonly RunState[]).includes(state);
@@ -64,6 +66,7 @@ export const STATE_TOKENS: Readonly<Record<RunState, StateTokens>> = {
     bg: "var(--sf-not-reached-bg)",
     label: "not reached",
   },
+  ungraded: { fg: "var(--sf-accepted)", bg: "var(--sf-accepted-bg)", label: "not graded" },
   running: { fg: "var(--sf-running)", bg: "var(--sf-running-bg)", label: "running" },
   waiting: { fg: "var(--sf-waiting)", bg: "var(--sf-waiting-bg)", label: "waiting" },
   accepted: { fg: "var(--sf-accepted)", bg: "var(--sf-accepted-bg)", label: "accepted" },
@@ -158,7 +161,9 @@ export const CONTENT_FORMS_MIRRORED: FormsMirrorOk = true;
  * agree-affordance: a correct outcome needs no feedback, and soliciting praise
  * pollutes a corpus that is already a biased failure sample.
  */
-export const VERDICT_OPTIONS: Readonly<Record<"reached" | "not-reached", readonly string[]>> = {
+export const VERDICT_OPTIONS: Readonly<Record<"reached" | "not-reached" | "ungraded", readonly string[]>> = {
+  // No verdict to disagree with: the person gives one.
+  ungraded: ["Reached", "Not reached"],
   reached: ["Didn't do it", "Did the wrong thing", "Right idea, wrong change", "Unsafe"],
   "not-reached": [
     "It actually worked",

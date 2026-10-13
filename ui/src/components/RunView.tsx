@@ -199,7 +199,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   };
   const state: RunState = deriveRunState(facts);
   const span = spanMs(walk);
-  const reason = state === "not-reached" ? (walk.goalReachReason?.trim() || walk.error || null) : null;
+  const reason = state === "not-reached" || state === "ungraded" ? (walk.goalReachReason?.trim() || walk.error || null) : null;
   const who = walk.operator ?? walk.trigger;
   const answer = walk.answerBody?.trim() ? walk.answerBody : null;
   // The builder pastes the reach verdict where no step wrote an answer: label it as what it is.
@@ -278,7 +278,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         <section className="sf-view-section" aria-label="Grade">
           <h3 className="sf-view-label">Grade</h3>
           <GradeGesture
-            renderedState={state === "reached" ? "reached" : "not-reached"}
+            renderedState={state === "reached" ? "reached" : state === "ungraded" ? "ungraded" : "not-reached"}
             executionId={walk.executionId}
             goal={walk.goal ?? ""}
             alreadyGraded={walk.humanGraded}

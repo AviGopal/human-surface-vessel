@@ -81,7 +81,7 @@ export function RunRow({
   };
   const state: RunState = deriveRunState(facts);
   const reason =
-    state === "not-reached" ? rowReason({ goalReachReason: walk?.goalReachReason ?? null, ...(walk?.error !== undefined ? { error: walk.error } : {}) }) : null;
+    state === "not-reached" || state === "ungraded" ? rowReason({ goalReachReason: walk?.goalReachReason ?? null, ...(walk?.error !== undefined ? { error: walk.error } : {}) }) : null;
 
   const goalText = row.goal?.trim();
 

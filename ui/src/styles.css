@@ -513,6 +513,12 @@ body {
   background: var(--sf-not-reached-bg);
 }
 
+/* No verdict: neutral, neither success nor failure. */
+.sf-verdict[data-state="ungraded"] {
+  color: var(--sf-accepted);
+  background: var(--sf-accepted-bg);
+}
+
 .sf-verdict[data-state="running"] {
   color: var(--sf-running);
   background: var(--sf-running-bg);

@@ -30,7 +30,7 @@ export function GradeGesture({
   humanReachNotes,
   appliesTo = null,
 }: {
-  renderedState: "reached" | "not-reached";
+  renderedState: "reached" | "not-reached" | "ungraded";
   /** ABSENT when goal-host never recorded one — the key is not serialized. */
   executionId: string | undefined;
   goal: string;
@@ -74,7 +74,7 @@ export function GradeGesture({
       }}
     >
       {appliesTo ? <p className="sf-note sf-muted sf-grade-applies">{appliesTo}</p> : null}
-      <ChoiceInput label="Disagree with the verdict?" options={options} value={selected} onChange={setSelected} disabled={grade.isPending} />
+      <ChoiceInput label={renderedState === "ungraded" ? "Your verdict" : "Disagree with the verdict?"} options={options} value={selected} onChange={setSelected} disabled={grade.isPending} />
       <TextInput label="Note" placeholder="Note (optional)" value={note} onChange={setNote} disabled={grade.isPending} />
       <InteractionFooter
         state={stateOf(grade)}

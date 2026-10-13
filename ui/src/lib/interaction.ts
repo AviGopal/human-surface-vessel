@@ -48,14 +48,16 @@ export function questionForAsk(ask: { type: string; choices?: readonly string[] 
 
 /** Grading a finished run → `goal_verification_label_write` via /api/grade. */
 export function gradePayload(args: {
-  renderedState: "reached" | "not-reached";
+  renderedState: "reached" | "not-reached" | "ungraded";
   option: string;
   note: string;
   executionId: string;
   goal: string;
 }): { executionId: string; goal: string; verdict: OracleVerdict; notes: string } {
   const verdict: OracleVerdict =
-    args.renderedState === "reached" ? "not_achieved" : args.option === "It actually worked" ? "achieved" : "not_achieved";
+    args.renderedState === "ungraded"
+      ? args.option === "Reached" ? "achieved" : "not_achieved"
+      : args.renderedState === "reached" ? "not_achieved" : args.option === "It actually worked" ? "achieved" : "not_achieved";
   return {
     executionId: args.executionId,
     goal: args.goal,

@@ -60,7 +60,8 @@ export function deriveRunState(f: RunFacts): RunState {
   // Terminal first. Both `completed` and `failed` are terminal, and neither of
   // them is the verdict.
   if (f.status === "completed" || f.status === "failed") {
-    return f.reached === true ? "reached" : "not-reached";
+    // No verdict is not a failing verdict: the judge abstained, or none was recorded.
+    return f.reached === true ? "reached" : f.reached === false ? "not-reached" : "ungraded";
   }
   if (f.awaitingAnswer) return "waiting";
   if (f.quietForMs !== null && f.quietForMs > STALL_AFTER_MS) return "stalled";

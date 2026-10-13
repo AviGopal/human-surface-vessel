@@ -6,7 +6,7 @@
  * route authentication).
  */
 
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import type { GoalWalkState, RouteAround } from "../api/types";
 import { buildChains, inputsOf, isSeed, type ChainNode, type RunChains } from "../lib/chain";
 import { creditFor, readCredit, type CreditRow, type RunCredit } from "../lib/credit";
@@ -44,7 +44,12 @@ function CreditBadge({ row }: { row: CreditRow | null }): ReactNode {
   );
 }
 
-function NodeContent({ n, density, credit, choosable = true }: { n: ChainNode; density: "full" | "inline"; credit: RunCredit | null; choosable?: boolean }): ReactNode {
+/** Whether outputs here offer "Show as": never in the blind calibration view. */
+const Choosable = createContext(true);
+
+function NodeContent({ n, density, credit, choosable: forced }: { n: ChainNode; density: "full" | "inline"; credit: RunCredit | null; choosable?: boolean }): ReactNode {
+  const allowed = useContext(Choosable);
+  const choosable = allowed && forced !== false;
   const content = fromProvenance(n.raw);
   if (!content) return null;
   return (
@@ -224,6 +229,7 @@ export function Chain({
   // view, where the layout must not carry the verdict.
   const collapsed = !blind && walk.reached !== true;
   return (
+    <Choosable.Provider value={!blind}>
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
 
@@ -291,5 +297,6 @@ export function Chain({
       <CreditSection credit={credit} />
       <RouteArounds items={routes} />
     </section>
+    </Choosable.Provider>
   );
 }

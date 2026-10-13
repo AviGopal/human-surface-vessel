@@ -169,7 +169,7 @@ export function Rendered({
           ) : null}
           {extraHeader}
           <span className="sf-rendered-head-right">
-            {choosable && density === "full" ? <FormChoice current={plan.form} onChoose={choose} /> : null}
+            {choosable ? <FormChoice current={plan.form} onChoose={choose} /> : null}
             {completeness(content)}
             {density === "full" && plan.text.trim().length > 0 && plan.form !== "scalar" ? (
               <CopyButton text={plan.text} what={content.shape} />
@@ -177,7 +177,7 @@ export function Rendered({
           </span>
         </div>
       ) : null}
-      {!header && choosable && density === "full" ? (
+      {!header && choosable ? (
         <div className="sf-rendered-choice-bar">
           <FormChoice current={plan.form} onChoose={choose} />
         </div>

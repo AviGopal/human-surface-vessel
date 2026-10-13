@@ -15,6 +15,7 @@ import { formatElapsed } from "../lib/time";
 const MARKS: Readonly<Record<RunState, string>> = {
   reached: "●",
   "not-reached": "●",
+  ungraded: "–",
   running: "◐",
   waiting: "?",
   accepted: "○",

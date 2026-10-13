@@ -65,3 +65,10 @@ describe("typed questions", () => {
     expect(questionForAsk({ type: "claim" })).toEqual({ kind: "text" });
   });
 });
+
+describe("grading a run with no verdict", () => {
+  test("the person's verdict is recorded as given", () => {
+    expect(gradePayload({ renderedState: "ungraded", option: "Reached", note: "", executionId: "e", goal: "g" }).verdict).toBe("achieved");
+    expect(gradePayload({ renderedState: "ungraded", option: "Not reached", note: "", executionId: "e", goal: "g" }).verdict).toBe("not_achieved");
+  });
+});

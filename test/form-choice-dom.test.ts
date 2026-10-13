@@ -72,3 +72,19 @@ describe("Show as", () => {
     expect(el.querySelector("[aria-label='Show as']")).toBeNull();
   });
 });
+
+describe("Show as on a one-line row", () => {
+  test("must-fail: an expanded row offers Show as, so a record can be asked for as a table", async () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const w = { ...walk(), reached: false } as GoalWalkState;
+    await act(async () => {
+      createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(Chain, { walk: w }))));
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    const row = el.querySelector(".sf-chain-collapsed details");
+    expect(row).not.toBeNull();
+    expect(row?.querySelector("[aria-label='Show as']")).not.toBeNull();
+  });
+});

@@ -139,3 +139,17 @@ describe("the attempts strip (958e0dcd, 10-13)", () => {
     expect(sentence).toBe(1);
   });
 });
+
+describe("a run the judge did not grade (80a57177, cc920124)", () => {
+  const ABSTAIN = "abstain:cut-view — the deliverable did not fit the judge's view (executionTraceList 24000/27665 chars); not graded";
+  test("must-fail: it reads as not graded, not as not reached, and the grade box asks for a verdict", async () => {
+    const el = await mount(base({ status: "failed", reached: null, goalReachReason: ABSTAIN, executionId: "exec_abstain" }));
+    const badge = el.querySelector(".sf-view-head .sf-verdict");
+    expect(badge?.getAttribute("data-state")).toBe("ungraded");
+    expect(badge?.textContent).toContain("not graded");
+    const grade = el.querySelector("[aria-label='Grade']")?.textContent ?? "";
+    expect(grade).toContain("Your verdict");
+    expect(grade).toContain("Reached");
+    expect(grade).not.toContain("Disagree with the verdict?");
+  });
+});
