@@ -13,7 +13,8 @@
  *   full   — full frame and body.
  */
 
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { sendObservation } from "../api/exposure";
+import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { useRenderPolicy } from "../api/queries";
 import { contentText, type Content } from "../lib/content";
 import { CUT_KEY, planContent, type RenderPlan } from "../lib/ledger";
@@ -104,6 +105,7 @@ export function Rendered({
   region,
   header = true,
   extraHeader,
+  choosable = false,
 }: {
   content: Content;
   density?: Density;
@@ -113,12 +115,36 @@ export function Rendered({
   header?: boolean;
   /** Caller-specific facts that belong in the header (e.g. a step's producer). */
   extraHeader?: ReactNode;
+  /**
+   * Offer the reader a choice of form ("Prose · Fields · Table · Text"). A
+   * choice redraws this payload at once and is recorded as a `form_choice`
+   * observation the form learner reads (src/form-learn.ts). It previews through
+   * the same path a pin or a learned form takes, so what a person picks is
+   * what the learner would later apply for this kind of content.
+   */
+  choosable?: boolean;
 }): ReactNode {
   const { paused, intervalMs } = useLiveControls();
   const policy = useRenderPolicy({ enabled: !paused, intervalMs }).data;
   const text = contentText(content);
   const truncated = content.state === "truncated";
-  const plan = planFor(content, policy);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const planned = planFor(content, policy);
+  const plan = chosen
+    ? planFor(content, { ...(policy ?? {}), formByShape: { ...(policy?.formByShape ?? {}), [content.shape]: chosen } })
+    : planned;
+  const choose = (form: string): void => {
+    if (form === plan.form) return;
+    sendObservation({
+      obs_type: "form_choice",
+      visibility: "operator_only",
+      shape: content.shape,
+      form_from: plan.form,
+      form_to: form,
+      ...(region ? { region } : {}),
+    });
+    setChosen(form);
+  };
 
   if (density === "row") {
     return (
@@ -143,11 +169,17 @@ export function Rendered({
           ) : null}
           {extraHeader}
           <span className="sf-rendered-head-right">
+            {choosable && density === "full" ? <FormChoice current={plan.form} onChoose={choose} /> : null}
             {completeness(content)}
             {density === "full" && plan.text.trim().length > 0 && plan.form !== "scalar" ? (
               <CopyButton text={plan.text} what={content.shape} />
             ) : null}
           </span>
+        </div>
+      ) : null}
+      {!header && choosable && density === "full" ? (
+        <div className="sf-rendered-choice-bar">
+          <FormChoice current={plan.form} onChoose={choose} />
         </div>
       ) : null}
       {plan.form === "empty" && content.state === "absent" ? null : (
@@ -167,5 +199,25 @@ export function Rendered({
         />
       ) : null}
     </div>
+  );
+}
+
+const CHOICES: readonly { form: string; label: string }[] = [
+  { form: "prose", label: "Prose" },
+  { form: "record", label: "Fields" },
+  { form: "rows", label: "Table" },
+  { form: "text", label: "Text" },
+];
+
+/** The reader's say in how one payload is drawn. */
+function FormChoice({ current, onChoose }: { current: string; onChoose: (form: string) => void }): ReactNode {
+  return (
+    <span className="sf-form-choice" role="group" aria-label="Show as">
+      {CHOICES.map((c) => (
+        <button key={c.form} type="button" aria-pressed={current === c.form} onClick={() => onChoose(c.form)}>
+          {c.label}
+        </button>
+      ))}
+    </span>
   );
 }

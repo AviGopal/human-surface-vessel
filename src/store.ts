@@ -90,7 +90,14 @@ export type ObservationType =
    * judgement — a pin, a complaint, a fidelity predicate — needs something to
    * attach to.
    */
-  | "form_decision";
+  | "form_decision"
+  /**
+   * A person chose a different form for one drawn payload ("as table", "as
+   * text"): `body.shape`, `body.form_from`, `body.form_to`. Unlike
+   * form_decision this IS a judgement, and the form learner reads it
+   * (src/form-learn.ts) as evidence against the form left and for the one chosen.
+   */
+  | "form_choice";
 
 /**
  * The four states a SHOWN solicitation can end in, kept distinct here because
@@ -442,7 +449,8 @@ export function recordObservation(
   // The learner reads the journal file itself (src/importance-learn.ts
   // `readExposureCorpus`), so its corpus is neither bounded by MAX_HISTORY nor
   // lost on restart.
-  if (exposure) appendParticipation("interactorObservation_write", entry);
+  // A person's form choice is learner evidence too (src/form-learn.ts readFormChoices).
+  if (exposure || o.type === "form_choice") appendParticipation("interactorObservation_write", entry);
   emit("observation_recorded", entry);
   return entry;
 }

@@ -56,6 +56,7 @@ import {
   readExposureCorpus,
 } from "./importance-learn.ts";
 import { getRenderPolicy } from "./store.ts";
+import { readParticipation } from "./participation-journal.ts";
 
 export const FORM_LEARNER_ID = "activity:form_learn@human-surface-vessel";
 
@@ -63,6 +64,13 @@ export const FORM_LEARNER_ID = "activity:form_learn@human-surface-vessel";
 export const FORM_OBSERVATION_FLOOR = 5;
 /** Posterior mean α/(α+β) at or below which a form is demoted for its shape. */
 export const FORM_DEMOTE_THRESHOLD = 1 / 3;
+/**
+ * Posterior mean at or above which a form PEOPLE CHOSE is promoted for its
+ * shape. Promotion needs FORM_OBSERVATION_FLOOR explicit choices of that form:
+ * a person picking it is the variance source v1 lacked, so this is not
+ * "promoting an unexplored form" — people explored it.
+ */
+export const FORM_PROMOTE_THRESHOLD = 2 / 3;
 /** The surface's verbatim default; the only form v1 ever writes. */
 export const FALLBACK_FORM = "text";
 /** Rows in the participation list are planned under this shape (`QUESTION_CONTENT_SHAPE`). */
@@ -76,6 +84,8 @@ export interface PairEvidence {
   readonly successes: number;
   readonly failures: number;
   readonly mean: number;
+  /** How many of the successes were a person explicitly choosing this form (form_choice). */
+  readonly chosen: number;
 }
 
 export interface FormMove {
@@ -113,11 +123,29 @@ function round4(v: number): number {
 export function aggregateFormEvidence(
   records: readonly Rec[],
 ): { pairs: PairEvidence[]; skipped: { reason: string; count: number }[] } {
-  const tally = new Map<string, { shape: string; form: string; s: number; f: number }>();
+  const tally = new Map<string, { shape: string; form: string; s: number; f: number; c: number }>();
   const skipped = new Map<string, number>();
   const skip = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
 
   for (const rec of records) {
+    // A person moved one payload from one form to another: against the form
+    // left (a statement about presentation, weighed like a complaint), and for
+    // the form chosen.
+    if (rec["type"] === "form_choice") {
+      const body = (rec["body"] ?? {}) as Rec;
+      const shape = str(body["shape"]);
+      const from = str(body["form_from"]);
+      const to = str(body["form_to"]);
+      if (!shape || !from || !to || from === to) { skip("form_choice_incomplete"); continue; }
+      const away = tally.get(`${shape}\u0000${from}`) ?? { shape, form: from, s: 0, f: 0, c: 0 };
+      away.f += 1;
+      tally.set(`${shape}\u0000${from}`, away);
+      const toward = tally.get(`${shape}\u0000${to}`) ?? { shape, form: to, s: 0, f: 0, c: 0 };
+      toward.s += 1;
+      toward.c += 1;
+      tally.set(`${shape}\u0000${to}`, toward);
+      continue;
+    }
     if (rec["type"] !== "exposure_outcome") continue;
     const outcome = str(rec["outcome"]);
     // The join fields ride in the observation body (everything outside the
@@ -134,7 +162,7 @@ export function aggregateFormEvidence(
     if (outcome !== "answered" && outcome !== "complained") { skip("unknown_outcome"); continue; }
     const shape = str(body["shape"]) ?? str(rec["panelKind"]) ?? DEFAULT_ROW_SHAPE;
     const key = `${shape}\u0000${form}`;
-    const cell = tally.get(key) ?? { shape, form, s: 0, f: 0 };
+    const cell = tally.get(key) ?? { shape, form, s: 0, f: 0, c: 0 };
     if (outcome === "answered") cell.s += 1; else cell.f += 1;
     tally.set(key, cell);
   }
@@ -151,6 +179,7 @@ export function aggregateFormEvidence(
       successes: cell.s,
       failures: cell.f,
       mean: round4(alpha / (alpha + beta)),
+      chosen: cell.c,
     });
   }
   pairs.sort((a, b) => (a.shape + a.form).localeCompare(b.shape + b.form));
@@ -179,8 +208,21 @@ export function decideLearnedForms(
   for (const [shape, shapePairs] of byShape) {
     const scored = shapePairs.filter((p) => p.successes + p.failures >= FORM_OBSERVATION_FLOOR);
     if (scored.length === 0) continue; // below the floor: not evidence yet
-    const demoted = scored.find((p) => p.mean <= FORM_DEMOTE_THRESHOLD && p.form !== FALLBACK_FORM);
     const had = current[shape] ?? null;
+    // A form people chose, often enough and well enough, is promoted. Checked
+    // before demotion: when people have said what they want instead, that beats
+    // falling back to the verbatim default.
+    const promoted = scored
+      .filter((p) => p.chosen >= FORM_OBSERVATION_FLOOR && p.mean >= FORM_PROMOTE_THRESHOLD)
+      .reduce<PairEvidence | null>((a, b) => (a === null || b.mean > a.mean ? b : a), null);
+    if (promoted) {
+      if (had !== promoted.form) {
+        next[shape] = promoted.form;
+        moves.push({ shape, from: had, to: promoted.form, because: promoted });
+      }
+      continue;
+    }
+    const demoted = scored.find((p) => p.mean <= FORM_DEMOTE_THRESHOLD && p.form !== FALLBACK_FORM);
     if (demoted) {
       if (had !== FALLBACK_FORM) {
         next[shape] = FALLBACK_FORM;
@@ -198,13 +240,22 @@ export function decideLearnedForms(
   return { next, moves };
 }
 
+/** Every form_choice observation journalled on this surface. */
+export function readFormChoices(): Rec[] {
+  const out: Rec[] = [];
+  for (const raw of readParticipation("interactorObservation_write")) {
+    if (raw && typeof raw === "object" && !Array.isArray(raw) && (raw as Rec)["type"] === "form_choice") out.push(raw as Rec);
+  }
+  return out;
+}
+
 /**
  * The pass. Reads the exposure corpus the importance learner reads, scores it
  * for form, and returns what should be written. Never writes.
  */
 export function runFormLearningPass(): FormLearningPass {
   const current = getRenderPolicy().learnedFormByShape ?? {};
-  const { pairs, skipped } = aggregateFormEvidence(readExposureCorpus() as readonly Rec[]);
+  const { pairs, skipped } = aggregateFormEvidence([...(readExposureCorpus() as readonly Rec[]), ...readFormChoices()]);
   const { next, moves } = decideLearnedForms(pairs, current);
   const changed = moves.length > 0;
   const scoredPairs = pairs.filter((p) => p.successes + p.failures >= FORM_OBSERVATION_FLOOR).length;

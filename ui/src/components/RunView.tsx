@@ -252,7 +252,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         {promoted && promotedContent ? (
           <section className="sf-view-section" aria-label="Answer">
             <h3 className="sf-view-label">Answer</h3>
-            <Rendered content={promotedContent} density="full" header={false} region="run_answer" />
+            <Rendered content={promotedContent} density="full" header={false} region="run_answer" choosable />
           </section>
         ) : null}
         <section

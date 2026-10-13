@@ -128,6 +128,8 @@ const OBSERVATION_TYPES = [
    * reward to attach to, whichever mechanism eventually supplies the reward.
    */
   "form_decision",
+  /** A person's choice of a different form for one payload: read by the form learner. */
+  "form_choice",
 ] as const;
 const EXPOSURE_OUTCOMES = ["answered", "declined", "complained", "shown_not_acted"] as const;
 
@@ -753,6 +755,23 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           );
         }
       }
+      // A form choice names the payload's shape and both forms, or it is not evidence.
+      if (obsType === "form_choice") {
+        const shapeOf = optStr(pointer, "shape");
+        const from = optStr(pointer, "form_from");
+        const to = optStr(pointer, "form_to");
+        if (!shapeOf || !from || !to || from === to) {
+          return c.json(
+            {
+              resolved: false,
+              success: false,
+              shape: type,
+              error: "a form_choice needs shape, form_from and form_to (different forms)",
+            },
+            400,
+          );
+        }
+      }
       const scanStatusRaw = optStr(pointer, "scan_status") ?? optStr(pointer, "scanStatus");
       const entry = recordObservation({
         type: obsType,
@@ -788,6 +807,30 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       // refusal from the policy writer is the CONVERGED case (the weights the
       // evidence implies are already in force), not a failure, so it is
       // reported and not turned into a non-2xx on the record that was accepted.
+      // A person's form choice is new evidence for the form learner only.
+      if (obsType === "form_choice") {
+        const formPass = runFormLearningPass();
+        const formWrite = formPass.changed
+          ? writeRenderPolicy({ learnedFormByShape: formPass.learnedFormByShape, assignedBy: FORM_LEARNER_ID, reason: formPass.reason })
+          : null;
+        return c.json({
+          resolved: true,
+          success: true,
+          shape: type,
+          body: entry,
+          learning: {
+            form_learning: {
+              changed: formPass.changed,
+              learned_form_by_shape: formWrite ? formWrite.policy.learnedFormByShape : formPass.learnedFormByShape,
+              moves: formPass.moves,
+              reason: formPass.reason,
+              learner: formPass.learnerId,
+              ...(formWrite?.refusal ? { refusal: formWrite.refusal.reason } : {}),
+            },
+          },
+        });
+      }
+
       const learning =
         obsType === "exposure_outcome"
           ? (() => {

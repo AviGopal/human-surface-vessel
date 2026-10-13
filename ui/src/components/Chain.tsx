@@ -44,7 +44,7 @@ function CreditBadge({ row }: { row: CreditRow | null }): ReactNode {
   );
 }
 
-function NodeContent({ n, density, credit }: { n: ChainNode; density: "full" | "inline"; credit: RunCredit | null }): ReactNode {
+function NodeContent({ n, density, credit, choosable = true }: { n: ChainNode; density: "full" | "inline"; credit: RunCredit | null; choosable?: boolean }): ReactNode {
   const content = fromProvenance(n.raw);
   if (!content) return null;
   return (
@@ -52,6 +52,7 @@ function NodeContent({ n, density, credit }: { n: ChainNode; density: "full" | "
       content={content}
       density={density}
       region="run_chain"
+      choosable={choosable}
       extraHeader={
         <>
           {n.producerExecutionId ? <span className="sf-muted sf-mono">{n.producerExecutionId}</span> : null}
@@ -63,7 +64,9 @@ function NodeContent({ n, density, credit }: { n: ChainNode; density: "full" | "
 }
 
 /** Forms that are content to read: they lead open even on a run that has not reached. */
-const READ_FORMS: ReadonlySet<string> = new Set(["prose", "text", "scalar"]);
+// Not "text": on live runs that was raw JSON (a 766,693-char variantMetricsSummary)
+// and lists of machine ids. Anything else opens when a person asks (Show as).
+const READ_FORMS: ReadonlySet<string> = new Set(["prose", "scalar"]);
 
 type Policy = Parameters<typeof planFor>[1];
 
@@ -246,7 +249,7 @@ export function Chain({
       ) : (
         lead.map((n) => (
           <article key={n.id} className="sf-chain-output">
-            <NodeContent n={n} density="full" credit={credit} />
+            <NodeContent n={n} density="full" credit={credit} choosable={!blind} />
             <Inputs n={n} chains={chains} depth={0} seen={new Set()} credit={credit} />
           </article>
         ))
