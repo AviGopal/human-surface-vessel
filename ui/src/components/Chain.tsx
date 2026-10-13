@@ -154,8 +154,20 @@ function CreditSection({ credit }: { credit: RunCredit | null }): ReactNode {
  * `blind` is for calibration grading: what the run produced, with nothing that
  * carries the system's own verdict on it (credit, stalls).
  */
-export function Chain({ walk, blind = false }: { walk: GoalWalkState; blind?: boolean }): ReactNode {
-  const chains = buildChains(walk);
+export function Chain({
+  walk,
+  blind = false,
+  exclude = null,
+}: {
+  walk: GoalWalkState;
+  blind?: boolean;
+  /** A node already drawn elsewhere (the run view's promoted answer): not drawn again here. */
+  exclude?: string | null;
+}): ReactNode {
+  const built = buildChains(walk);
+  const chains = exclude
+    ? { ...built, outputs: built.outputs.filter((n) => n.id !== exclude), unused: built.unused.filter((n) => n.id !== exclude) }
+    : built;
   const credit = blind ? null : readCredit(walk.learning);
   const routes = blind ? [] : (walk.routeArounds ?? []);
   const terminal = walk.status !== "running";

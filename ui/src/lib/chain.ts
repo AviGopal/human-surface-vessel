@@ -129,3 +129,12 @@ export function inputsOf(n: ChainNode, chains: RunChains): { inputs: readonly Ch
   }
   return { inputs, missing };
 }
+
+/**
+ * What a run produced that reads as its answer: its largest output with
+ * content, else the largest thing it produced with content. Null when it
+ * produced nothing with content.
+ */
+export function answerNode(chains: RunChains): ChainNode | null {
+  return chains.outputs[0] ?? chains.unused.find((n) => !n.placeholder) ?? null;
+}

@@ -100,10 +100,20 @@ describe("the attempts strip", () => {
 });
 
 describe("the answer header", () => {
-  test("must-fail: an answer that is only the judge's reason is labelled a verdict", async () => {
+  test("must-fail: an answer that is only the judge's reason is labelled a verdict; what the run produced leads as the answer", async () => {
     const el = await mount();
-    expect(el.querySelector("[aria-label='Verdict']")).not.toBeNull();
-    expect(el.querySelector("[aria-label='Answer']")).toBeNull();
+    const verdict = el.querySelector("[aria-label='Verdict']");
+    const answer = el.querySelector("[aria-label='Answer']");
+    expect(verdict).not.toBeNull();
+    expect(verdict?.className).toContain("sf-verdict-compact");
+    expect(answer).not.toBeNull();
+    expect(answer?.textContent).not.toContain(REASON);
+    // The answer comes first, and its output is not drawn a second time under Outputs.
+    expect(answer!.compareDocumentPosition(verdict!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const outputs = el.querySelector("[aria-label='Outputs']")?.textContent ?? "";
+    const firstLine = (answer?.textContent ?? "").slice(0, 30);
+    expect(firstLine.length).toBeGreaterThan(0);
+    expect(outputs).not.toContain(firstLine);
   });
 
   test("an answer with its own text stays an answer", () => {

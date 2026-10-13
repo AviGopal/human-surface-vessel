@@ -21,6 +21,8 @@ import { useLiveControls } from "../state/liveControls";
 import { segmentAttempts } from "../lib/attempts";
 import { AnswerBody, answerIsVerdict } from "./Answer";
 import { Attempts } from "./Attempts";
+import { answerNode, buildChains } from "../lib/chain";
+import { fromProvenance } from "../lib/content";
 import { Chain } from "./Chain";
 import { isWriteShape } from "../lib/shapes";
 import { RunQuestion } from "./RunQuestion";
@@ -199,6 +201,10 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const answer = walk.answerBody?.trim() ? walk.answerBody : null;
   // The builder pastes the reach verdict where no step wrote an answer: label it as what it is.
   const verdictOnly = answer !== null && answerIsVerdict(answer, walk.goal ?? undefined, walk.goalReachReason);
+  // A reached run whose "answer" is only the verdict: what it produced leads as
+  // the answer, and the verdict follows as a line.
+  const promoted = walk.reached === true && verdictOnly ? answerNode(buildChains(walk)) : null;
+  const promotedContent = promoted ? fromProvenance(promoted.raw) : null;
   // Several walks: say WHICH one the verdict, answer and grade belong to. It is
   // the reported walk, which is not necessarily the last one.
   const segments = segmentAttempts(walk);
@@ -238,13 +244,24 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
       {runQuestion ? <RunQuestion question={runQuestion} running={walk.status === "running"} /> : null}
 
       {answer ? (
-        <section className="sf-view-section" aria-label={verdictOnly ? "Verdict" : "Answer"}>
+        <>
+        {promoted && promotedContent ? (
+          <section className="sf-view-section" aria-label="Answer">
+            <h3 className="sf-view-label">Answer</h3>
+            <Rendered content={promotedContent} density="full" header={false} region="run_answer" />
+          </section>
+        ) : null}
+        <section
+          className={`sf-view-section${promoted && promotedContent ? " sf-verdict-compact" : ""}`}
+          aria-label={verdictOnly ? "Verdict" : "Answer"}
+        >
           <h3 className="sf-view-label">{verdictOnly ? "Verdict" : "Answer"}</h3>
           <AnswerBody answerBody={answer} goal={walk.goal} dispatchId={walk.dispatchId} />
         </section>
+        </>
       ) : null}
 
-      <Chain walk={walk} />
+      <Chain walk={walk} exclude={promoted && promotedContent ? promoted.id : null} />
 
       <details className="sf-view-section sf-provenance" aria-label="Provenance">
         <summary className="sf-view-label">Provenance</summary>

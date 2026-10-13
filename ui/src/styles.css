@@ -204,6 +204,13 @@ body {
   padding-left: var(--sf-space-6);
 }
 
+/* Tailwind's preflight strips list markers; prose lists keep theirs. */
+.sf-prose ul { list-style: disc; }
+.sf-prose ol { list-style: decimal; }
+.sf-prose ul li[data-depth="1"] { list-style-type: circle; }
+.sf-prose ul li[data-depth="2"],
+.sf-prose ul li[data-depth="3"] { list-style-type: square; }
+
 .sf-prose li {
   margin-bottom: var(--sf-space-1);
 }
@@ -1944,3 +1951,7 @@ body { overflow: hidden; }
 .sf-prose li[data-depth="1"] { margin-left: 1.25rem; }
 .sf-prose li[data-depth="2"] { margin-left: 2.5rem; }
 .sf-prose li[data-depth="3"] { margin-left: 3.75rem; }
+
+/* The verdict under a promoted answer: one quiet line, its basis folded. */
+.sf-verdict-compact { font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
+.sf-verdict-compact .sf-view-label { display: inline; margin-right: var(--sf-space-2); }
