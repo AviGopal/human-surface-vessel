@@ -184,3 +184,24 @@ describe("authored content inside an envelope is planned as text, command stream
     expect(plan.text.startsWith("Here's a report on today.")).toBe(true);
   });
 });
+
+describe("one text field beside small ones (llmTextCompletion)", () => {
+  const text = "Here's a summary:\n\n### 1. **System**\n- OS: Linux\n\n### 2. **Files**\n- `package.json`\n";
+  test("the text draws as prose; model and usage ride as chips", () => {
+    const p = planContent(
+      "llm_completion_dispatch",
+      JSON.stringify({ success: true, shape: "llmTextCompletion", body: { text, model: "deepseek-chat", usage: { input_tokens: 2216, output_tokens: 97 } } }),
+      false,
+    );
+    expect(p.form).toBe("prose");
+    expect(p.text).toBe(text);
+    expect(p.meta).toContainEqual({ kind: "field", key: "model", text: "deepseek-chat" });
+    expect(p.meta).toContainEqual({ kind: "field", key: "usage", text: "input_tokens 2216 · output_tokens 97" });
+  });
+
+  test("must-fail: a record with two text fields, or a big field beside the text, stays a record", () => {
+    const long = "x".repeat(400);
+    expect(planContent("r", JSON.stringify({ a: long, b: long }), false).form).toBe("record");
+    expect(planContent("r", JSON.stringify({ a: long, rows: [1, 2, 3] }), false).form).toBe("record");
+  });
+});

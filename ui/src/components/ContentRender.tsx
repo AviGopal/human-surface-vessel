@@ -207,6 +207,13 @@ function MetaChipView({ chip }: { chip: MetaChip }): ReactNode {
   if (chip.kind === "note") {
     return <span className="sf-muted">{chip.text}</span>;
   }
+  if (chip.kind === "field") {
+    return (
+      <span className="sf-muted">
+        <span className="sf-mono">{chip.key}</span> {chip.text}
+      </span>
+    );
+  }
   return null;
 }
 
@@ -220,8 +227,8 @@ function EnvelopeMeta({ meta }: { meta?: readonly MetaChip[] }): ReactNode {
   if (!meta || meta.length === 0) return null;
   return (
     <div className="sf-envelope-meta">
-      {meta.map((chip) => (
-        <MetaChipView key={chip.kind} chip={chip} />
+      {meta.map((chip, i) => (
+        <MetaChipView key={`${chip.kind}-${i}`} chip={chip} />
       ))}
     </div>
   );

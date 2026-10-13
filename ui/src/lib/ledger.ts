@@ -247,7 +247,9 @@ export type MetaChip =
   /** The producer reported failure (`success: false`, or an `error` field). */
   | { readonly kind: "failure"; readonly text: string | null }
   /** The wrapper's own description of what it carries (`metadata.summary`). */
-  | { readonly kind: "note"; readonly text: string };
+  | { readonly kind: "note"; readonly text: string }
+  /** A small field beside the one text field a record carries (`model`, `usage`), drawn as a chip. */
+  | { readonly kind: "field"; readonly key: string; readonly text: string };
 
 /**
  * WHICH BRANCH DECIDED. Carried on every plan because a form with no recorded
@@ -834,14 +836,73 @@ function planValue(shape: string, v: unknown, text: string, depth: number, parti
 
   // The single-key wrapper: `{"goal":"…"}`. The key is a label.
   const only = keys.length === 1 ? keys[0] : undefined;
-  if (!partial && only !== undefined) {
+  if (only !== undefined) {
     const value = o[only];
-    if (typeof value === "string" && !value.includes("\n") && value.trim().length <= SCALAR_MAX_CHARS) {
+    if (!partial && typeof value === "string" && !value.includes("\n") && value.trim().length <= SCALAR_MAX_CHARS) {
       return { form: "scalar", text: value, label: only, decidedBy: "wrapper" };
+    }
+    // A long or multi-line string under one key (an llmTextCompletion's
+    // `{"text": …}`) is the content itself: planned as text, so prose and
+    // markdown draw as prose instead of a monospace cell in a record. A cut
+    // preview keeps the received part of it; the frame says how much that is.
+    if (typeof value === "string" && value.trim().length > 0 && (value.includes("\n") || value.trim().length > SCALAR_MAX_CHARS)) {
+      const inner = planText(shape, value, depth + 1);
+      const cutNote: MetaChip[] = o[CUT_KEY] !== undefined ? [{ kind: "note", text: CUT_NOTE }] : [];
+      return { ...inner, label: only, decidedBy: partial ? "partial_json" : "wrapper", meta: [...cutNote, ...(inner.meta ?? [])] };
+    }
+  }
+
+  // One long text field beside small ones (`{text, model, usage}`): the text is
+  // the content and the rest is about it. The text draws as text; each other
+  // field is a chip, a flat object as `k v · k v`. Anything bigger stays a record.
+  const textKeys = keys.filter((k) => typeof o[k] === "string" && ((o[k] as string).includes("\n") || (o[k] as string).trim().length > SCALAR_MAX_CHARS));
+  if (textKeys.length === 1) {
+    const textKey = textKeys[0] as string;
+    const fields: MetaChip[] = [];
+    let small = true;
+    for (const k of keys) {
+      if (k === textKey) continue;
+      const fv = fieldText(o[k]);
+      if (fv === null) {
+        small = false;
+        break;
+      }
+      fields.push({ kind: "field", key: k, text: fv });
+    }
+    if (small && fields.length <= 6) {
+      const inner = planText(shape, o[textKey] as string, depth + 1);
+      return {
+        ...inner,
+        label: textKey,
+        decidedBy: partial ? "partial_json" : "wrapper",
+        // A cut text ends where the preview did: say so right under it.
+        meta: [...(o[CUT_KEY] !== undefined ? [{ kind: "note" as const, text: CUT_NOTE }] : []), ...(inner.meta ?? []), ...failureMeta, ...fields],
+      };
     }
   }
 
   return { form: "record", text, decidedBy: partial ? "partial_json" : "record", ...(failureMeta.length ? { meta: failureMeta } : {}) };
+}
+
+/** A field small enough to be a chip: a short scalar, or a flat object of up to four short scalars. Null otherwise. */
+function fieldText(v: unknown): string | null {
+  const scalar = (x: unknown): string | null =>
+    typeof x === "number" || typeof x === "boolean"
+      ? String(x)
+      : typeof x === "string" && !x.includes("\n") && x.length <= 80
+        ? x
+        : x === null
+          ? "null"
+          : null;
+  const flat = scalar(v);
+  if (flat !== null) return flat;
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+    const entries = Object.entries(v).filter(([k]) => k !== CUT_KEY);
+    if (entries.length === 0 || entries.length > 4) return null;
+    const parts = entries.map(([k, x]) => (scalar(x) === null ? null : `${k} ${scalar(x)}`));
+    return parts.every((x) => x !== null) ? parts.join(" · ") : null;
+  }
+  return null;
 }
 
 /** Plan a complete (not truncated) string, parsing it when it is JSON. */
