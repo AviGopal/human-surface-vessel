@@ -152,3 +152,31 @@ describe("segmentAttempts", () => {
     expect(unknown.some((s) => s.reported)).toBe(false);
   });
 });
+
+describe("restart reasons (the project-507 run, 10-12)", () => {
+  test("a feedback retry then a retry without the hollow shortcut label attempts 2 and 3", () => {
+    const segs = segmentAttempts(
+      walk({
+        dispatchId: "d-507",
+        poolEvents: events,
+        walkLog: [
+          "/run-goal: walk: FEEDBACK-RETRY — re-running the same chain with the prior verdict fed into synthesis",
+          "/run-goal: walk: hollow satisfier verdict — re-running with suppressSatisfierShapes",
+          "/run-goal: walk: retry WIDENED target shapes to [shellResult,httpResponse,webSearchResult]",
+        ],
+      }),
+    );
+    expect(segs.map((s) => s.reason)).toEqual([null, "retried with the prior verdict", "retried without the hollow shortcut"]);
+  });
+
+  test("must-fail: when a restart line is not recognised, no attempt is labelled rather than the wrong one", () => {
+    const segs = segmentAttempts(
+      walk({
+        dispatchId: "d-507-partial",
+        poolEvents: events,
+        walkLog: ["/run-goal: walk: FEEDBACK-RETRY — re-running the same chain", "/run-goal: walk: some restart this surface does not know"],
+      }),
+    );
+    expect(segs.map((s) => s.reason)).toEqual([null, null, null]);
+  });
+});

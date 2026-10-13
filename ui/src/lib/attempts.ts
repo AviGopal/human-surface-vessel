@@ -87,6 +87,7 @@ function boundaries(events: readonly PoolEvent[]): number[] {
 
 const RESTART_PATTERNS: readonly [RegExp, string][] = [
   [/FEEDBACK-RETRY/, "retried with the prior verdict"],
+  [/re-running with suppressSatisfierShapes/, "retried without the hollow shortcut"],
   [/re-framing to alternative target shapes (\[[^\]]*\])?/, "re-framed to alternative targets"],
   [/fallback walk|FALLBACK/i, "fell back"],
 ];
@@ -165,8 +166,10 @@ export function segmentAttempts(walk: GoalWalkState): readonly AttemptSegment[] 
   const judged = walk.reached === true ? starts.length - 1 : starts.length;
   const verdictOffset = judged - verdicts.length;
   const reportedReason = walk.goalReachReason ? norm(walk.goalReachReason) : null;
-  // The log is a tail: align reasons to the LAST attempts, since the earliest
-  // lines are the ones that fall off.
+  // A reason is shown only when every restart has one: aligned from the tail,
+  // one restart line the patterns miss shifts every label onto the wrong
+  // attempt (a feedback retry was shown on the widened retry after it).
+  const complete = reasons.length === starts.length - 1;
   const reasonOffset = starts.length - 1 - reasons.length;
 
   const segs: AttemptSegment[] = starts.map((start, n) => {
@@ -187,7 +190,7 @@ export function segmentAttempts(walk: GoalWalkState): readonly AttemptSegment[] 
       events: events.slice(start, end),
       steps,
       provenance,
-      reason: n > 0 && reasonIndex >= 0 ? (reasons[reasonIndex] ?? null) : null,
+      reason: complete && n > 0 && reasonIndex >= 0 ? (reasons[reasonIndex] ?? null) : null,
       current,
       partial: n === 0 && events.length >= 64 && events[0]?.shape !== "goal",
       verdict,
