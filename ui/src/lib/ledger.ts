@@ -568,8 +568,10 @@ function decodeJsonStringBody(raw: string): string {
  * so the renderer can say "cut off here" at the exact place it happened. The
  * earlier rule refused any read of a fragment because a half-parse presents a
  * guess as a reading. This does not half-parse: a member is either complete and
- * shown verbatim, or incomplete and dropped. Nothing is inferred about the part
- * that did not arrive, and the frame still says how much of the whole this is.
+ * shown verbatim, or incomplete and dropped. The one exception is a string the
+ * cut fell inside: its received characters are kept (they arrived verbatim) and
+ * the cut is marked. Nothing is inferred about the part that did not arrive, and
+ * the frame still says how much of the whole this is.
  */
 export const CUT_KEY = "\u22ef";
 export const CUT_NOTE = "cut off here \u2014 the rest is beyond the preview";
@@ -617,7 +619,19 @@ class PartialReader {
       }
       this.i++;
     }
-    throw new Cut(undefined, false);
+    // A string the cut fell inside: the characters that arrived are shown
+    // verbatim, and the container is marked cut where it ends. Dropping it lost
+    // the whole of an answer whose text was one long string (a 2,251-char
+    // llmTextCompletion previewed at 2,000 showed nothing at all). An escape
+    // the cut split is dropped, never guessed.
+    const received = this.s.slice(start + 1).replace(/\\(u[0-9a-fA-F]{0,3})?$/, "");
+    let prefix: string;
+    try {
+      prefix = JSON.parse(`"${received}"`) as string;
+    } catch {
+      throw new Cut(undefined, false);
+    }
+    throw new Cut(prefix.length > 0 ? prefix : undefined, false);
   }
 
   private atom(): unknown {

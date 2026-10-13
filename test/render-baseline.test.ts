@@ -71,9 +71,12 @@ describe("render baseline over the live census", () => {
       const o = r.value as Record<string, unknown>;
       for (const [k, v] of Object.entries(o)) {
         if (k === CUT_KEY) continue;
-        const holdsCut = JSON.stringify(v).includes(CUT_KEY) || (Array.isArray(v) && k === Object.keys(o).filter((x) => x !== CUT_KEY).at(-1));
+        const last = k === Object.keys(o).filter((x) => x !== CUT_KEY).at(-1);
+        const holdsCut = JSON.stringify(v).includes(CUT_KEY) || (Array.isArray(v) && last);
         if (holdsCut) continue; // the member the cut fell inside is partial by design
-        expect(i.preview!).toContain(`${JSON.stringify(k)}:${JSON.stringify(v)}`);
+        const whole = `${JSON.stringify(k)}:${JSON.stringify(v)}`;
+        // A string the cut fell inside keeps exactly the characters that arrived: verbatim, unclosed.
+        expect(i.preview!).toContain(typeof v === "string" && last && o[CUT_KEY] !== undefined && !i.preview!.includes(whole) ? whole.slice(0, -1) : whole);
         checked++;
       }
     }
@@ -130,10 +133,15 @@ describe("planner branches", () => {
 });
 
 describe("parsePartialJson", () => {
-  test("keeps whole members, drops the one cut mid-string, marks the cut", () => {
+  test("keeps whole members and what arrived of the string the cut fell in, and marks the cut", () => {
     const r = parsePartialJson('{"a":1,"b":"whole","c":"cut mid');
     expect(r?.cut).toBe(true);
-    expect(r?.value).toEqual({ a: 1, b: "whole", [CUT_KEY]: expect.any(String) });
+    expect(r?.value).toEqual({ a: 1, b: "whole", c: "cut mid", [CUT_KEY]: expect.any(String) });
+  });
+
+  test("an escape the cut split is dropped, never guessed", () => {
+    expect(parsePartialJson('{"t":"caf\\u00')?.value).toEqual({ t: "caf", [CUT_KEY]: expect.any(String) });
+    expect(parsePartialJson('{"t":"line\\')?.value).toEqual({ t: "line", [CUT_KEY]: expect.any(String) });
   });
 
   test("a number running into the cut is not trusted", () => {
@@ -148,10 +156,10 @@ describe("parsePartialJson", () => {
     expect(CUT_KEY in (v as object)).toBe(false);
   });
 
-  test("malformed before the cut, or nothing whole, is not read", () => {
+  test("malformed before the cut is not read; a lone cut string keeps what arrived", () => {
     expect(parsePartialJson('{"a" 1,')).toBeNull();
-    expect(parsePartialJson('{"a":"cut')).toBeNull();
     expect(parsePartialJson("plain text")).toBeNull();
+    expect(parsePartialJson('{"a":"cut')?.value).toEqual({ a: "cut", [CUT_KEY]: expect.any(String) });
   });
 
   test("a truncated resolver reply unwraps to the whole part of its body", () => {

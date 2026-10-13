@@ -118,4 +118,20 @@ describe("Chain outputs", () => {
     expect(notEl.querySelector(".sf-chain-collapsed")).toBeNull();
     expect(notEl.querySelectorAll(".sf-chain-output").length).toBe(reachedEl.querySelectorAll(".sf-chain-output").length);
   });
+
+  test("must-fail: an answer whose text the preview cut shows what arrived, not nothing (9c7ee149, 10-13)", async () => {
+    const text = "Here's a summary based on the current system state:\n\n### 1. **System/Container Environment**\n   - **Operating System**: Linux (specifical";
+    const preview = `{"success":true,"shape":"llmTextCompletion","body":{"text":${JSON.stringify(text).slice(0, -1)}`;
+    const el = await mount(
+      walk([
+        seed,
+        { id: "l", shape: "llm_completion_dispatch", producedBy: "satisfier:llm_completion_dispatch", contentPreview: preview, chars: 2251, truncated: true, consumedIds: ["g"] },
+      ]),
+    );
+    const out = el.querySelector(".sf-chain-output")?.textContent ?? "";
+    expect(out).toContain("Here's a summary based on the current system state");
+    expect(out).toContain("System/Container Environment");
+    expect(out).toContain("cut off here");
+  });
 });
+
