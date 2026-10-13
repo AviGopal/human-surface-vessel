@@ -377,6 +377,8 @@ function rescueBareScalar(
  * verbatim text; drawing it as a page is a form a person asks for (Show as).
  */
 export function isMarkup(text: string): boolean {
+  // A document start is markup even when a preview cut it before its closing tag.
+  if (/^\s*(?:<!doctype\s+html\b|<html\b)/i.test(text)) return true;
   const open = /^\s*(?:<!doctype[^>]*>\s*)?<([a-zA-Z][\w:-]*)\b[^>]*>/i.exec(text);
   if (!open || !open[1]) return false;
   return new RegExp(`</${open[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*>`, "i").test(text);
@@ -821,13 +823,22 @@ function planValue(shape: string, v: unknown, text: string, depth: number, parti
   const failure = failureChip(o);
   const md = o["metadata"];
   const mdKeys = md && typeof md === "object" && !Array.isArray(md) ? Object.keys(md).filter((k) => k !== "shape" && k !== "rowCount") : [];
-  const note: MetaChip | null =
-    mdKeys.length === 0
-      ? null
-      : { kind: "note", text: mdKeys.length === 1 && typeof (md as Record<string, unknown>)["summary"] === "string"
-          ? ((md as Record<string, unknown>)["summary"] as string)
-          : JSON.stringify(Object.fromEntries(mdKeys.map((k) => [k, (md as Record<string, unknown>)[k]]))) };
-  const failureMeta: MetaChip[] = [...(failure ? [failure] : []), ...(note ? [note] : [])];
+  // The wrapper's own description: a lone summary as a note; otherwise each small
+  // field as a chip, and only fields too big for a chip as JSON (never the lot).
+  const mdObj = (md ?? {}) as Record<string, unknown>;
+  const mdChips: MetaChip[] = [];
+  if (mdKeys.length === 1 && typeof mdObj["summary"] === "string") {
+    mdChips.push({ kind: "note", text: mdObj["summary"] as string });
+  } else if (mdKeys.length > 0) {
+    const big: Record<string, unknown> = {};
+    for (const k of mdKeys) {
+      const fv = fieldText(mdObj[k]);
+      if (fv !== null) mdChips.push({ kind: "field", key: k, text: fv });
+      else big[k] = mdObj[k];
+    }
+    if (Object.keys(big).length > 0) mdChips.push({ kind: "note", text: JSON.stringify(big) });
+  }
+  const failureMeta: MetaChip[] = [...(failure ? [failure] : []), ...mdChips];
 
   // The resolver reply wrapper: `{success, shape, body}`. The wrapper is transport;
   // `body` is what the resolver answered. Its facts ride as chips.
@@ -1011,6 +1022,34 @@ export function detectForm(
 
 export function isKnownForm(form: string): form is ContentForm {
   return (CONTENT_FORMS as readonly string[]).includes(form);
+}
+
+/**
+ * The markup a payload carries: the text itself when it is markup, else the
+ * first string inside it (parsed whole, or the received part of a cut preview)
+ * that is. Generic over shapes: a fetched page inside {success, body:{body}} is
+ * found the same way as a bare <svg>. Null when there is none.
+ */
+export function findMarkup(text: string): string | null {
+  if (isMarkup(text)) return text;
+  const t = text.trim();
+  if (!t.startsWith("{") && !t.startsWith("[")) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(t);
+  } catch {
+    value = parsePartialJson(t)?.value;
+  }
+  const seen: unknown[] = [value];
+  for (let i = 0; i < seen.length && i < 500; i++) {
+    const v = seen[i];
+    if (typeof v === "string") {
+      if (isMarkup(v)) return v;
+    } else if (v && typeof v === "object") {
+      seen.push(...Object.values(v as Record<string, unknown>));
+    }
+  }
+  return null;
 }
 
 /* ─────────────────────────── parsing helpers ─────────────────────────────── */

@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
-import { CUT_KEY, heuristicForm, parseDiff, parseRows, type MetaChip, type RenderPlan } from "../lib/ledger";
+import { CUT_KEY, findMarkup, heuristicForm, parseDiff, parseRows, type MetaChip, type RenderPlan } from "../lib/ledger";
 import { Prose } from "./Prose";
 
 /** Above this a value is not a scalar, whatever the plan said. */
@@ -550,7 +550,8 @@ function FormBody({ plan }: { plan: RenderPlan }): ReactNode {
         </p>
       );
     case "page":
-      return <SandboxedPage source={plan.text} />;
+      // The markup the payload carries, found inside a wrapper if need be.
+      return <SandboxedPage source={findMarkup(plan.text) ?? plan.text} />;
     case "text":
     default:
       // THE DEFAULT BRANCH. Every unrecognised form lands here and renders

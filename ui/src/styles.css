@@ -1988,3 +1988,8 @@ body { overflow: hidden; }
 .sf-chain-failed > summary { color: var(--sf-not-reached); font-weight: 600; cursor: pointer; }
 .sf-chain-failed ul { list-style: none; margin: 0; padding: 0; }
 .sf-failure-text { color: var(--sf-ink); font-size: var(--sf-text-sm); }
+
+/* Verdicts and reasons can be unbroken machine text (JSON arrays of shape names): wrap anywhere. */
+.sf-attempt-outcome,
+.sf-run-reason-full,
+.sf-failure-text { overflow-wrap: anywhere; }

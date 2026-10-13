@@ -238,6 +238,12 @@ export function Chain({
   const lead = outputsOk.length > 0 ? outputsOk : produced.slice(0, 1);
   const withContent = outputsOk.length > 0 ? produced : produced.slice(1);
   const references = chains.unused.filter((n) => n.placeholder);
+  // Not reached yet: content to read leads open wherever it sits in the chain.
+  // A model answer that consumed nothing is "unused", not an output, and was
+  // hidden behind a 125 KB gap dump that happened to be the run's output.
+  const readable = collapsed ? [...lead, ...withContent].filter((n) => readsOpen(n, policy)) : [];
+  const shownOpen = new Set(readable.map((n) => n.id));
+  const withContentRest = withContent.filter((n) => !shownOpen.has(n.id));
   // A run that has not reached (finished or still walking): records and rows are
   // one line until opened (a running walk's pool can hold a 130 KB record), but
   // content to read still leads open, by its planned form. Never in the blind
@@ -264,13 +270,11 @@ export function Chain({
         // Not reached yet: content to read leads open; records and rows stay one line.
         // (Collapsing everything hid every answer.)
         <>
-          {lead
-            .filter((n) => readsOpen(n, policy))
-            .map((n) => (
-              <article key={n.id} className="sf-chain-output">
-                <NodeContent n={n} density="full" credit={credit} />
-              </article>
-            ))}
+          {readable.map((n) => (
+            <article key={n.id} className="sf-chain-output">
+              <NodeContent n={n} density="full" credit={credit} />
+            </article>
+          ))}
           <ul className="sf-chain-collapsed">
             {lead
               .filter((n) => !readsOpen(n, policy))
@@ -288,7 +292,7 @@ export function Chain({
         ))
       )}
 
-      {withContent.length === 0 && references.length > 0 ? (
+      {withContentRest.length === 0 && references.length > 0 ? (
         // Nothing but references: no "Produced" fold that opens onto nothing.
         <details className="sf-chain-references">
           <summary>No content · {references.length}</summary>
@@ -298,13 +302,13 @@ export function Chain({
             ))}
           </ul>
         </details>
-      ) : withContent.length + references.length > 0 ? (
+      ) : withContentRest.length + references.length > 0 ? (
         <details className="sf-chain-unused" open={lead.length === 0}>
           <summary>
-            {chains.outputs.length === 0 ? "Produced" : "Unused"} · {withContent.length + references.length}
+            {chains.outputs.length === 0 ? "Produced" : "Unused"} · {withContentRest.length + references.length}
           </summary>
           <ul>
-            {withContent.map((n) => (
+            {withContentRest.map((n) => (
               <InputRow key={n.id} n={n} chains={chains} depth={MAX_DEPTH} seen={new Set()} credit={credit} />
             ))}
           </ul>

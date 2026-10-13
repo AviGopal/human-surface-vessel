@@ -17,7 +17,7 @@ import { sendObservation } from "../api/exposure";
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { useRenderPolicy } from "../api/queries";
 import { contentText, type Content } from "../lib/content";
-import { CUT_KEY, isMarkup, planContent, type RenderPlan } from "../lib/ledger";
+import { CUT_KEY, findMarkup, planContent, type RenderPlan } from "../lib/ledger";
 import { formatChars } from "../lib/time";
 import { useLiveControls } from "../state/liveControls";
 import { ContentRender, CopyButton } from "./ContentRender";
@@ -169,7 +169,7 @@ export function Rendered({
           ) : null}
           {extraHeader}
           <span className="sf-rendered-head-right">
-            {choosable ? <FormChoice current={plan.form} onChoose={choose} markup={isMarkup(text)} /> : null}
+            {choosable ? <FormChoice current={plan.form} onChoose={choose} markup={findMarkup(text) !== null} /> : null}
             {completeness(content)}
             {density === "full" && plan.text.trim().length > 0 && plan.form !== "scalar" ? (
               <CopyButton text={plan.text} what={content.shape} />
@@ -179,7 +179,7 @@ export function Rendered({
       ) : null}
       {!header && choosable ? (
         <div className="sf-rendered-choice-bar">
-          <FormChoice current={plan.form} onChoose={choose} markup={isMarkup(text)} />
+          <FormChoice current={plan.form} onChoose={choose} markup={findMarkup(text) !== null} />
         </div>
       ) : null}
       {plan.form === "empty" && content.state === "absent" ? null : (

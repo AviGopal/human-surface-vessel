@@ -63,7 +63,7 @@ type Block =
   | { kind: "p"; lines: string[] }
   | { kind: "h"; level: number; text: string }
   | { kind: "ul"; items: string[]; depths: number[] }
-  | { kind: "ol"; items: string[] }
+  | { kind: "ol"; items: string[]; start: number }
   | { kind: "quote"; lines: string[] }
   | { kind: "code"; lines: string[]; lang: string }
   | { kind: "table"; header: string[]; rows: string[][] }
@@ -148,12 +148,15 @@ function parseBlocks(source: string): Block[] {
     }
 
     if (/^\d+\.\s+/.test(line)) {
+      // The writer's own numbering: a list split by sub-bullets or blank lines
+      // continues at its number rather than restarting at 1.
+      const start = Number(/^(\d+)\./.exec(line)?.[1] ?? "1");
       const items: string[] = [];
       while (i < lines.length && /^\d+\.\s+/.test((lines[i] ?? "").trimEnd())) {
         items.push((lines[i] ?? "").trimEnd().replace(/^\d+\.\s+/, ""));
         i += 1;
       }
-      blocks.push({ kind: "ol", items });
+      blocks.push({ kind: "ol", items, start });
       continue;
     }
 
@@ -234,7 +237,7 @@ export function Prose({ source }: { source: string }): ReactNode {
             );
           case "ol":
             return (
-              <ol key={key}>
+              <ol key={key} start={block.start}>
                 {block.items.map((item, j) => (
                   <li key={`${key}-${j}`}>{renderInline(item, `${key}-${j}`)}</li>
                 ))}
