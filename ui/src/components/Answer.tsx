@@ -157,7 +157,7 @@ function AnswerSegmentView({ shape, text, truncated }: { shape: string; text: st
  * already shows the goal as its title and those impulses in the trace, so the
  * heading is dropped when it repeats the goal and the basis is folded.
  */
-function splitAnswer(body: string, goal: string | undefined): { main: string; basis: string | null } {
+export function splitAnswer(body: string, goal: string | undefined): { main: string; basis: string | null } {
   let text = body.trim();
   const firstLine = text.split("\n", 1)[0] ?? "";
   const heading = /^#\s+(.*)$/.exec(firstLine);
@@ -232,4 +232,15 @@ function dropLine(text: string, line: string): string | null {
     .join("\n")
     .trim();
   return kept.length > 0 ? kept : null;
+}
+
+/**
+ * Whether the answer's text is only the judge's reason: the builder pastes the
+ * reach verdict where an answer belongs when no step wrote one. Shown as a
+ * verdict, it reads as the judge's claim; shown as an answer, it reads as one.
+ */
+export function answerIsVerdict(body: string, goal: string | undefined, reason: string | null | undefined): boolean {
+  if (!reason?.trim()) return false;
+  const norm = (t: string): string => t.replace(/\s+/g, " ").trim().toLowerCase();
+  return norm(splitAnswer(body, goal).main) === norm(reason);
 }

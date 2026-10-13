@@ -1929,3 +1929,13 @@ body { overflow: hidden; }
 .sf-question-subject { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 /* Not asks: folded below them and quieter. */
 .sf-qgroup[data-folded="true"] > .sf-qgroup-head { color: var(--sf-ink-3); }
+
+/* A run's attempts, one line each, under its title. */
+.sf-attempts { list-style: none; margin: var(--sf-space-3) 0 0; padding: 0; display: grid; gap: var(--sf-space-1); }
+.sf-attempt-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sf-space-2); font-size: var(--sf-text-sm); }
+.sf-attempt-mark { width: 1ch; text-align: center; }
+.sf-attempt-line[data-outcome="rejected"] .sf-attempt-mark { color: var(--sf-not-reached); }
+.sf-attempt-line[data-outcome="reached"] .sf-attempt-mark,
+.sf-attempt-line[data-outcome="reached"] .sf-attempt-outcome { color: var(--sf-reached); }
+.sf-attempt-n { font-weight: 600; }
+.sf-attempt-outcome { flex: 1 1 20rem; min-width: 0; }

@@ -158,8 +158,12 @@ export function segmentAttempts(walk: GoalWalkState): readonly AttemptSegment[] 
 
   const reasons = restartReasons(walk.walkLog);
   const verdicts = hollowVerdicts(walk.walkLog);
-  // The log is a tail: align verdicts to the LAST attempts.
-  const verdictOffset = starts.length - verdicts.length;
+  // The log is a tail: align verdicts to the LAST attempts that were judged
+  // hollow. A reached run's last attempt has no HOLLOW line, so its rejections
+  // belong to the attempts before it; aligning them to the very last attempt
+  // put attempt 1's rejection on the attempt that reached.
+  const judged = walk.reached === true ? starts.length - 1 : starts.length;
+  const verdictOffset = judged - verdicts.length;
   const reportedReason = walk.goalReachReason ? norm(walk.goalReachReason) : null;
   // The log is a tail: align reasons to the LAST attempts, since the earliest
   // lines are the ones that fall off.
@@ -176,7 +180,7 @@ export function segmentAttempts(walk: GoalWalkState): readonly AttemptSegment[] 
       : (record?.steps ?? []).filter((s) => nextAt === null || typeof s["at"] !== "number" || (s["at"] as number) < nextAt);
     const provenance = current ? (stale ? [] : walk.poolProvenance) : (record?.provenance ?? null);
     const reasonIndex = n - 1 - reasonOffset;
-    const verdict = n - verdictOffset >= 0 ? (verdicts[n - verdictOffset] ?? null) : null;
+    const verdict = n < judged && n - verdictOffset >= 0 ? (verdicts[n - verdictOffset] ?? null) : null;
     return {
       number: n + 1,
       startAt,

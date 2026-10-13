@@ -19,7 +19,8 @@ import { useNow } from "../lib/useNow";
 import { useProgressWatch } from "../lib/useProgressWatch";
 import { useLiveControls } from "../state/liveControls";
 import { segmentAttempts } from "../lib/attempts";
-import { AnswerBody } from "./Answer";
+import { AnswerBody, answerIsVerdict } from "./Answer";
+import { Attempts } from "./Attempts";
 import { Chain } from "./Chain";
 import { isWriteShape } from "../lib/shapes";
 import { RunQuestion } from "./RunQuestion";
@@ -196,16 +197,13 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const reason = state === "not-reached" ? (walk.goalReachReason?.trim() || walk.error || null) : null;
   const who = walk.operator ?? walk.trigger;
   const answer = walk.answerBody?.trim() ? walk.answerBody : null;
+  // The builder pastes the reach verdict where no step wrote an answer: label it as what it is.
+  const verdictOnly = answer !== null && answerIsVerdict(answer, walk.goal ?? undefined, walk.goalReachReason);
   // Several walks: say WHICH one the verdict, answer and grade belong to. It is
   // the reported walk, which is not necessarily the last one.
   const segments = segmentAttempts(walk);
   const reportedSeg = segments.find((s) => s.reported) ?? null;
-  const attemptNote =
-    segments.length > 1
-      ? reportedSeg
-        ? `attempt ${reportedSeg.number} of ${segments.length} reported`
-        : `${segments.length} attempts`
-      : null;
+
 
   return (
     <article className="sf-run" data-state={state} aria-busy={query.isFetching}>
@@ -219,7 +217,6 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
           {who ? <span>{who}</span> : null}
           {walk.executionPath ? <span className="sf-chip">{PATH_LABEL[walk.executionPath]}</span> : null}
           {walk.humanGraded ? <span className="sf-chip">human-graded</span> : null}
-          {attemptNote ? <span className="sf-chip sf-chip-quiet">{attemptNote}</span> : null}
           <span className="sf-mono sf-view-id" title={walk.executionId ?? undefined}>
             {walk.dispatchId}
           </span>
@@ -234,13 +231,15 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         {walk.humanReachNotes ? <p className="sf-run-reason-full">“{walk.humanReachNotes}”</p> : null}
       </header>
 
+      <Attempts walk={walk} segments={segments} />
+
       {walk.status === "running" ? <WalkNeeds walk={walk} /> : null}
 
       {runQuestion ? <RunQuestion question={runQuestion} running={walk.status === "running"} /> : null}
 
       {answer ? (
-        <section className="sf-view-section" aria-label="Answer">
-          <h3 className="sf-view-label">Answer</h3>
+        <section className="sf-view-section" aria-label={verdictOnly ? "Verdict" : "Answer"}>
+          <h3 className="sf-view-label">{verdictOnly ? "Verdict" : "Answer"}</h3>
           <AnswerBody answerBody={answer} goal={walk.goal} dispatchId={walk.dispatchId} />
         </section>
       ) : null}
