@@ -916,7 +916,10 @@ function planValue(shape: string, v: unknown, text: string, depth: number, parti
 /** A field small enough to be a chip: a short scalar, or a flat object of up to four short scalars. Null otherwise. */
 function fieldText(v: unknown): string | null {
   const scalar = (x: unknown): string | null =>
-    typeof x === "number" || typeof x === "boolean"
+    typeof x === "number"
+      ? // A float like 0.0017771999999999998 reads as 0.001777.
+        Number.isInteger(x) ? String(x) : String(Number(x.toPrecision(4)))
+      : typeof x === "boolean"
       ? String(x)
       : typeof x === "string" && !x.includes("\n") && x.length <= 80
         ? x

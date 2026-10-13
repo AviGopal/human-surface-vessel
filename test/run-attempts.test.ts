@@ -97,6 +97,13 @@ describe("the attempts strip", () => {
     expect(lines[1]?.textContent).toContain("retried with the prior verdict");
     expect(lines[1]?.textContent).toContain("substrateGap_write");
   });
+
+  test("must-fail: an earlier attempt this browser never saw says its content was not retained; the current one does not", async () => {
+    const el = await mount();
+    const lines = [...el.querySelectorAll("[aria-label='Attempts'] li")];
+    expect(lines[0]?.textContent).toContain("content not retained");
+    expect(lines[1]?.textContent).not.toContain("content not retained");
+  });
 });
 
 describe("the answer header", () => {

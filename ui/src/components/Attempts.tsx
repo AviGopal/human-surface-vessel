@@ -54,6 +54,8 @@ export function Attempts({ walk, segments }: { walk: GoalWalkState; segments: re
             <span className="sf-attempt-body">
               {t0 !== null && seg.startAt !== null ? <span className="sf-muted sf-mono">{clock(seg.startAt - t0)}</span> : null}
               {seg.reason ? <span className="sf-muted">{seg.reason}</span> : null}
+              {/* Trace's own condition and words: this browser never saw that attempt's content. */}
+              {!seg.current && seg.provenance === null ? <span className="sf-muted">content not retained</span> : null}
               {shapes.map((sh) => (
                 <span key={sh} className="sf-shape-badge">{sh}</span>
               ))}

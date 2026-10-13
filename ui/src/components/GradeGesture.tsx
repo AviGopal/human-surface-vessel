@@ -20,6 +20,7 @@ import { VERDICT_OPTIONS } from "@avigopal/design-tokens";
 import { useState, type ReactNode } from "react";
 import { useSubmitGrade } from "../api/queries";
 import { gradePayload } from "../lib/interaction";
+import { gradeRefusal } from "../lib/refusal";
 import { ChoiceInput, InteractionFooter, TextInput, stateOf } from "./Interaction";
 
 export function GradeGesture({
@@ -43,6 +44,7 @@ export function GradeGesture({
   const [note, setNote] = useState("");
   const grade = useSubmitGrade();
   const options = VERDICT_OPTIONS[renderedState];
+  const refusal = grade.isError ? gradeRefusal((grade.error as Error).message) : null;
 
   if (alreadyGraded) {
     return (
@@ -80,9 +82,15 @@ export function GradeGesture({
         state={stateOf(grade)}
         submitLabel="Record"
         canSubmit={selected !== null}
-        error={grade.isError ? `Not recorded: ${(grade.error as Error).message}` : null}
+        error={grade.isError ? refusal ?? `Not recorded: ${(grade.error as Error).message}` : null}
         sentLabel="Recorded"
       />
+      {refusal ? (
+        <details className="sf-grade-refusal">
+          <summary>Server</summary>
+          <p className="sf-muted sf-mono">{(grade.error as Error).message}</p>
+        </details>
+      ) : null}
     </form>
   );
 }

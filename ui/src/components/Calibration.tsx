@@ -21,6 +21,7 @@ import {
 } from "../api/calibration";
 import { useWalk } from "../api/queries";
 import { Chain } from "./Chain";
+import { gradeRefusal } from "../lib/refusal";
 
 interface StoredGrade {
   readonly grade: CalibrationGrade;
@@ -149,7 +150,11 @@ export function BlindRun({
           <button type="submit" className="sf-button" disabled={!grade || mutation.isPending || (!dirty && saved !== null)}>
             {saved && !dirty ? "Saved" : "Save"}
           </button>
-          {mutation.isError ? <span className="sf-error-inline">Not saved: {(mutation.error as Error).message}</span> : null}
+          {mutation.isError ? (
+            <span className="sf-error-inline" title={(mutation.error as Error).message}>
+              {gradeRefusal((mutation.error as Error).message) ?? `Not saved: ${(mutation.error as Error).message}`}
+            </span>
+          ) : null}
         </div>
       </form>
     </article>
