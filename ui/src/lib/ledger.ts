@@ -247,7 +247,7 @@ export type MetaChip =
   | { readonly kind: "stderr"; readonly text: string }
   | { readonly kind: "envelopeShape"; readonly shape: string }
   /** The producer reported failure (`success: false`, or an `error` field). */
-  | { readonly kind: "failure"; readonly text: string | null }
+  | { readonly kind: "failure"; readonly text: string | null; /** "rejected" only when the record says action:"rejected"; otherwise "failed". */ readonly cause?: "failed" | "rejected" }
   /** The wrapper's own description of what it carries (`metadata.summary`). */
   | { readonly kind: "note"; readonly text: string }
   /** A small field beside the one text field a record carries (`model`, `usage`), drawn as a chip. */
@@ -771,9 +771,9 @@ function failureChip(o: Readonly<Record<string, unknown>>): Extract<MetaChip, { 
   const err = o["error"];
   const message =
     typeof err === "string" ? err : err && typeof err === "object" ? JSON.stringify(err) : null;
-  if (o["success"] === false || message) return { kind: "failure", text: message };
   // A write that says it was refused (`{action:"rejected", reason}`): only what the record declares.
-  if (o["action"] === "rejected") return { kind: "failure", text: typeof o["reason"] === "string" ? o["reason"] : null };
+  if (o["action"] === "rejected") return { kind: "failure", text: typeof o["reason"] === "string" ? o["reason"] : message, cause: "rejected" };
+  if (o["success"] === false || o["resolved"] === false || message) return { kind: "failure", text: message, cause: "failed" };
   return null;
 }
 

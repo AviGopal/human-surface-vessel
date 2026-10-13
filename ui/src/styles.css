@@ -1982,3 +1982,9 @@ body { overflow: hidden; }
 
 /* Markup drawn as a page: an isolated frame, resizable by the reader. */
 .sf-page-frame { width: 100%; height: 28rem; border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); background: #fff; resize: vertical; overflow: auto; }
+
+/* What the run's own records say failed, leading the outputs of an unreached run. */
+.sf-chain-failed { margin-bottom: var(--sf-space-3); }
+.sf-chain-failed > summary { color: var(--sf-not-reached); font-weight: 600; cursor: pointer; }
+.sf-chain-failed ul { list-style: none; margin: 0; padding: 0; }
+.sf-failure-text { color: var(--sf-ink); font-size: var(--sf-text-sm); }

@@ -81,17 +81,27 @@ function readsOpen(n: ChainNode, policy: Policy): boolean {
   const content = fromProvenance(n.raw);
   if (!content) return false;
   const plan = planFor(content, policy);
-  return READ_FORMS.has(plan.form) && !(plan.meta ?? []).some((m) => m.kind === "failure");
+  if ((plan.meta ?? []).some((m) => m.kind === "failure")) return false;
+  // A form a person pinned, or the learner learned from people's choices, is
+  // the presentation they asked for: it leads open whatever form it is.
+  if (plan.decidedBy === "pin" || plan.decidedBy === "learned") return true;
+  return READ_FORMS.has(plan.form);
 }
 
-/** Whether the record says it failed: `success:false`, an `error`, or `action:"rejected"`. */
-function declaresFailure(n: ChainNode, policy: Policy): boolean {
+/** What the record declares about its own failure (`success:false`, `resolved:false`, an `error`, `action:"rejected"`), or null. */
+function failureOf(n: ChainNode, policy: Policy): { cause: "failed" | "rejected"; text: string | null } | null {
   const content = fromProvenance(n.raw);
-  return content ? (planFor(content, policy).meta ?? []).some((m) => m.kind === "failure") : false;
+  if (!content) return null;
+  const chip = (planFor(content, policy).meta ?? []).find((m) => m.kind === "failure");
+  return chip && chip.kind === "failure" ? { cause: chip.cause ?? "failed", text: chip.text } : null;
+}
+
+function declaresFailure(n: ChainNode, policy: Policy): boolean {
+  return failureOf(n, policy) !== null;
 }
 
 /** A collapsed input: one line until opened. */
-function InputRow({ n, chains, depth, seen, credit, failed = false }: { n: ChainNode; chains: RunChains; depth: number; seen: ReadonlySet<string>; credit: RunCredit | null; failed?: boolean }): ReactNode {
+function InputRow({ n, chains, depth, seen, credit, failure = null }: { n: ChainNode; chains: RunChains; depth: number; seen: ReadonlySet<string>; credit: RunCredit | null; failure?: { cause: "failed" | "rejected"; text: string | null } | null }): ReactNode {
   const content = fromProvenance(n.raw);
   const producer = producerLabel(n);
   return (
@@ -100,10 +110,10 @@ function InputRow({ n, chains, depth, seen, credit, failed = false }: { n: Chain
         <summary>
           <span className="sf-shape-badge">{n.shape}</span>
           {isSeed(n) ? <span className="sf-muted">request</span> : producer ? <span className="sf-mono sf-producer">{producer}</span> : null}
-          {failed ? <span className="sf-failure-chip">rejected</span> : null}
+          {failure ? <span className="sf-failure-chip">{failure.cause}</span> : null}
           <span className="sf-muted">{n.chars > 0 && !n.placeholder ? `${count(n.chars)} chars` : "no content"}</span>
           <CreditBadge row={creditFor(n.producedBy, credit)} />
-          {content && !n.placeholder ? <Rendered content={content} density="row" /> : null}
+          {failure?.text ? <span className="sf-failure-text">{failure.text}</span> : content && !n.placeholder ? <Rendered content={content} density="row" /> : null}
         </summary>
         <div className="sf-chain-input-body">
           <NodeContent n={n} density="inline" credit={credit} />
@@ -217,25 +227,42 @@ export function Chain({
     ) : null;
   }
 
+  const collapsed = !blind && walk.reached !== true;
+  // On a run that has not reached, declared failures lead in their own group.
+  const isFailed = (n: ChainNode): boolean => collapsed && !n.placeholder && declaresFailure(n, policy);
+  const failed = [...chains.outputs, ...chains.unused].filter(isFailed);
+  const outputsOk = chains.outputs.filter((n) => !isFailed(n));
+  const produced = chains.unused.filter((n) => !n.placeholder && !isFailed(n));
   // No terminal derivation: the largest thing the run did produce leads instead,
   // so a run that found something shows it before its bookkeeping.
-  const produced = chains.unused.filter((n) => !n.placeholder);
-  const lead = chains.outputs.length > 0 ? chains.outputs : produced.slice(0, 1);
-  const withContent = chains.outputs.length > 0 ? produced : produced.slice(1);
+  const lead = outputsOk.length > 0 ? outputsOk : produced.slice(0, 1);
+  const withContent = outputsOk.length > 0 ? produced : produced.slice(1);
   const references = chains.unused.filter((n) => n.placeholder);
   // A run that has not reached (finished or still walking): records and rows are
   // one line until opened (a running walk's pool can hold a 130 KB record), but
   // content to read still leads open, by its planned form. Never in the blind
   // view, where the layout must not carry the verdict.
-  const collapsed = !blind && walk.reached !== true;
   return (
     <Choosable.Provider value={!blind}>
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
 
+      {collapsed && failed.length > 0 ? (
+        // What the run's own records say failed, in their own words, first. Not
+        // claimed as the reason it did not reach: that is the judge's to say.
+        <details className="sf-chain-failed" open>
+          <summary>Failed · {failed.length}</summary>
+          <ul>
+            {failed.map((n) => (
+              <InputRow key={n.id} n={n} chains={chains} depth={MAX_DEPTH} seen={new Set()} credit={credit} failure={failureOf(n, policy)} />
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
       {collapsed ? (
-        // Not reached yet: content to read leads open; records, rows and declared
-        // failures stay one line. (Collapsing everything hid every answer.)
+        // Not reached yet: content to read leads open; records and rows stay one line.
+        // (Collapsing everything hid every answer.)
         <>
           {lead
             .filter((n) => readsOpen(n, policy))
@@ -248,7 +275,7 @@ export function Chain({
             {lead
               .filter((n) => !readsOpen(n, policy))
               .map((n) => (
-                <InputRow key={n.id} n={n} chains={chains} depth={0} seen={new Set()} credit={credit} failed={declaresFailure(n, policy)} />
+                <InputRow key={n.id} n={n} chains={chains} depth={0} seen={new Set()} credit={credit} />
               ))}
           </ul>
         </>

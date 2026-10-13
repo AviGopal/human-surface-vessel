@@ -124,7 +124,7 @@ describe("Chain outputs", () => {
     const rejected = { id: "w", shape: "memoryNote_write", producedBy: "activity:x", contentPreview: JSON.stringify({ id: null, action: "rejected", reason: "memoryNote_write requires at least a title" }), chars: 109, consumedIds: ["g"] };
     const el = await mount(walk([seed, rejected], false));
     expect(el.querySelector(".sf-chain-output")).toBeNull();
-    expect(el.querySelector(".sf-chain-collapsed summary .sf-failure-chip")?.textContent).toBe("rejected");
+    expect(el.querySelector(".sf-chain-failed summary .sf-failure-chip")?.textContent).toBe("rejected");
   });
 
   test("must-fail: the blind view's layout does not depend on the verdict", async () => {
