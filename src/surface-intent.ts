@@ -44,6 +44,9 @@ export const CONTENT_FORMS = [
   "record",
   "scalar",
   "stub",
+  // Markup drawn as a page, in a sandboxed frame with nothing granted. Never a
+  // default: a person asks for it (Show as, or "show svg as a page").
+  "page",
 ] as const;
 export type ContentForm = (typeof CONTENT_FORMS)[number];
 
@@ -89,7 +92,8 @@ type MirroredForm =
   | "terminal"
   | "record"
   | "scalar"
-  | "stub";
+  | "stub"
+  | "page";
 type FormsMirrorOk = [ContentForm] extends [MirroredForm]
   ? [MirroredForm] extends [ContentForm]
     ? true
@@ -121,6 +125,7 @@ const FORM_WORDS: ReadonlyArray<readonly [RegExp, ContentForm]> = [
   [/^(?:a\s+|an\s+|the\s+)?(?:scalars?|single values?|one value|a value|values?|inline)$/i, "scalar"],
   [/^(?:a\s+|an\s+|the\s+)?(?:nothing|empty|blank)$/i, "empty"],
   [/^(?:a\s+|an\s+|the\s+)?(?:stubs?|provenance(?: only)?)$/i, "stub"],
+  [/^(?:a\s+|an\s+|the\s+)?(?:pages?|web ?pages?|rendered|html|svg|images?|pictures?|animations?)$/i, "page"],
 ];
 
 function formWord(word: string): ContentForm | null {
@@ -215,7 +220,7 @@ export interface IntentReading {
 export const GRAMMAR: readonly string[] = [
   "make the text bigger / smaller (add 'much' or 'a bit' to change the step)",
   "set the text to 16px",
-  "show <shape> as a table | rows | prose | verbatim | diff | terminal | record | value",
+  "show <shape> as a table | rows | prose | verbatim | diff | terminal | record | value | page",
   "stop overriding <shape> (drop one form pin)",
   "make it denser / tighter / looser / roomier",
   "expand the ledger / collapse the ledger",

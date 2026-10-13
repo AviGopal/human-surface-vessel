@@ -99,6 +99,9 @@ export const CONTENT_FORMS = [
   "record",
   "scalar",
   "stub",
+  // Markup drawn as a page, in a sandboxed frame with nothing granted. Never a
+  // default: a person asks for it (Show as, or "show svg as a page").
+  "page",
 ] as const;
 export type ContentForm = (typeof CONTENT_FORMS)[number];
 
@@ -146,7 +149,8 @@ type MirroredForm =
   | "terminal"
   | "record"
   | "scalar"
-  | "stub";
+  | "stub"
+  | "page";
 type FormsMirrorOk = [ContentForm] extends [MirroredForm]
   ? [MirroredForm] extends [ContentForm]
     ? true

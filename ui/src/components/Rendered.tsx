@@ -17,7 +17,7 @@ import { sendObservation } from "../api/exposure";
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { useRenderPolicy } from "../api/queries";
 import { contentText, type Content } from "../lib/content";
-import { CUT_KEY, planContent, type RenderPlan } from "../lib/ledger";
+import { CUT_KEY, isMarkup, planContent, type RenderPlan } from "../lib/ledger";
 import { formatChars } from "../lib/time";
 import { useLiveControls } from "../state/liveControls";
 import { ContentRender, CopyButton } from "./ContentRender";
@@ -169,7 +169,7 @@ export function Rendered({
           ) : null}
           {extraHeader}
           <span className="sf-rendered-head-right">
-            {choosable ? <FormChoice current={plan.form} onChoose={choose} /> : null}
+            {choosable ? <FormChoice current={plan.form} onChoose={choose} markup={isMarkup(text)} /> : null}
             {completeness(content)}
             {density === "full" && plan.text.trim().length > 0 && plan.form !== "scalar" ? (
               <CopyButton text={plan.text} what={content.shape} />
@@ -179,7 +179,7 @@ export function Rendered({
       ) : null}
       {!header && choosable ? (
         <div className="sf-rendered-choice-bar">
-          <FormChoice current={plan.form} onChoose={choose} />
+          <FormChoice current={plan.form} onChoose={choose} markup={isMarkup(text)} />
         </div>
       ) : null}
       {plan.form === "empty" && content.state === "absent" ? null : (
@@ -207,13 +207,15 @@ const CHOICES: readonly { form: string; label: string }[] = [
   { form: "record", label: "Fields" },
   { form: "rows", label: "Table" },
   { form: "text", label: "Text" },
+  { form: "page", label: "Page" },
 ];
 
 /** The reader's say in how one payload is drawn. */
-function FormChoice({ current, onChoose }: { current: string; onChoose: (form: string) => void }): ReactNode {
+function FormChoice({ current, onChoose, markup }: { current: string; onChoose: (form: string) => void; markup: boolean }): ReactNode {
   return (
     <span className="sf-form-choice" role="group" aria-label="Show as">
-      {CHOICES.map((c) => (
+      {/* "Page" only where there is markup to draw as one. */}
+      {CHOICES.filter((c) => c.form !== "page" || markup).map((c) => (
         <button key={c.form} type="button" aria-pressed={current === c.form} onClick={() => onChoose(c.form)}>
           {c.label}
         </button>

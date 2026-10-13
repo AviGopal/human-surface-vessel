@@ -494,6 +494,36 @@ function Stub({ text }: { text: string }): ReactNode {
   );
 }
 
+/**
+ * Markup drawn as a page, isolated. The frame's `sandbox` grants nothing (no
+ * scripts, no same origin, no forms, popups or navigation), so it is a separate
+ * opaque origin that cannot touch this surface. A content policy at the head of
+ * the document refuses every network fetch, so a page cannot call out (no
+ * tracking pixels, no remote styles); only inline styles and data: images draw.
+ * SVG's declarative <animate> needs no script and plays. This is still the
+ * "no injected markup" rule: nothing here enters the surface's own DOM.
+ */
+const PAGE_POLICY =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:";
+
+export function pageDocument(source: string): string {
+  return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${PAGE_POLICY}"><meta name="referrer" content="no-referrer">${source}`;
+}
+
+function SandboxedPage({ source }: { source: string }): ReactNode {
+  return (
+    <iframe
+      className="sf-page-frame"
+      title="Page"
+      sandbox=""
+      referrerPolicy="no-referrer"
+      srcDoc={pageDocument(source)}
+      // Chromium honours the attribute too; the meta above covers the rest.
+      {...({ csp: PAGE_POLICY } as Record<string, string>)}
+    />
+  );
+}
+
 function FormBody({ plan }: { plan: RenderPlan }): ReactNode {
   switch (plan.form) {
     case "prose":
@@ -519,6 +549,8 @@ function FormBody({ plan }: { plan: RenderPlan }): ReactNode {
           No content. This impulse carries a shape and nothing else.
         </p>
       );
+    case "page":
+      return <SandboxedPage source={plan.text} />;
     case "text":
     default:
       // THE DEFAULT BRANCH. Every unrecognised form lands here and renders
