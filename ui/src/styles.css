@@ -1939,7 +1939,8 @@ body { overflow: hidden; }
 
 /* A run's attempts, one line each, under its title. */
 .sf-attempts { list-style: none; margin: var(--sf-space-3) 0 0; padding: 0; display: grid; gap: var(--sf-space-1); }
-.sf-attempt-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sf-space-2); font-size: var(--sf-text-sm); }
+.sf-attempt-line { display: grid; grid-template-columns: 1ch 1.5ch 1fr; align-items: baseline; gap: var(--sf-space-2); font-size: var(--sf-text-sm); }
+.sf-attempt-body { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sf-space-2); min-width: 0; }
 .sf-attempt-mark { width: 1ch; text-align: center; }
 .sf-attempt-line[data-outcome="rejected"] .sf-attempt-mark { color: var(--sf-not-reached); }
 .sf-attempt-line[data-outcome="reached"] .sf-attempt-mark,
@@ -1955,3 +1956,6 @@ body { overflow: hidden; }
 /* The verdict under a promoted answer: one quiet line, its basis folded. */
 .sf-verdict-compact { font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-verdict-compact .sf-view-label { display: inline; margin-right: var(--sf-space-2); }
+
+/* A verdict's system code: a quiet tag, not the opening words of a sentence. */
+.sf-verdict-code { font-size: var(--sf-text-xs); color: var(--sf-ink-3); border: 1px solid var(--sf-rule); border-radius: 3px; padding: 0 var(--sf-space-1); margin-right: var(--sf-space-2); }

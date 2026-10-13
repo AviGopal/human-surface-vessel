@@ -24,7 +24,8 @@ import { Attempts } from "./Attempts";
 import { answerNode, buildChains } from "../lib/chain";
 import { fromProvenance } from "../lib/content";
 import { Chain } from "./Chain";
-import { isWriteShape } from "../lib/shapes";
+import { isHumanProvidable } from "../lib/shapes";
+import { splitVerdict } from "../lib/verdict";
 import { RunQuestion } from "./RunQuestion";
 import { useQuestions } from "../state/questions";
 import { Rendered } from "./Rendered";
@@ -94,7 +95,7 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
           {missing.map((s) => (
             <li key={s}>
               <span className="sf-shape-badge">{s}</span>
-              {isWriteShape(s) ? null : (
+              {!isHumanProvidable(s) ? null : (
               <button
                 type="button"
                 className="sf-button sf-button-quiet"
@@ -231,7 +232,8 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         </p>
         {reason ? (
           <div className="sf-run-reason-full">
-            <Rendered content={fromText("goal_reach_reason", reason)} density="inline" header={false} region="run_reason" />
+            {splitVerdict(reason).code ? <span className="sf-verdict-code sf-mono">{splitVerdict(reason).code}</span> : null}
+            <Rendered content={fromText("goal_reach_reason", splitVerdict(reason).text)} density="inline" header={false} region="run_reason" />
           </div>
         ) : null}
         {walk.humanReachNotes ? <p className="sf-run-reason-full">“{walk.humanReachNotes}”</p> : null}

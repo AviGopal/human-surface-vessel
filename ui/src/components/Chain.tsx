@@ -189,10 +189,11 @@ export function Chain({
   const lead = chains.outputs.length > 0 ? chains.outputs : produced.slice(0, 1);
   const withContent = chains.outputs.length > 0 ? produced : produced.slice(1);
   const references = chains.unused.filter((n) => n.placeholder);
-  // A finished run that did not reach: its outputs are what it tried, not an
-  // answer, so each is one line until opened. Never in the blind view, where
-  // the layout must not carry the verdict.
-  const collapsed = !blind && terminal && walk.reached !== true;
+  // A run that has not reached (finished or still walking): its outputs are what
+  // it tried, not an answer, so each is one line until opened. A running walk's
+  // pool can hold a 130 KB record. Never in the blind view, where the layout
+  // must not carry the verdict.
+  const collapsed = !blind && walk.reached !== true;
   return (
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
@@ -212,7 +213,17 @@ export function Chain({
         ))
       )}
 
-      {withContent.length + references.length > 0 ? (
+      {withContent.length === 0 && references.length > 0 ? (
+        // Nothing but references: no "Produced" fold that opens onto nothing.
+        <details className="sf-chain-references">
+          <summary>No content · {references.length}</summary>
+          <ul>
+            {references.map((n) => (
+              <InputRow key={n.id} n={n} chains={chains} depth={MAX_DEPTH} seen={new Set()} credit={credit} />
+            ))}
+          </ul>
+        </details>
+      ) : withContent.length + references.length > 0 ? (
         <details className="sf-chain-unused" open={lead.length === 0}>
           <summary>
             {chains.outputs.length === 0 ? "Produced" : "Unused"} · {withContent.length + references.length}

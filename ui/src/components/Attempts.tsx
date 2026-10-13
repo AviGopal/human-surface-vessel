@@ -8,6 +8,7 @@
 import type { ReactNode } from "react";
 import type { GoalWalkState } from "../api/types";
 import type { AttemptSegment } from "../lib/attempts";
+import { splitVerdict } from "../lib/verdict";
 
 /** What an attempt produced, by shape: request seeds and the goal excluded. */
 export function producedShapes(seg: AttemptSegment): readonly string[] {
@@ -47,17 +48,31 @@ export function Attempts({ walk, segments }: { walk: GoalWalkState; segments: re
               {outcome === "rejected" ? "✗" : outcome === "reached" ? "✓" : outcome === "running" ? "◐" : "·"}
             </span>
             <span className="sf-attempt-n">{seg.number}</span>
-            {t0 !== null && seg.startAt !== null ? <span className="sf-muted sf-mono">{clock(seg.startAt - t0)}</span> : null}
-            {seg.reason ? <span className="sf-muted">{seg.reason}</span> : null}
-            {shapes.map((sh) => (
-              <span key={sh} className="sf-shape-badge">{sh}</span>
-            ))}
-            <span className="sf-attempt-outcome">
-              {outcome === "rejected" ? seg.verdict : outcome === "reached" ? "reached" : outcome === "running" ? "in progress" : ""}
+            {/* One column for everything else, so a long verdict wraps under its own attempt. */}
+            <span className="sf-attempt-body">
+              {t0 !== null && seg.startAt !== null ? <span className="sf-muted sf-mono">{clock(seg.startAt - t0)}</span> : null}
+              {seg.reason ? <span className="sf-muted">{seg.reason}</span> : null}
+              {shapes.map((sh) => (
+                <span key={sh} className="sf-shape-badge">{sh}</span>
+              ))}
+              <span className="sf-attempt-outcome">
+                {outcome === "rejected" && seg.verdict ? <VerdictText text={seg.verdict} /> : outcome === "reached" ? "reached" : outcome === "running" ? "in progress" : ""}
+              </span>
             </span>
           </li>
         );
       })}
     </ol>
+  );
+}
+
+/** A verdict with its system code, if it has one, drawn as a tag before the text. */
+export function VerdictText({ text }: { text: string }): ReactNode {
+  const v = splitVerdict(text);
+  return (
+    <>
+      {v.code ? <span className="sf-verdict-code sf-mono">{v.code}</span> : null}
+      {v.text}
+    </>
   );
 }
