@@ -756,6 +756,8 @@ function failureChip(o: Readonly<Record<string, unknown>>): Extract<MetaChip, { 
   const message =
     typeof err === "string" ? err : err && typeof err === "object" ? JSON.stringify(err) : null;
   if (o["success"] === false || message) return { kind: "failure", text: message };
+  // A write that says it was refused (`{action:"rejected", reason}`): only what the record declares.
+  if (o["action"] === "rejected") return { kind: "failure", text: typeof o["reason"] === "string" ? o["reason"] : null };
   return null;
 }
 

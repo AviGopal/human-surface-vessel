@@ -1959,3 +1959,11 @@ body { overflow: hidden; }
 
 /* A verdict's system code: a quiet tag, not the opening words of a sentence. */
 .sf-verdict-code { font-size: var(--sf-text-xs); color: var(--sf-ink-3); border: 1px solid var(--sf-rule); border-radius: 3px; padding: 0 var(--sf-space-1); margin-right: var(--sf-space-2); }
+
+/* Which step produced an output: kept, but bookkeeping, not reading. */
+.sf-producer,
+.sf-rendered-source { font-size: var(--sf-text-xs); color: var(--sf-ink-3); opacity: 0.8; }
+
+/* The attempt whose verdict the header reports. */
+.sf-attempt-reported { font-size: var(--sf-text-xs); border: 1px solid var(--sf-rule-strong); border-radius: 3px; padding: 0 var(--sf-space-1); }
+.sf-walk-needs > summary { cursor: pointer; }

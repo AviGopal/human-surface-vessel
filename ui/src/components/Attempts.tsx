@@ -31,6 +31,8 @@ export function Attempts({ walk, segments }: { walk: GoalWalkState; segments: re
   const running = walk.status === "running";
   if (segments.length < 2 && !running) return null;
   const t0 = segments.find((s) => s.startAt !== null)?.startAt ?? null;
+  const norm = (t: string | null | undefined): string => (t ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  const header = norm(walk.goalReachReason);
   return (
     <ol className="sf-attempts" aria-label="Attempts">
       {segments.map((seg) => {
@@ -55,8 +57,25 @@ export function Attempts({ walk, segments }: { walk: GoalWalkState; segments: re
               {shapes.map((sh) => (
                 <span key={sh} className="sf-shape-badge">{sh}</span>
               ))}
+              {seg.reported ? <span className="sf-attempt-reported">reported</span> : null}
               <span className="sf-attempt-outcome">
-                {outcome === "rejected" && seg.verdict ? <VerdictText text={seg.verdict} /> : outcome === "reached" ? "reached" : outcome === "running" ? "in progress" : ""}
+                {outcome === "rejected" && seg.verdict ? (
+                  // The reported attempt's verdict is the header's; an attempt whose verdict
+                  // repeats the one before says so. Either way the sentence is not printed again.
+                  seg.reported && header && norm(seg.verdict) === header ? (
+                    <VerdictText text={seg.verdict} codeOnly note="the verdict above" />
+                  ) : seg.number > 1 && norm(seg.verdict) === norm(segments[seg.number - 2]?.verdict) ? (
+                    <VerdictText text={seg.verdict} codeOnly note="same as above" />
+                  ) : (
+                    <VerdictText text={seg.verdict} />
+                  )
+                ) : outcome === "reached" ? (
+                  "reached"
+                ) : outcome === "running" ? (
+                  "in progress"
+                ) : (
+                  ""
+                )}
               </span>
             </span>
           </li>
@@ -67,12 +86,12 @@ export function Attempts({ walk, segments }: { walk: GoalWalkState; segments: re
 }
 
 /** A verdict with its system code, if it has one, drawn as a tag before the text. */
-export function VerdictText({ text }: { text: string }): ReactNode {
+export function VerdictText({ text, codeOnly = false, note }: { text: string; codeOnly?: boolean; note?: string }): ReactNode {
   const v = splitVerdict(text);
   return (
     <>
       {v.code ? <span className="sf-verdict-code sf-mono">{v.code}</span> : null}
-      {v.text}
+      {codeOnly ? <span className="sf-muted">{note}</span> : v.text}
     </>
   );
 }

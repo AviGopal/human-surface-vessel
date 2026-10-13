@@ -11,6 +11,9 @@ import type { GoalWalkState, RouteAround } from "../api/types";
 import { buildChains, inputsOf, isSeed, type ChainNode, type RunChains } from "../lib/chain";
 import { creditFor, readCredit, type CreditRow, type RunCredit } from "../lib/credit";
 import { fromProvenance } from "../lib/content";
+import { useRenderPolicy } from "../api/queries";
+import { useLiveControls } from "../state/liveControls";
+import { planFor } from "./Rendered";
 import { Rendered } from "./Rendered";
 
 const MAX_DEPTH = 4;
@@ -59,8 +62,28 @@ function NodeContent({ n, density, credit }: { n: ChainNode; density: "full" | "
   );
 }
 
+/** Forms that are content to read: they lead open even on a run that has not reached. */
+const READ_FORMS: ReadonlySet<string> = new Set(["prose", "text", "scalar"]);
+
+type Policy = Parameters<typeof planFor>[1];
+
+/** Whether a node is content to read (prose, text, a value) rather than a record, rows or a reference, and not a declared failure. */
+function readsOpen(n: ChainNode, policy: Policy): boolean {
+  if (n.placeholder) return false;
+  const content = fromProvenance(n.raw);
+  if (!content) return false;
+  const plan = planFor(content, policy);
+  return READ_FORMS.has(plan.form) && !(plan.meta ?? []).some((m) => m.kind === "failure");
+}
+
+/** Whether the record says it failed: `success:false`, an `error`, or `action:"rejected"`. */
+function declaresFailure(n: ChainNode, policy: Policy): boolean {
+  const content = fromProvenance(n.raw);
+  return content ? (planFor(content, policy).meta ?? []).some((m) => m.kind === "failure") : false;
+}
+
 /** A collapsed input: one line until opened. */
-function InputRow({ n, chains, depth, seen, credit }: { n: ChainNode; chains: RunChains; depth: number; seen: ReadonlySet<string>; credit: RunCredit | null }): ReactNode {
+function InputRow({ n, chains, depth, seen, credit, failed = false }: { n: ChainNode; chains: RunChains; depth: number; seen: ReadonlySet<string>; credit: RunCredit | null; failed?: boolean }): ReactNode {
   const content = fromProvenance(n.raw);
   const producer = producerLabel(n);
   return (
@@ -68,7 +91,8 @@ function InputRow({ n, chains, depth, seen, credit }: { n: ChainNode; chains: Ru
       <details>
         <summary>
           <span className="sf-shape-badge">{n.shape}</span>
-          {isSeed(n) ? <span className="sf-muted">request</span> : producer ? <span className="sf-mono sf-muted">{producer}</span> : null}
+          {isSeed(n) ? <span className="sf-muted">request</span> : producer ? <span className="sf-mono sf-producer">{producer}</span> : null}
+          {failed ? <span className="sf-failure-chip">rejected</span> : null}
           <span className="sf-muted">{n.chars > 0 && !n.placeholder ? `${count(n.chars)} chars` : "no content"}</span>
           <CreditBadge row={creditFor(n.producedBy, credit)} />
           {content && !n.placeholder ? <Rendered content={content} density="row" /> : null}
@@ -164,6 +188,8 @@ export function Chain({
   /** A node already drawn elsewhere (the run view's promoted answer): not drawn again here. */
   exclude?: string | null;
 }): ReactNode {
+  const { paused, intervalMs } = useLiveControls();
+  const policy = useRenderPolicy({ enabled: !paused, intervalMs }).data;
   const built = buildChains(walk);
   const chains = exclude
     ? { ...built, outputs: built.outputs.filter((n) => n.id !== exclude), unused: built.unused.filter((n) => n.id !== exclude) }
@@ -189,21 +215,34 @@ export function Chain({
   const lead = chains.outputs.length > 0 ? chains.outputs : produced.slice(0, 1);
   const withContent = chains.outputs.length > 0 ? produced : produced.slice(1);
   const references = chains.unused.filter((n) => n.placeholder);
-  // A run that has not reached (finished or still walking): its outputs are what
-  // it tried, not an answer, so each is one line until opened. A running walk's
-  // pool can hold a 130 KB record. Never in the blind view, where the layout
-  // must not carry the verdict.
+  // A run that has not reached (finished or still walking): records and rows are
+  // one line until opened (a running walk's pool can hold a 130 KB record), but
+  // content to read still leads open, by its planned form. Never in the blind
+  // view, where the layout must not carry the verdict.
   const collapsed = !blind && walk.reached !== true;
   return (
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
 
       {collapsed ? (
-        <ul className="sf-chain-collapsed">
-          {lead.map((n) => (
-            <InputRow key={n.id} n={n} chains={chains} depth={0} seen={new Set()} credit={credit} />
-          ))}
-        </ul>
+        // Not reached yet: content to read leads open; records, rows and declared
+        // failures stay one line. (Collapsing everything hid every answer.)
+        <>
+          {lead
+            .filter((n) => readsOpen(n, policy))
+            .map((n) => (
+              <article key={n.id} className="sf-chain-output">
+                <NodeContent n={n} density="full" credit={credit} />
+              </article>
+            ))}
+          <ul className="sf-chain-collapsed">
+            {lead
+              .filter((n) => !readsOpen(n, policy))
+              .map((n) => (
+                <InputRow key={n.id} n={n} chains={chains} depth={0} seen={new Set()} credit={credit} failed={declaresFailure(n, policy)} />
+              ))}
+          </ul>
+        </>
       ) : (
         lead.map((n) => (
           <article key={n.id} className="sf-chain-output">

@@ -88,8 +88,10 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
   const stillMissing = sent !== null && missing.includes(sent);
 
   return (
-    <section className="sf-view-section sf-walk-needs" aria-label="What the walk is missing">
-      <h3 className="sf-view-label">Missing</h3>
+    // Folded unless something in it is a person's to provide: it is where a running
+    // walk says what it is stuck on, but its machine shapes are not a person's to act on.
+    <details className="sf-view-section sf-walk-needs" aria-label="What the walk is missing" open={missing.some(isHumanProvidable) || sent !== null}>
+      <summary className="sf-view-label">Missing · {missing.length}</summary>
       {missing.length > 0 ? (
         <ul className="sf-needs-list">
           {missing.map((s) => (
@@ -141,7 +143,7 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
           {stillMissing ? `${sent} · in the pool` : `${sent} · taken`}
         </p>
       ) : null}
-    </section>
+    </details>
   );
 }
 

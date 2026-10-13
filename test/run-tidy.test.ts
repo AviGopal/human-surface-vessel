@@ -107,3 +107,35 @@ describe("Outputs", () => {
     expect(summaries.some((s) => s?.startsWith("Produced"))).toBe(false);
   });
 });
+
+describe("the attempts strip (958e0dcd, 10-13)", () => {
+  const B = "deterministic:hollow_walklog_capped — all 1 logged walk step(s) produced 0 new shapes; LLM judge SKIPPED (it cannot out-testify the walk's own log)";
+  const events = (t: number) => [
+    { shape: "goal", source: "goal", at: t },
+    { shape: "dispatch_id", source: "seed var dispatch_id", at: t + 1 },
+  ];
+  test("must-fail: the reported attempt is marked and repeated verdicts are not printed again", async () => {
+    const el = await mount(
+      base({
+        goalReachReason: B,
+        poolEvents: [...events(1000), ...events(22000), ...events(106000)],
+        walkLog: [
+          "walk: HOLLOW — deterministic:unsourced-current-information — the goal asks for current information and the chain consulted no source; β WITHHELD",
+          "/run-goal: walk: FEEDBACK-RETRY — re-running",
+          `walk: HOLLOW — ${B}; β WITHHELD`,
+          "/run-goal: walk: hollow satisfier verdict — re-running with suppressSatisfierShapes",
+          `walk: HOLLOW — ${B}; β WITHHELD`,
+        ],
+      }),
+    );
+    const rows = [...el.querySelectorAll("[aria-label='Attempts'] li")];
+    expect(rows.length).toBe(3);
+    expect(rows[0]?.textContent).toContain("the goal asks for current information");
+    expect(rows[1]?.textContent).toContain("all 1 logged walk step(s)");
+    expect(rows[2]?.querySelector(".sf-attempt-reported")?.textContent).toBe("reported");
+    expect(rows[2]?.textContent).not.toContain("all 1 logged walk step(s)");
+    expect(rows[2]?.textContent).toContain("the verdict above");
+    const sentence = (el.querySelector("[aria-label='Attempts']")?.textContent ?? "").split("all 1 logged walk step(s)").length - 1;
+    expect(sentence).toBe(1);
+  });
+});

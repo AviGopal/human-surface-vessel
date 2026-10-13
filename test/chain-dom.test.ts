@@ -104,12 +104,20 @@ describe("Chain outputs", () => {
   const search = { id: "s", shape: "webSearchResult", producedBy: "satisfier:webSearchResult", contentPreview: "About — Project 507 CIC", chars: 2969, consumedIds: ["g"] };
   const seed = { id: "g", shape: "goal", producedBy: "seed", contentPreview: "What is project 507?", chars: 20, consumedIds: [] };
 
-  test("a finished run that did not reach shows its outputs one line each", async () => {
-    const el = await mount(walk([seed, search, ...refs], false));
+  test("a run that did not reach: content to read leads open, a record stays one line", async () => {
+    const record = { id: "r", shape: "substrateGap", producedBy: "activity:t", contentPreview: JSON.stringify({ gaps: [{ id: "g1", status: "open" }, { id: "g2", status: "open" }] }), chars: 130544, consumedIds: ["g"] };
+    const el = await mount(walk([seed, search, record, ...refs], false));
+    const open = [...el.querySelectorAll(".sf-chain-output")].map((a) => a.textContent ?? "");
+    expect(open.some((t) => t.includes("About — Project 507 CIC"))).toBe(true);
+    expect(open.some((t) => t.includes("g1"))).toBe(false);
+    expect(el.querySelector(".sf-chain-collapsed summary")?.textContent).toContain("substrateGap");
+  });
+
+  test("must-fail: a record that declares it was rejected is marked, not shown as a result (28e707e4)", async () => {
+    const rejected = { id: "w", shape: "memoryNote_write", producedBy: "activity:x", contentPreview: JSON.stringify({ id: null, action: "rejected", reason: "memoryNote_write requires at least a title" }), chars: 109, consumedIds: ["g"] };
+    const el = await mount(walk([seed, rejected], false));
     expect(el.querySelector(".sf-chain-output")).toBeNull();
-    const row = el.querySelector(".sf-chain-collapsed summary")?.textContent ?? "";
-    expect(row).toContain("webSearchResult");
-    expect(row).toContain("About — Project 507 CIC");
+    expect(el.querySelector(".sf-chain-collapsed summary .sf-failure-chip")?.textContent).toBe("rejected");
   });
 
   test("must-fail: the blind view's layout does not depend on the verdict", async () => {
