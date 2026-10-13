@@ -205,6 +205,8 @@ export function heuristicForm(shape: string, text: string, fromEnvelope: boolean
   // already says how much of them is showing.
   const trimmed = text.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) return DEFAULT_CONTENT_FORM;
+  // Markup is never prose either: reflowing it as markdown mangles it.
+  if (isMarkup(trimmed)) return DEFAULT_CONTENT_FORM;
 
   // PROVENANCE BEATS THE GUESS, and this is why it sits ABOVE the prose tests.
   //
@@ -363,7 +365,21 @@ function rescueBareScalar(
   // fragmentary JSON blob — and drawing that as one value would claim it is
   // complete when the guard exists to say it is not.
   if (value.startsWith("{") || value.startsWith("[")) return { form, text, decidedBy };
+  // Markup is not a value either: a whole 403 page or an <svg> drew as "scalar".
+  if (isMarkup(value)) return { form, text, decidedBy };
   return { form: "scalar", text, decidedBy: "rescue" };
+}
+
+/**
+ * Whether text is markup: it opens with an element (`<html`, `<svg`, `<div`)
+ * and that element's closing tag appears later. The closing tag is required so
+ * prose such as "a < b" or "<3" is not mistaken for markup. Markup plans as
+ * verbatim text; drawing it as a page is a form a person asks for (Show as).
+ */
+export function isMarkup(text: string): boolean {
+  const open = /^\s*(?:<!doctype[^>]*>\s*)?<([a-zA-Z][\w:-]*)\b[^>]*>/i.exec(text);
+  if (!open || !open[1]) return false;
+  return new RegExp(`</${open[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*>`, "i").test(text);
 }
 
 /**

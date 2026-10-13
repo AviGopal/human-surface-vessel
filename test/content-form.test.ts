@@ -205,3 +205,18 @@ describe("one text field beside small ones (llmTextCompletion)", () => {
     expect(planContent("r", JSON.stringify({ a: long, rows: [1, 2, 3] }), false).form).toBe("record");
   });
 });
+
+describe("markup", () => {
+  const page = "<html><head><title>403 Forbidden</title></head><body><h1>Forbidden</h1></body></html>";
+  const svg = '<svg width="100" height="100"><circle cx="50" cy="50" r="40"><animate attributeName="r" values="10;40;10" dur="2s" repeatCount="indefinite"/></circle></svg>';
+  test("must-fail: a whole page or an svg is not a value; it is drawn as its source", () => {
+    expect(planContent("httpResponse", page, false).form).toBe("text");
+    expect(planContent("svg", svg, false).form).toBe("text");
+    expect(planContent("httpResponse", `<!DOCTYPE html>\n<html>\n<body>\n<p>Some words here.</p>\n</body>\n</html>`, false).form).toBe("text");
+  });
+
+  test("prose with angle brackets is not markup", () => {
+    expect(planContent("x", "a < b and b > c", false).form).toBe("scalar");
+    expect(planContent("x", "<3 you", false).form).toBe("scalar");
+  });
+});
