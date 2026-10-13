@@ -104,13 +104,20 @@ describe("Chain outputs", () => {
   const search = { id: "s", shape: "webSearchResult", producedBy: "satisfier:webSearchResult", contentPreview: "About — Project 507 CIC", chars: 2969, consumedIds: ["g"] };
   const seed = { id: "g", shape: "goal", producedBy: "seed", contentPreview: "What is project 507?", chars: 20, consumedIds: [] };
 
-  test("a run that did not reach: content to read leads open, a record stays one line", async () => {
+  test("a run that did not reach: prose leads open; a record and raw JSON text stay one line", async () => {
     const record = { id: "r", shape: "substrateGap", producedBy: "activity:t", contentPreview: JSON.stringify({ gaps: [{ id: "g1", status: "open" }, { id: "g2", status: "open" }] }), chars: 130544, consumedIds: ["g"] };
-    const el = await mount(walk([seed, search, record, ...refs], false));
+    const prose = { id: "p", shape: "llmCompletion", producedBy: "satisfier:llmCompletion", contentPreview: "## Finding Summary\n\nWe learn by **grading** runs and keeping what reached.\n\n- one\n- two", chars: 2983, consumedIds: ["g"] };
+    // 72b9a71d's real preview: JSON as a string inside a content envelope, cut, which plans as "text".
+    const inner = '{\n  "loaded": false,\n  "metadata": {\n    "rowCount": 1678,\n    "variantCount": 1678';
+    const rawJson = { id: "j", shape: "variantMetricsSummary", producedBy: "satisfier:variantMetricsSummary", contentPreview: `{"success":true,"content":${JSON.stringify(inner).slice(0, -1)}`, chars: 766693, truncated: true, consumedIds: ["g"] };
+    const el = await mount(walk([seed, search, record, prose, rawJson, ...refs], false));
     const open = [...el.querySelectorAll(".sf-chain-output")].map((a) => a.textContent ?? "");
-    expect(open.some((t) => t.includes("About — Project 507 CIC"))).toBe(true);
+    expect(open.some((t) => t.includes("We learn by grading runs"))).toBe(true);
+    expect(open.some((t) => t.includes("rowCount"))).toBe(false);
     expect(open.some((t) => t.includes("g1"))).toBe(false);
-    expect(el.querySelector(".sf-chain-collapsed summary")?.textContent).toContain("substrateGap");
+    const rows = [...el.querySelectorAll(".sf-chain-collapsed > li > details > summary")].map((x) => x.textContent ?? "").join("\n");
+    expect(rows).toContain("substrateGap");
+    expect(rows).toContain("variantMetricsSummary");
   });
 
   test("must-fail: a record that declares it was rejected is marked, not shown as a result (28e707e4)", async () => {
