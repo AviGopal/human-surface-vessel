@@ -11,6 +11,7 @@ import type { GoalWalkState, RouteAround } from "../api/types";
 import { buildChains, inputsOf, isSeed, type ChainNode, type RunChains } from "../lib/chain";
 import { creditFor, readCredit, type CreditRow, type RunCredit } from "../lib/credit";
 import { fromProvenance } from "../lib/content";
+import { linksIn, mergeLinks, type FoundLink } from "../lib/links";
 import { useRenderPolicy } from "../api/queries";
 import { useLiveControls } from "../state/liveControls";
 import { planFor } from "./Rendered";
@@ -98,6 +99,42 @@ function failureOf(n: ChainNode, policy: Policy): { cause: "failed" | "rejected"
 
 function declaresFailure(n: ChainNode, policy: Policy): boolean {
   return failureOf(n, policy) !== null;
+}
+
+/** How many found links lead; the rest stay in their records. */
+const LINKS_SHOWN = 8;
+
+function oneLine(text: string, max: number): string {
+  const t = text.replace(/[#*>`]+/g, " ").replace(/\.{3,}/g, " ").replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
+
+/** Links the run found, leading on a run that has not reached: often the answer is one click away. */
+function FoundLinks({ links }: { links: readonly FoundLink[] }): ReactNode {
+  return (
+    <section className="sf-chain-links" aria-label="Links">
+      <h4 className="sf-view-label">Links · {links.length}</h4>
+      <ul>
+        {links.slice(0, LINKS_SHOWN).map((l) => (
+          <li key={l.url}>
+            <a className="sf-link" href={l.url} target="_blank" rel="noreferrer noopener">
+              {l.title ? oneLine(l.title, 120) : l.url}
+            </a>
+            <span className="sf-muted sf-chain-link-host">{hostOf(l.url)}</span>
+            {l.snippet ? <p className="sf-muted sf-chain-link-snippet">{oneLine(l.snippet, 180)}</p> : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
 /** A collapsed input: one line until opened. */
@@ -243,6 +280,11 @@ export function Chain({
   // hidden behind a 125 KB gap dump that happened to be the run's output.
   const readable = collapsed ? [...lead, ...withContent].filter((n) => readsOpen(n, policy)) : [];
   const shownOpen = new Set(readable.map((n) => n.id));
+  // Not reached: links a record carries lead, whatever its form. They are what a
+  // search found, and often the answer one click away.
+  const links = collapsed
+    ? mergeLinks([...chains.outputs, ...chains.unused].filter((n) => !n.placeholder).map((n) => linksIn(fromProvenance(n.raw)?.body ?? null)))
+    : [];
   const withContentRest = withContent.filter((n) => !shownOpen.has(n.id));
   // A run that has not reached (finished or still walking): records and rows are
   // one line until opened (a running walk's pool can hold a 130 KB record), but
@@ -265,6 +307,9 @@ export function Chain({
           </ul>
         </details>
       ) : null}
+
+      {/* After what failed, before everything else: what the run found. */}
+      {links.length > 0 ? <FoundLinks links={links} /> : null}
 
       {collapsed ? (
         // Not reached yet: content to read leads open; records and rows stay one line.

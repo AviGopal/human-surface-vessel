@@ -1984,6 +1984,11 @@ body { overflow: hidden; }
 .sf-page-frame { width: 100%; height: 28rem; border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); background: #fff; resize: vertical; overflow: auto; }
 
 /* What the run's own records say failed, leading the outputs of an unreached run. */
+.sf-chain-links { margin-bottom: var(--sf-space-3); }
+.sf-chain-links ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sf-space-2); }
+.sf-chain-links li { min-width: 0; overflow-wrap: anywhere; }
+.sf-chain-link-host { margin-left: var(--sf-space-2); font-size: 0.85em; }
+.sf-chain-link-snippet { margin: 2px 0 0; font-size: 0.9em; }
 .sf-chain-failed { margin-bottom: var(--sf-space-3); }
 .sf-chain-failed > summary { color: var(--sf-not-reached); font-weight: 600; cursor: pointer; }
 .sf-chain-failed ul { list-style: none; margin: 0; padding: 0; }
@@ -1993,3 +1998,5 @@ body { overflow: hidden; }
 .sf-attempt-outcome,
 .sf-run-reason-full,
 .sf-failure-text { overflow-wrap: anywhere; }
+
+.sf-run-goalless > summary { padding: var(--sf-space-2) var(--sf-space-3); color: var(--sf-ink-3); cursor: pointer; font-size: 0.9em; }

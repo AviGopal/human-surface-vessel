@@ -29,6 +29,14 @@ const LIVE_DETAIL_BUDGET = 6;
 
 export type RunFilter = "all" | "mine" | "system";
 
+/**
+ * A run with no goal text: an internal job (template extraction) or an empty
+ * dispatch. Folded under one line so the runs with something to read stay visible.
+ */
+export function isGoalless(row: ActiveDispatch): boolean {
+  return !row.goal?.trim();
+}
+
 /** Runs asked from this surface. Everything else was started by the system. */
 export function isMine(row: ActiveDispatch): boolean {
   return row.operator === "human-surface";
@@ -137,8 +145,11 @@ export function RunsList({
     scrollRef.current?.scrollTo({ top: 0 });
   }, [buffered]);
 
-  const shown = committed.filter((p) => (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row)));
-  const bufferedShown = buffered.filter((p) => (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row)));
+  const inFilter = committed.filter((p) => (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row)));
+  const shown = inFilter.filter((p) => !isGoalless(p.row));
+  const goalless = inFilter.filter((p) => isGoalless(p.row));
+  // Goal-less arrivals join their fold silently; they never raise the "new" pill.
+  const bufferedShown = buffered.filter((p) => !isGoalless(p.row) && (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row)));
 
   const onListKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -190,7 +201,7 @@ export function RunsList({
       >
         {failed && committed.length === 0 ? <p className="sf-rail-empty sf-error">Runs unavailable</p> : null}
         {!failed && committed.length === 0 ? <p className="sf-rail-empty">{board.isLoading ? "Loading…" : "No runs"}</p> : null}
-        {committed.length > 0 && shown.length === 0 ? <p className="sf-rail-empty">None</p> : null}
+        {committed.length > 0 && inFilter.length === 0 ? <p className="sf-rail-empty">None</p> : null}
         {shown.map((p) => (
           <RunRow
             key={p.dispatchId}
@@ -205,6 +216,25 @@ export function RunsList({
             onFocused={setFocusedId}
           />
         ))}
+        {goalless.length > 0 ? (
+          <details className="sf-run-goalless" open={goalless.some((p) => p.dispatchId === selectedDispatchId)}>
+            <summary>No goal · {goalless.length}</summary>
+            {goalless.map((p) => (
+              <RunRow
+                key={p.dispatchId}
+                row={p.row}
+                startedAtMs={p.startedAtMs}
+                now={now}
+                selected={p.dispatchId === selectedDispatchId}
+                liveDetail={false}
+                onSelect={onSelect}
+                intervalMs={intervalMs}
+                tabStop
+                onFocused={setFocusedId}
+              />
+            ))}
+          </details>
+        ) : null}
       </div>
     </div>
   );
