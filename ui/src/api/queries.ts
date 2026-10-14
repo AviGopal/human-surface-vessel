@@ -55,6 +55,25 @@ export function useBoard(opts: { enabled: boolean; intervalMs: number }): UseQue
   });
 }
 
+/** How often a FINISHED run is re-read. */
+export const FINISHED_WALK_REFETCH_MS = 60_000;
+
+/**
+ * The poll interval for one run's walk state, or false for none.
+ *
+ * A running walk is read on the live cadence. A finished one (completed or
+ * failed) still changes rarely (a verdict recorded, a late judgement), so it is
+ * re-read slowly rather than never. Measured 10-14: one tab holding a finished
+ * run polled it every ~2 s for hours, and goal-host re-reads that run's labels
+ * on every poll, about 28 sorted DB reads a minute on a saturated host. A status
+ * this does not know keeps the live cadence.
+ */
+export function walkRefetchMs(data: Pick<GoalWalkState, "status"> | undefined, enabled: boolean, intervalMs: number): number | false {
+  if (!enabled) return false;
+  const status = data?.status;
+  return status === "completed" || status === "failed" ? Math.max(intervalMs, FINISHED_WALK_REFETCH_MS) : intervalMs;
+}
+
 export function useWalk(
   dispatchId: string | null,
   opts: { enabled: boolean; intervalMs: number },
@@ -63,7 +82,8 @@ export function useWalk(
     queryKey: queryKeys.walk(dispatchId ?? ""),
     queryFn: () => fetchWalkState(dispatchId as string),
     enabled: Boolean(dispatchId) && opts.enabled,
-    refetchInterval: opts.enabled ? opts.intervalMs : false,
+    // Hidden tabs already stop: react-query's refetchIntervalInBackground defaults to false.
+    refetchInterval: (query) => walkRefetchMs(query.state.data, opts.enabled, opts.intervalMs),
     refetchOnWindowFocus: false,
     placeholderData: (previous) => previous,
   });
