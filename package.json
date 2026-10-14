@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test --preload ./test/setup.ts ./test/*.test.ts",
+    "test": "bun test ./test/*.test.ts",
     "test:browser": "bun test/browser-participation.ts",
     "test:form-decision": "bun test/form-decision-probe.ts",
     "test:capacity": "bun test/capacity-probe.ts"

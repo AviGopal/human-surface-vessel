@@ -1,0 +1,5 @@
+# Every `bun test`, however it is started (the package script, a bare single
+# file, the pull-sync gate), gets a throwaway WORKSPACE_ROOT before any test
+# module loads. Without it a bare run wrote to the live /workspace on 09-22.
+[test]
+preload = ["./test/setup.ts"]
