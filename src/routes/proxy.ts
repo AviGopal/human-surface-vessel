@@ -26,6 +26,7 @@
  */
 
 import { Hono, type MiddlewareHandler } from "hono";
+import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
 import { getRenderPolicy, recentSurfaceIntents, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
@@ -722,13 +723,119 @@ proxyRouter.post("/api/run-goal", async (c) => {
   } catch {
     req = {};
   }
-  return resolveThrough(
+  const res = await resolveThrough(
     cand,
     JSON.stringify({ ...req, type: "goalDispatchAsync" }),
     c.req.header("Origin"),
     unwrapDispatch,
   );
+  // Only this surface knows which runs it asked; goal-host cannot list by operator.
+  if (res.ok && typeof req["operator"] === "string" && req["operator"] === SURFACE_OPERATOR) {
+    try {
+      const body = (await res.clone().json()) as { dispatchId?: unknown };
+      if (typeof body.dispatchId === "string" && body.dispatchId) {
+        recordOwnDispatch({
+          dispatchId: body.dispatchId,
+          goal: typeof req["goal"] === "string" ? (req["goal"] as string).slice(0, 200) : null,
+          operator: SURFACE_OPERATOR,
+          startedAt: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.warn(`[human-surface] own-dispatch record failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return res;
 });
+
+/**
+ * The runs this surface asked, newest first, with their last known state.
+ * goal-host is read only for runs whose state is unknown, still running, or
+ * finished but not re-checked for five minutes, and at most a few per call.
+ * A run goal-host no longer knows (pruned) is left out until it answers.
+ */
+proxyRouter.get("/api/mine", async (c) => {
+  if (ownDispatchCount() === 0) void backfillOwnDispatches();
+  const rows = listOwnDispatches(OWN_LIST_LIMIT);
+  const now = Date.now();
+  await Promise.all(
+    dueForRead(rows, now).map(async (id) => {
+      const w = await readWalkState(id);
+      const status = w?.["status"];
+      if (status === "running" || status === "completed" || status === "failed") {
+        rememberState(id, {
+          status,
+          reached: typeof w?.["reached"] === "boolean" ? (w["reached"] as boolean) : null,
+          executionId: typeof w?.["executionId"] === "string" ? (w["executionId"] as string) : null,
+          checkedAt: now,
+        });
+      }
+    }),
+  );
+  const dispatches = rows.flatMap((r) => {
+    const s = knownState(r.dispatchId);
+    return s
+      ? [{ dispatchId: r.dispatchId, goal: r.goal, status: s.status, reached: s.reached, operator: r.operator, trigger: null, startedAt: r.startedAt, learning: null, answerBody: null, ...(s.executionId ? { executionId: s.executionId } : {}) }]
+      : [];
+  });
+  return c.json({ resolved: true, shape: "ownDispatches", body: { dispatches } }, 200, corsHeaders(c.req.header("Origin")));
+});
+
+/** The operator this surface stamps on what a person asks (TopBar). */
+const SURFACE_OPERATOR = "human-surface";
+const OWN_LIST_LIMIT = 50;
+/** Pages of goal-host's listing a backfill reads, once per process: its whole store is 2,000 rows. */
+const BACKFILL_MAX_PAGES = 40;
+let backfilling = false;
+
+/**
+ * Runs asked before this record existed: read goal-host's listing once, page by
+ * page, and keep the ones this surface asked. Once per process, only while the
+ * record is empty, never on the poll path's critical path.
+ */
+async function backfillOwnDispatches(): Promise<void> {
+  if (backfilling) return;
+  backfilling = true;
+  try {
+    const cand = await resolveGoalHostEndpoint();
+    let offset: number | null = 0;
+    for (let page = 0; page < BACKFILL_MAX_PAGES && offset !== null; page++) {
+      const res = await fetch(resolveUrl(cand), {
+        method: "POST",
+        headers: upstreamHeaders(true),
+        body: JSON.stringify({ type: "activeDispatches", limit: 50, offset }),
+        signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
+      });
+      if (!res.ok) break;
+      const j = JSON.parse(unwrapFederated(await res.text())) as { body?: { dispatches?: Array<Record<string, unknown>>; nextOffset?: number | null } };
+      const now = Date.now();
+      for (const d of j.body?.dispatches ?? []) {
+        if (d["operator"] !== SURFACE_OPERATOR || typeof d["dispatchId"] !== "string") continue;
+        const started = typeof d["startedAt"] === "number" ? d["startedAt"] : Date.parse(String(d["startedAt"] ?? ""));
+        recordOwnDispatch({
+          dispatchId: d["dispatchId"],
+          goal: typeof d["goal"] === "string" ? d["goal"] : null,
+          operator: SURFACE_OPERATOR,
+          startedAt: Number.isFinite(started) ? started : now,
+        });
+        const status = d["status"];
+        if (status === "running" || status === "completed" || status === "failed") {
+          rememberState(d["dispatchId"], {
+            status,
+            reached: typeof d["reached"] === "boolean" ? d["reached"] : null,
+            executionId: typeof d["executionId"] === "string" ? d["executionId"] : null,
+            checkedAt: now,
+          });
+        }
+      }
+      offset = j.body?.nextOffset ?? null;
+    }
+  } catch (err) {
+    console.warn(`[human-surface] own-dispatch backfill stopped: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    backfilling = false;
+  }
+}
 
 proxyRouter.post("/api/resolve", async (c) => {
   const raw = await rawBodyOf(c);

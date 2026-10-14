@@ -195,10 +195,34 @@ export function fetchWalkState(dispatchId: string): Promise<GoalWalkState> {
 }
 
 export async function fetchActiveDispatches(): Promise<readonly ActiveDispatch[]> {
-  const body = await resolveShape<{ dispatches?: readonly ActiveDispatch[] }>({
-    type: "activeDispatches",
-  });
-  return Array.isArray(body?.dispatches) ? body.dispatches : [];
+  const [body, mine] = await Promise.all([
+    resolveShape<{ dispatches?: readonly ActiveDispatch[] }>({ type: "activeDispatches" }),
+    fetchOwnDispatches(),
+  ]);
+  const board = Array.isArray(body?.dispatches) ? body.dispatches : [];
+  return mergeOwnDispatches(board, mine);
+}
+
+/**
+ * The runs this surface asked, from its own record. goal-host's listing is the
+ * newest 50 of everyone's runs, so on a busy node a person's asks fall off it
+ * and "Mine" goes empty. Never fails the board: an error here is no rows.
+ */
+export async function fetchOwnDispatches(): Promise<readonly ActiveDispatch[]> {
+  try {
+    const res = await fetch("/api/mine", { credentials: "same-origin" });
+    if (!res.ok) return [];
+    const j = (await res.json()) as { body?: { dispatches?: readonly ActiveDispatch[] } };
+    return Array.isArray(j.body?.dispatches) ? j.body.dispatches : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The board's rows, plus the surface's own runs it no longer lists. The board's copy wins: it is the fresher. */
+export function mergeOwnDispatches(board: readonly ActiveDispatch[], mine: readonly ActiveDispatch[]): readonly ActiveDispatch[] {
+  const listed = new Set(board.map((d) => d.dispatchId));
+  return [...board, ...mine.filter((d) => !listed.has(d.dispatchId))];
 }
 
 /** Answer a mid-walk question in place. */
