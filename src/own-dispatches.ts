@@ -8,12 +8,15 @@
  * Every ask passes through this vessel's /api/run-goal, so the fact of what
  * this surface asked lives here (data locality), not behind a 2,000-row scan.
  *
- * Durable as an append-only file under WORKSPACE_ROOT, private to this vessel:
- * the shared interactor-log corpus has named external readers and this record
- * has one reader, the surface's own "Mine" list.
+ * Durable as an append-only file under WORKSPACE_ROOT/state/, private to this
+ * vessel: the shared interactor-log corpus has named external readers and this
+ * record has one reader, the surface's own "Mine" list. state/ because on a node
+ * where WORKSPACE_ROOT is the super-repo clone it is one of the runtime folders
+ * that clone's .gitignore already excludes; the first version wrote
+ * human-surface/ at the clone's top level, untracked and not ignored.
  */
-import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, rmdirSync, unlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export interface OwnDispatch {
   readonly dispatchId: string;
@@ -36,13 +39,38 @@ export const FINISHED_RECHECK_MS = 5 * 60_000;
 /** Reads goal-host makes per /api/mine call, at most. */
 export const MAX_READS_PER_CALL = 8;
 
-const file = (): string => join(process.env.WORKSPACE_ROOT ?? "/workspace", "human-surface", "own-dispatches.jsonl");
+const root = (): string => process.env.WORKSPACE_ROOT ?? "/workspace";
+const file = (): string => join(root(), "state", "human-surface", "own-dispatches.jsonl");
+/** Where the first version wrote: moved into file() on load, then removed. */
+const legacyFile = (): string => join(root(), "human-surface", "own-dispatches.jsonl");
 
 let loaded: OwnDispatch[] | null = null;
 const states = new Map<string, KnownState>();
 
+/** Move the first version's file to file(), once; its directory goes too if it is then empty. */
+function migrateLegacy(): void {
+  const old = legacyFile();
+  if (!existsSync(old)) return;
+  try {
+    const f = file();
+    mkdirSync(dirname(f), { recursive: true });
+    const fd = openSync(f, "a");
+    try {
+      appendFileSync(fd, readFileSync(old, "utf8"));
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    unlinkSync(old);
+    if (readdirSync(dirname(old)).length === 0) rmdirSync(dirname(old));
+  } catch (err) {
+    console.warn(`[human-surface] own-dispatch migration skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 function load(): OwnDispatch[] {
   if (loaded) return loaded;
+  migrateLegacy();
   loaded = [];
   const f = file();
   if (!existsSync(f)) return loaded;
@@ -67,7 +95,7 @@ export function recordOwnDispatch(d: OwnDispatch): boolean {
   const all = load();
   if (!d.dispatchId || all.some((x) => x.dispatchId === d.dispatchId)) return false;
   const f = file();
-  mkdirSync(join(f, ".."), { recursive: true });
+  mkdirSync(dirname(f), { recursive: true });
   const fd = openSync(f, "a");
   try {
     appendFileSync(fd, JSON.stringify(d) + "\n");

@@ -89,6 +89,28 @@ describe("the surface's own record", () => {
   });
 });
 
+describe("where the record lives", () => {
+  test("must-fail: under state/, which a super-repo clone ignores, never a new top-level folder", async () => {
+    const { existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    await ask("placement", "human-surface");
+    const root = process.env.WORKSPACE_ROOT!;
+    expect(existsSync(join(root, "state", "human-surface", "own-dispatches.jsonl"))).toBe(true);
+    expect(existsSync(join(root, "human-surface"))).toBe(false);
+  });
+
+  test("the first version's file is moved under state/ and its folder removed", async () => {
+    const { existsSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const root = process.env.WORKSPACE_ROOT!;
+    mkdirSync(join(root, "human-surface"), { recursive: true });
+    writeFileSync(join(root, "human-surface", "own-dispatches.jsonl"), JSON.stringify({ dispatchId: "legacy-1", goal: "old ask", operator: "human-surface", startedAt: 1 }) + "\n");
+    resetOwnDispatchesForTest();
+    expect(listOwnDispatches(500).map((r) => r.dispatchId)).toContain("legacy-1");
+    expect(existsSync(join(root, "human-surface"))).toBe(false);
+  });
+});
+
 describe("/api/mine", () => {
   test("returns this surface's runs with the state goal-host reports; one it no longer knows is left out", async () => {
     const r1 = (await (await ask("What time is it in France?", "human-surface")).json()) as { dispatchId: string };
