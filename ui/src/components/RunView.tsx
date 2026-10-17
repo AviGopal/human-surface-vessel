@@ -333,6 +333,8 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
             goal={walk.goal ?? ""}
             alreadyGraded={walk.humanGraded}
             changedSomething={walk.executionPath === "feature_compose"}
+            dispatchId={walk.dispatchId}
+            judgeReached={walk.reached}
             appliesTo={
               segments.length > 1
                 ? reportedSeg

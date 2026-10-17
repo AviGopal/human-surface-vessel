@@ -97,7 +97,16 @@ export type ObservationType =
    * form_decision this IS a judgement, and the form learner reads it
    * (src/form-learn.ts) as evidence against the form left and for the one chosen.
    */
-  | "form_choice";
+  | "form_choice"
+  /**
+   * A verdict on a run, from any source (a person on this surface, a judge, an
+   * oracle). A verdict is an observation: it is kept with its source whatever
+   * the learning corpus does with it, and independent concurring observations
+   * are weighed by their reader, never refused at the door. `body` carries
+   * dispatch_id, execution_id, goal, verdict, note, source and judge_reached.
+   * READER: personVerdicts (the run page's "You: …" line and the thread mark).
+   */
+  | "verdict";
 
 /**
  * The four states a SHOWN solicitation can end in, kept distinct here because
@@ -225,6 +234,16 @@ function indexFeedback(f: Feedback): void {
   if (list) list.push(f); else feedbackByPanel.set(f.panelId, [f]);
 }
 const observations: Observation[] = [];
+/** Verdict observations by dispatch, replayed from the journal at init so they outlive restarts. */
+const verdictsByDispatch = new Map<string, Observation[]>();
+function indexVerdict(o: Observation): void {
+  const id = o.body?.["dispatch_id"];
+  if (typeof id !== "string" || id.length === 0) return;
+  const list = verdictsByDispatch.get(id);
+  if (list) list.push(o);
+  else verdictsByDispatch.set(id, [o]);
+}
+
 const events: InteractorEvent[] = [];
 const asserts: InteractorAssertion[] = [];
 const attachments: InteractorAttachment[] = [];
@@ -387,6 +406,10 @@ for (const raw of readParticipation("uiPanel_write")) {
     panels.set(p.id, { ...p, revision: Number.isInteger(p.revision) && p.revision > 0 ? p.revision : 1 });
   }
 }
+for (const raw of readParticipation("interactorObservation_write")) {
+  const o = raw as Observation | null;
+  if (o && o.type === "verdict" && typeof o.observedAt === "number") indexVerdict(o);
+}
 for (const raw of readParticipation("uiFeedback_write")) {
   const f = raw as Feedback | null;
   if (f && typeof f.id === "string" && typeof f.panelId === "string" &&
@@ -450,9 +473,16 @@ export function recordObservation(
   // `readExposureCorpus`), so its corpus is neither bounded by MAX_HISTORY nor
   // lost on restart.
   // A person's form choice is learner evidence too (src/form-learn.ts readFormChoices).
-  if (exposure || o.type === "form_choice") appendParticipation("interactorObservation_write", entry);
+  if (exposure || o.type === "form_choice" || o.type === "verdict") appendParticipation("interactorObservation_write", entry);
+  if (o.type === "verdict") indexVerdict(entry);
   emit("observation_recorded", entry);
   return entry;
+}
+
+/** Verdicts recorded on a run, oldest first; or the newest across runs when no id is given. */
+export function personVerdicts(dispatchId?: string, limit = 200): Observation[] {
+  if (dispatchId) return [...(verdictsByDispatch.get(dispatchId) ?? [])];
+  return [...verdictsByDispatch.values()].flat().sort((a, b) => b.observedAt - a.observedAt).slice(0, limit);
 }
 
 export function recentObservations(limit = 50): Observation[] {

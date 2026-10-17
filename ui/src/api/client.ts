@@ -16,6 +16,7 @@ import type {
   DispatchRequest,
   GoalWalkState,
   GradeSubmission,
+  KeptVerdict,
   SolicitationOutcome,
   UnparsedClause,
 } from "./types";
@@ -340,6 +341,8 @@ export async function submitGrade(g: GradeSubmission): Promise<void> {
       confidence: 1,
       labeler: "human",
       notes: g.notes,
+      dispatch_id: g.dispatchId,
+      judge_reached: g.judgeReached ?? null,
     }),
   });
   if (!res.ok) {
@@ -351,6 +354,14 @@ export async function submitGrade(g: GradeSubmission): Promise<void> {
   }
 }
 
+
+/** Verdicts kept on a run, oldest first. */
+export async function fetchVerdicts(dispatchId: string): Promise<readonly KeptVerdict[]> {
+  const res = await fetch(`/api/verdicts?dispatch_id=${encodeURIComponent(dispatchId)}`, { credentials: "same-origin" });
+  if (!res.ok) throw new SurfaceError(`verdicts not read (HTTP ${res.status})`, res.status);
+  const j = (await res.json()) as { body?: { verdicts?: KeptVerdict[] } };
+  return j.body?.verdicts ?? [];
+}
 
 /* ────────────────────────── render policy ────────────────────────────────── */
 

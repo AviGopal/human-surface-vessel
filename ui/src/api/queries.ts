@@ -7,6 +7,7 @@ import {
   fetchFleetShapes,
   fetchGap,
   fetchRenderPolicy,
+  fetchVerdicts,
   fetchWalkState,
   injectContext,
   submitGrade,
@@ -20,6 +21,7 @@ export const queryKeys = {
   shapes: ["fleetShapes"] as const,
   capability: (shape: string) => ["vesselCapability", shape] as const,
   renderPolicy: ["renderPolicy"] as const,
+  verdicts: (dispatchId: string) => ["verdicts", dispatchId] as const,
 };
 
 /**
@@ -126,10 +128,24 @@ export function useDispatchGoal() {
   });
 }
 
+/** Verdicts kept on a run. Read once and after each grade, not polled. */
+export function useVerdicts(dispatchId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.verdicts(dispatchId ?? ""),
+    queryFn: () => fetchVerdicts(dispatchId ?? ""),
+    enabled: dispatchId !== null,
+    staleTime: Infinity,
+  });
+}
+
 export function useSubmitGrade() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: submitGrade,
+    // The surface keeps the verdict before the corpus answers, so re-read it either way.
+    onSettled: (_d, _e, g) => {
+      if (g.dispatchId) void client.invalidateQueries({ queryKey: queryKeys.verdicts(g.dispatchId) });
+    },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.board });
     },

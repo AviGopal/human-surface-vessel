@@ -2027,3 +2027,9 @@ body { overflow: hidden; }
 /* The one box's context: what the next message will be read as. */
 .sf-box-chip { display: inline-flex; align-items: center; gap: var(--sf-space-1); align-self: center; max-width: 22rem; padding: var(--sf-space-1) var(--sf-space-2); border-radius: 999px; font-size: var(--sf-text-xs); color: var(--sf-ink-3); border: 1px solid var(--sf-rule); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
 .sf-box-chip[data-context="reply"] { color: var(--sf-ink); border-color: var(--sf-waiting); background: var(--sf-panel-alt); }
+
+/* Verdicts kept on a run, beside the judge's. */
+.sf-kept-verdicts { list-style: none; margin: 0 0 var(--sf-space-2); padding: 0; display: grid; gap: var(--sf-space-1); font-size: var(--sf-text-sm); }
+.sf-kept-who { font-weight: 600; }
+.sf-kept-verdicts li[data-agree="false"] { border-left: 2px solid var(--sf-not-reached); padding-left: var(--sf-space-2); }
+.sf-kept-disagree { color: var(--sf-not-reached); }

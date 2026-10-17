@@ -27,7 +27,7 @@
 
 import { Hono, type MiddlewareHandler } from "hono";
 import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
-import { getRenderPolicy, recentSurfaceIntents, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
+import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
@@ -1109,6 +1109,23 @@ proxyRouter.post("/api/grade", async (c) => {
       corsHeaders(c.req.header("Origin")),
     );
   }
+  // A verdict is an observation, kept with its source before anything else and
+  // whatever the learning corpus does with it: a refusal there must not lose
+  // what the person said (user ruling 10-17).
+  recordObservation({
+    type: "verdict",
+    visibility: "operator_only",
+    body: {
+      dispatch_id: typeof body["dispatch_id"] === "string" ? body["dispatch_id"] : null,
+      execution_id: body["execution_id"],
+      goal: typeof body["goal"] === "string" ? body["goal"] : null,
+      verdict: body["verdict"],
+      note: typeof body["notes"] === "string" ? body["notes"] : "",
+      judge_reached: typeof body["judge_reached"] === "boolean" ? body["judge_reached"] : null,
+      source: "person",
+      via: "human-surface",
+    },
+  });
   return passthrough({
     url: `${ACTIVITY_API_ENDPOINT}/v2/impulses/resolve`,
     method: "POST",
@@ -1137,6 +1154,13 @@ proxyRouter.post("/api/grade", async (c) => {
     }),
     origin: c.req.header("Origin"),
   });
+});
+
+/** Verdicts kept on a run (or the newest across runs), for the run page and the thread mark. */
+proxyRouter.get("/api/verdicts", (c) => {
+  const id = c.req.query("dispatch_id") || undefined;
+  const verdicts = personVerdicts(id).map((o) => ({ ...o.body, observedAt: o.observedAt }));
+  return c.json({ resolved: true, shape: "interactorObservation", body: { verdicts } }, 200, corsHeaders(c.req.header("Origin")));
 });
 
 // ─── interface gaps (browser read) ──────────────────────────────────────────

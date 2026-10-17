@@ -18,7 +18,8 @@
 
 import { VERDICT_OPTIONS } from "@avigopal/design-tokens";
 import { useState, type ReactNode } from "react";
-import { useSubmitGrade } from "../api/queries";
+import { useSubmitGrade, useVerdicts } from "../api/queries";
+import type { KeptVerdict } from "../api/types";
 import { gradePayload } from "../lib/interaction";
 import { gradeRefusal } from "../lib/refusal";
 import { ChoiceInput, InteractionFooter, TextInput, stateOf } from "./Interaction";
@@ -31,7 +32,13 @@ export function GradeGesture({
   humanReachNotes,
   appliesTo = null,
   changedSomething = false,
+  dispatchId = null,
+  judgeReached = null,
 }: {
+  /** The run, so a verdict is kept on it as an observation whatever the corpus does. */
+  dispatchId?: string | null;
+  /** What the judge said, shown beside the person's verdict. */
+  judgeReached?: boolean | null;
   renderedState: "reached" | "not-reached" | "ungraded";
   /** ABSENT when goal-host never recorded one — the key is not serialized. */
   executionId: string | undefined;
@@ -48,6 +55,7 @@ export function GradeGesture({
   const grade = useSubmitGrade();
   const options = VERDICT_OPTIONS[renderedState === "reached" && !changedSomething ? "reached-answer" : renderedState];
   const refusal = grade.isError ? gradeRefusal((grade.error as Error).message) : null;
+  const kept = useVerdicts(dispatchId).data ?? [];
 
   if (alreadyGraded) {
     return (
@@ -70,12 +78,14 @@ export function GradeGesture({
   }
 
   return (
+    <>
+    {kept.length > 0 ? <KeptVerdicts kept={kept} judgeReached={judgeReached} corpusRefused={refusal ?? null} /> : null}
     <form
       className="sf-grade sf-interaction"
       onSubmit={(e) => {
         e.preventDefault();
         if (!selected) return;
-        grade.mutate(gradePayload({ renderedState, option: selected, note, executionId, goal }));
+        grade.mutate({ ...gradePayload({ renderedState, option: selected, note, executionId, goal }), ...(dispatchId ? { dispatchId } : {}), judgeReached });
       }}
     >
       {appliesTo ? <p className="sf-note sf-muted sf-grade-applies">{appliesTo}</p> : null}
@@ -95,5 +105,29 @@ export function GradeGesture({
         </details>
       ) : null}
     </form>
+    </>
+  );
+}
+
+/**
+ * What people said about this run, kept here as observations, beside what the
+ * judge said. Agreement and disagreement are both evidence; neither is hidden.
+ */
+function KeptVerdicts({ kept, judgeReached, corpusRefused }: { kept: readonly KeptVerdict[]; judgeReached: boolean | null; corpusRefused: string | null }): ReactNode {
+  return (
+    <ul className="sf-kept-verdicts" aria-label="Verdicts kept on this run">
+      {kept.map((v) => {
+        const said = v.verdict === "achieved" ? "reached" : v.verdict === "partial" ? "partly" : "not reached";
+        const agree = judgeReached === null ? null : (v.verdict === "achieved") === judgeReached;
+        return (
+          <li key={`${v.observedAt}:${v.verdict}`} data-agree={agree === null ? "unknown" : String(agree)}>
+            <span className="sf-kept-who">{v.source === "person" ? "You" : v.source}</span>: {said}
+            {v.note ? <span className="sf-muted"> · {v.note}</span> : null}
+            {agree === false ? <span className="sf-kept-disagree"> · the judge said {judgeReached ? "reached" : "not reached"}</span> : null}
+          </li>
+        );
+      })}
+      {corpusRefused ? <li className="sf-muted sf-note">Kept here; the learning corpus didn't take it yet.</li> : null}
+    </ul>
   );
 }

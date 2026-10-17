@@ -130,6 +130,8 @@ const OBSERVATION_TYPES = [
   "form_decision",
   /** A person's choice of a different form for one payload: read by the form learner. */
   "form_choice",
+  /** A verdict on a run from any source, kept as an observation (body: dispatch_id, verdict, source, …). */
+  "verdict",
 ] as const;
 const EXPOSURE_OUTCOMES = ["answered", "declined", "complained", "shown_not_acted"] as const;
 
