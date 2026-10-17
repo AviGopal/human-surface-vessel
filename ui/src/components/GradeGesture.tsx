@@ -34,7 +34,10 @@ export function GradeGesture({
   changedSomething = false,
   dispatchId = null,
   judgeReached = null,
+  about = null,
 }: {
+  /** The result shown as the answer and its provenance, carried with the grade. */
+  about?: Readonly<Record<string, string>> | null;
   /** The run, so a verdict is kept on it as an observation whatever the corpus does. */
   dispatchId?: string | null;
   /** What the judge said, shown beside the person's verdict. */
@@ -85,7 +88,7 @@ export function GradeGesture({
       onSubmit={(e) => {
         e.preventDefault();
         if (!selected) return;
-        grade.mutate({ ...gradePayload({ renderedState, option: selected, note, executionId, goal }), ...(dispatchId ? { dispatchId } : {}), judgeReached });
+        grade.mutate({ ...gradePayload({ renderedState, option: selected, note, executionId, goal }), ...(dispatchId ? { dispatchId } : {}), judgeReached, about });
       }}
     >
       {appliesTo ? <p className="sf-note sf-muted sf-grade-applies">{appliesTo}</p> : null}

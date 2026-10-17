@@ -35,6 +35,7 @@ import {
   GOAL_HOST_ENDPOINT,
   HOST,
   METABOB_API_KEY,
+  PERSON_RESOLVED_SHAPES,
   PORT,
   RESOLVE_PATH,
   VESSEL_ENDPOINT,
@@ -1124,6 +1125,9 @@ proxyRouter.post("/api/grade", async (c) => {
       judge_reached: typeof body["judge_reached"] === "boolean" ? body["judge_reached"] : null,
       source: "person",
       via: "human-surface",
+      // Which result was judged and where it came from, so a grade confirms or puts
+      // in question that result and its provenance (user ruling 10-17).
+      about: aboutOf(body["about"]),
     },
   });
   return passthrough({
@@ -1155,6 +1159,22 @@ proxyRouter.post("/api/grade", async (c) => {
     origin: c.req.header("Origin"),
   });
 });
+
+/** The judged result as the page names it: plain strings only, nothing else kept. */
+function aboutOf(v: unknown): Record<string, string> | null {
+  if (!v || typeof v !== "object") return null;
+  const out: Record<string, string> = {};
+  for (const k of ["pool_id", "shape", "produced_by", "provenance"]) {
+    const x = (v as Record<string, unknown>)[k];
+    if (typeof x === "string" && x.length <= 200) out[k] = x;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** The shapes this surface resolves by asking a person. */
+proxyRouter.get("/api/person-shapes", (c) =>
+  c.json({ resolved: true, body: { shapes: PERSON_RESOLVED_SHAPES } }, 200, corsHeaders(c.req.header("Origin"))),
+);
 
 /** Verdicts kept on a run (or the newest across runs), for the run page and the thread mark. */
 proxyRouter.get("/api/verdicts", (c) => {

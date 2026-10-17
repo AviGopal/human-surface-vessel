@@ -10,12 +10,12 @@ GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
 import type { GoalWalkState } from "../ui/src/api/types";
-import { isHumanProvidable } from "../ui/src/lib/shapes";
 import { splitVerdict } from "../ui/src/lib/verdict";
 
 let walk: Record<string, unknown> = {};
 globalThis.fetch = (async (input: RequestInfo | URL) => {
   const url = String(input);
+  if (url.includes("/api/person-shapes")) return new Response(JSON.stringify({ resolved: true, body: { shapes: ["human_input"] } }), { status: 200 });
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
   if (url.includes("/api/resolve")) return new Response(JSON.stringify({ resolved: true, shape: "goalWalkState", body: walk }), { status: 200 });
   return new Response("{}", { status: 200 });
@@ -83,12 +83,12 @@ describe("verdict codes", () => {
 });
 
 describe("Missing", () => {
-  test("must-fail: Provide is offered only for what a person can provide (09757917)", async () => {
-    expect(isHumanProvidable("human_context")).toBe(true);
-    expect(isHumanProvidable("execution_trace")).toBe(false);
-    const el = await mount(base({ status: "running", reached: null, pendingTargets: ["execution_trace", "activity_template", "human_context"] }));
+  test("must-fail: Provide is offered only for what this surface answers by asking a person (09757917)", async () => {
+    // The surface's own declaration, not a name pattern: human_context matches "human_" but no
+    // person is ever asked for it, so it is not offered.
+    const el = await mount(base({ status: "running", reached: null, pendingTargets: ["execution_trace", "human_context", "human_input"] }));
     const rows = [...el.querySelectorAll(".sf-needs-list li")].map((li) => [li.querySelector(".sf-shape-badge")?.textContent, li.querySelector("button")?.textContent ?? null]);
-    expect(rows).toEqual([["execution_trace", null], ["activity_template", null], ["human_context", "Provide"]]);
+    expect(rows).toEqual([["execution_trace", null], ["human_context", null], ["human_input", "Provide"]]);
   });
 });
 

@@ -58,6 +58,15 @@ export const METABOB_API_KEY =
  * `src/routes/impulses.ts` must agree exactly. The switch imports this array
  * and reports it verbatim in its 400 body, so the two cannot drift silently.
  */
+/**
+ * The shapes this vessel resolves BY ASKING A PERSON: a request for one becomes a
+ * question on the run that asked, and only an answer to that question is a
+ * person's input. Read by the surface to tell input a person gave from input a
+ * stand-in produced under the same shape (provenance, not the name).
+ * Must match the asking case in `src/routes/impulses.ts`.
+ */
+export const PERSON_RESOLVED_SHAPES = ["human_input"] as const;
+
 export const DISCOVERY_SHAPES = [
   "uiPanel_write",
   "uiQuestion_write",

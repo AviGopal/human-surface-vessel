@@ -7,6 +7,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { readParticipation } from "../src/participation-journal.ts";
+import { impulsesRouter } from "../src/routes/impulses.ts";
+import { PERSON_RESOLVED_SHAPES } from "../src/config.ts";
+import { getPanel } from "../src/store.ts";
 
 const realFetch = globalThis.fetch;
 const upstream: string[] = [];
@@ -27,7 +30,7 @@ describe("verdicts kept on the run", () => {
     const res = await app.request("/api/grade", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ execution_id: "e-1", dispatch_id: "d-rain", goal: "Where is it raining?", verdict: "not_achieved", notes: "Wrong answer — an empty search", judge_reached: true }),
+      body: JSON.stringify({ execution_id: "e-1", dispatch_id: "d-rain", goal: "Where is it raining?", verdict: "not_achieved", notes: "Wrong answer — an empty search", judge_reached: true, about: { pool_id: "p-7", shape: "human_input", produced_by: "satisfier:human_input", provenance: "without-a-person", extra: { x: 1 } } }),
     });
     // The corpus's answer is passed through unchanged.
     expect(res.status).toBe(403);
@@ -35,6 +38,8 @@ describe("verdicts kept on the run", () => {
     const kept = (await (await app.request("/api/verdicts?dispatch_id=d-rain")).json()) as { body: { verdicts: Record<string, unknown>[] } };
     expect(kept.body.verdicts).toHaveLength(1);
     expect(kept.body.verdicts[0]).toMatchObject({ dispatch_id: "d-rain", verdict: "not_achieved", note: "Wrong answer — an empty search", source: "person", judge_reached: true });
+    // Which result was judged, and where it came from; nothing beyond the named strings is kept.
+    expect(kept.body.verdicts[0]?.["about"]).toEqual({ pool_id: "p-7", shape: "human_input", produced_by: "satisfier:human_input", provenance: "without-a-person" });
     // Journaled, so it outlives a restart.
     const journaled = readParticipation("interactorObservation_write").filter(
       (o) => (o as { type?: string; body?: { dispatch_id?: string } }).type === "verdict" && (o as { body?: { dispatch_id?: string } }).body?.dispatch_id === "d-rain",
@@ -45,5 +50,21 @@ describe("verdicts kept on the run", () => {
   test("another run's verdicts are not mixed in", async () => {
     const other = (await (await app.request("/api/verdicts?dispatch_id=d-other")).json()) as { body: { verdicts: unknown[] } };
     expect(other.body.verdicts).toHaveLength(0);
+  });
+
+  test("every shape the surface declares as person-resolved really asks a person", async () => {
+    const declared = (await (await app.request("/api/person-shapes")).json()) as { body: { shapes: string[] } };
+    expect(declared.body.shapes).toEqual([...PERSON_RESOLVED_SHAPES]);
+    const impulses = new Hono();
+    impulses.route("/", impulsesRouter);
+    for (const shape of PERSON_RESOLVED_SHAPES) {
+      const res = await impulses.request("/v2/impulses/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: shape, pointer: { type: shape, solicitation_id: `decl-${shape}`, question_markdown: "## q" } }),
+      });
+      expect(res.status).toBe(200);
+      expect(getPanel(`solicitation-decl-${shape}`)?.kind).toBe("question");
+    }
   });
 });

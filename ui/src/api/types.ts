@@ -205,6 +205,8 @@ export interface GradeSubmission {
   readonly dispatchId?: string;
   /** What the judge said, kept beside the person's verdict. */
   readonly judgeReached?: boolean | null;
+  /** The result judged and where it came from: a grade confirms or questions that result. */
+  readonly about?: Readonly<Record<string, string>> | null;
 }
 
 /** A verdict kept on a run as an observation, whatever the learning corpus did with it. */
@@ -214,6 +216,7 @@ export interface KeptVerdict {
   readonly note: string;
   readonly source: string;
   readonly judge_reached: boolean | null;
+  readonly about?: Readonly<Record<string, string>> | null;
   readonly observedAt: number;
 }
 

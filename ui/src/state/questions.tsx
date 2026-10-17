@@ -198,6 +198,11 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
   return <QuestionsContext.Provider value={value}>{children}</QuestionsContext.Provider>;
 }
 
+/** The questions, or null where no provider is mounted (views drawn outside the app shell). */
+export function useQuestionsIfAny(): QuestionsValue | null {
+  return useContext(QuestionsContext);
+}
+
 export function useQuestions(): QuestionsValue {
   const ctx = useContext(QuestionsContext);
   if (!ctx) throw new Error("useQuestions must be used inside QuestionsProvider");

@@ -8,14 +8,3 @@
 export function isWriteShape(shape: string): boolean {
   return /_write$/.test(shape) || /(^|:)write_note$/.test(shape) || /^(fs_write|fs_edit|fileWriteResult|fileEditResult)$/.test(shape);
 }
-
-/**
- * Whether a person can sensibly provide this missing shape: one named for
- * human input (`human_context`, `human_input`, …). Everything else a walk
- * misses (`execution_trace`, `activity_template`, `test_suite`) is the
- * system's own vocabulary, which a person has no way to supply, and offering to
- * take it asks them to do the system's work in its terms.
- */
-export function isHumanProvidable(shape: string): boolean {
-  return /^human[_:]/.test(shape) && !isWriteShape(shape);
-}

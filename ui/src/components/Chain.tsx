@@ -13,6 +13,7 @@ import { creditFor, readCredit, type CreditRow, type RunCredit } from "../lib/cr
 import { fromProvenance } from "../lib/content";
 import { linksIn, mergeLinks, type FoundLink } from "../lib/links";
 import { useRenderPolicy } from "../api/queries";
+import { PersonMark } from "./PersonMark";
 import { useLiveControls } from "../state/liveControls";
 import { planFor } from "./Rendered";
 import { Rendered } from "./Rendered";
@@ -47,9 +48,12 @@ function CreditBadge({ row }: { row: CreditRow | null }): ReactNode {
 
 /** Whether outputs here offer "Show as": never in the blind calibration view. */
 const Choosable = createContext(true);
+/** The run these outputs belong to, for the provenance mark. */
+const RunOf = createContext<string | null>(null);
 
 function NodeContent({ n, density, credit, choosable: forced }: { n: ChainNode; density: "full" | "inline"; credit: RunCredit | null; choosable?: boolean }): ReactNode {
   const allowed = useContext(Choosable);
+  const runId = useContext(RunOf);
   const choosable = allowed && forced !== false;
   const content = fromProvenance(n.raw);
   if (!content) return null;
@@ -63,6 +67,7 @@ function NodeContent({ n, density, credit, choosable: forced }: { n: ChainNode; 
         <>
           {n.producerExecutionId ? <span className="sf-muted sf-mono">{n.producerExecutionId}</span> : null}
           <CreditBadge row={creditFor(n.producedBy, credit)} />
+          <PersonMark shape={n.shape} dispatchId={runId} />
         </>
       }
     />
@@ -291,6 +296,7 @@ export function Chain({
   // content to read still leads open, by its planned form. Never in the blind
   // view, where the layout must not carry the verdict.
   return (
+    <RunOf.Provider value={walk.dispatchId}>
     <Choosable.Provider value={!blind}>
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
@@ -374,5 +380,6 @@ export function Chain({
       <RouteArounds items={routes} />
     </section>
     </Choosable.Provider>
+    </RunOf.Provider>
   );
 }
