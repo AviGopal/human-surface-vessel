@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
-import { CUT_KEY, findMarkup, heuristicForm, parseDiff, parseRows, type MetaChip, type RenderPlan } from "../lib/ledger";
+import { CUT_KEY, findMarkup, heuristicForm, parseDiff, parseRows, readableNumber, type MetaChip, type RenderPlan } from "../lib/ledger";
 import { Prose } from "./Prose";
 
 /** Above this a value is not a scalar, whatever the plan said. */
@@ -297,7 +297,11 @@ function renderValue(key: string, v: unknown, depth: number): ReactNode {
   if (typeof v === "number" && EPOCH_KEY.test(key) && v > 1e12 && v < 1e13) {
     return <TimeValue ms={v} raw={String(v)} />;
   }
-  if (typeof v === "boolean" || typeof v === "number") {
+  if (typeof v === "number") {
+    const r = readableNumber(v);
+    return <span className="sf-scalar-value sf-mono" title={r.exact}>{r.text}</span>;
+  }
+  if (typeof v === "boolean") {
     return <span className="sf-scalar-value sf-mono">{String(v)}</span>;
   }
   if (typeof v === "string") {

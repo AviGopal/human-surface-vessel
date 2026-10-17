@@ -1094,12 +1094,29 @@ const CELL_TITLE_CAP = 2000;
  * destroys the same alignment from the other direction. A count plus a
  * `title`, visibly marked as a summary, is the honest thing a cell can hold.
  */
+/**
+ * A number as a person reads it: whole numbers as they are, fractions to two
+ * places (four significant digits below one), and very large or very small
+ * values in exponent form. `exact` is set when the text is not the full value.
+ */
+export function readableNumber(n: number): { text: string; exact?: string } {
+  const full = String(n);
+  if (!Number.isFinite(n) || Number.isInteger(n) && Math.abs(n) < 1e15) return { text: full };
+  const abs = Math.abs(n);
+  const text = abs >= 1e15 || abs < 1e-4 ? n.toExponential(2) : abs >= 1 ? String(Number(n.toFixed(2))) : String(Number(n.toPrecision(4)));
+  return text === full ? { text } : { text, exact: full };
+}
+
 function cell(v: unknown): Cell {
   if (v === null || v === undefined) return { text: "" };
   // A multiline string cannot blow up the row height either. The pilcrow keeps
   // the break visible instead of silently joining two lines into one claim.
   if (typeof v === "string") return { text: v.replace(/\n/g, " ⏎ ") };
-  if (typeof v === "number" || typeof v === "boolean") return { text: String(v) };
+  if (typeof v === "number") {
+    const r = readableNumber(v);
+    return r.exact ? { text: r.text, title: r.exact } : { text: r.text };
+  }
+  if (typeof v === "boolean") return { text: String(v) };
   let title: string;
   try {
     title = JSON.stringify(v).slice(0, CELL_TITLE_CAP);

@@ -1025,9 +1025,13 @@ body {
 /* `display: contents` on the row so the key and the value are direct grid
    items and every key column lines up across the whole record — which is the
    only reason to draw a record as a grid rather than as stacked pairs. */
+/*
+ * The key column is capped: at max-content, one long key in a nested record
+ * took most of the width and squeezed every value into a narrow column.
+ */
 .sf-record {
   display: grid;
-  grid-template-columns: minmax(6rem, max-content) 1fr;
+  grid-template-columns: fit-content(35%) minmax(0, 1fr);
   gap: var(--sf-space-1) var(--sf-space-3);
   margin: 0;
 }
@@ -1037,6 +1041,7 @@ body {
 }
 
 .sf-record-key {
+  overflow-wrap: anywhere;
   font-family: var(--sf-font-mono);
   font-size: var(--sf-text-xs);
   color: var(--sf-ink-3);
