@@ -79,6 +79,15 @@ describe("one fold", () => {
     expect(fold.querySelector("[aria-label='Attempts']")).not.toBeNull();
   });
 
+  test("must-fail: an expired run counts its attempts from the run, and keeps 'Not retained' inside the fold", async () => {
+    walk = { ...base, status: "completed", reached: false, goalReachReason: "The output was an empty UI panel.", answerBody: null, poolProvenance: [], poolEvents: [], walkLog: [], attemptCount: 4 };
+    const el = await mount();
+    const fold = el.querySelector("details.sf-how")!;
+    expect(fold.querySelector("summary")?.textContent).toContain("4 attempts");
+    const outputs = el.querySelector("[aria-label='Outputs']");
+    expect(outputs === null || fold.contains(outputs)).toBe(true);
+  });
+
   test("a running run is not folded", async () => {
     walk = { ...base, status: "running", reached: null, goalReachReason: null, answerBody: null };
     const el = await mount();

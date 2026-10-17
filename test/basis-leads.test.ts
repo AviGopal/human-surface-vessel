@@ -66,9 +66,12 @@ const base = {
 
 describe("a reached run whose outputs expired", () => {
   test("must-fail: the basis leads as the answer, drawn as links, and is not drawn twice", async () => {
-    walk = { ...base, answerBody: `# ${GOAL}\n${REASON}\n## Basis\n\n${DID}\n\n${search}` };
+    // As goal-host writes it: the record, then one placeholder line per step.
+    const stub = '{"producedBy":"activity:⟨learned-composition-shellresult-to-llm-completion-to-memorynote-write⟩","executionId":"exec_3n3sxgu0"}';
+    walk = { ...base, answerBody: `# ${GOAL}\n${REASON}\n## Basis\n\n${DID}\n\n${search}\n\n${stub}\n\n${stub}` };
     const el = await mount();
     const answer = el.querySelector("[aria-label='Answer']");
+    expect(answer?.textContent).not.toContain("producedBy");
     expect(answer).not.toBeNull();
     const hrefs = [...answer!.querySelectorAll("a")].map((a) => a.getAttribute("href"));
     expect(hrefs).toContain("https://www.bbc.com/news/articles/cm2d6e62p49do");

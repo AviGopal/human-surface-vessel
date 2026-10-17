@@ -244,9 +244,12 @@ export function basisContent(body: string, goal: string | undefined, dispatchId:
   const { basis } = splitAnswer(body, goal);
   const kept = basis && dispatchId ? dropLine(basis, dispatchId) : basis;
   if (!kept) return null;
-  const at = kept.search(/[{[]/);
-  if (at < 0) return null;
-  const text = kept.slice(at).trim();
+  // The basis is blocks separated by blank lines: the record the answer came
+  // from first, then one placeholder line per step. Only the first record is
+  // the answer (run 3faa95f3: one search record, then eleven stub lines).
+  const first = kept.split(/\n\s*\n/).map((b) => b.trim()).find((b) => /^[{[]/.test(b));
+  if (!first) return null;
+  const text = first;
   let shape = "basis";
   let whole = true;
   try {

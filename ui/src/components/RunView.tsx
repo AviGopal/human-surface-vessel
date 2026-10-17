@@ -221,6 +221,10 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   // the reported walk, which is not necessarily the last one.
   const segments = segmentAttempts(walk);
   const reportedSeg = segments.find((s) => s.reported) ?? null;
+  // An expired run keeps its attempt count but not the events the strip counts.
+  const attemptsShown = Math.max(segments.length, walk.attemptCount ?? 0);
+  // Outputs that expired say only "Not retained": that belongs in the fold, not above it.
+  const outputsRetained = (walk.poolProvenance ?? []).length > 0;
 
 
   return (
@@ -299,14 +303,14 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
       ) : (
         <>
           {/* No answer: what the run produced is the only content, so it stays open. */}
-          {answer ? null : <Chain walk={walk} exclude={null} />}
+          {answer || !outputsRetained ? null : <Chain walk={walk} exclude={null} />}
           <details className="sf-view-section sf-how" aria-label="How it went">
             <summary className="sf-view-label">
-              How it went · {segments.length === 1 ? "1 attempt" : `${segments.length} attempts`}
+              How it went · {attemptsShown === 1 ? "1 attempt" : `${attemptsShown} attempts`}
               {span !== null ? ` · ${duration(span)}` : ""}
             </summary>
             <Attempts walk={walk} segments={segments} />
-            {answer ? <Chain walk={walk} exclude={promoted && promotedContent ? promoted.id : null} /> : null}
+            {answer || !outputsRetained ? <Chain walk={walk} exclude={promoted && promotedContent ? promoted.id : null} /> : null}
             <details className="sf-view-section sf-provenance" aria-label="Provenance">
               <summary className="sf-view-label">Provenance</summary>
               <Trace walk={walk} />
