@@ -144,6 +144,16 @@ export function useVerdicts(dispatchId: string | null) {
   });
 }
 
+/** The newest verdicts across runs, for the rail's marks; on the board's cadence. */
+export function useAllVerdicts(opts: { enabled: boolean; intervalMs: number }) {
+  return useQuery({
+    queryKey: ["verdicts", "*"],
+    queryFn: () => fetchVerdicts(),
+    enabled: opts.enabled,
+    refetchInterval: opts.enabled ? opts.intervalMs * 5 : false,
+  });
+}
+
 export function useSubmitGrade() {
   const client = useQueryClient();
   return useMutation({
@@ -151,6 +161,7 @@ export function useSubmitGrade() {
     // The surface keeps the verdict before the corpus answers, so re-read it either way.
     onSettled: (_d, _e, g) => {
       if (g.dispatchId) void client.invalidateQueries({ queryKey: queryKeys.verdicts(g.dispatchId) });
+      void client.invalidateQueries({ queryKey: ["verdicts", "*"] });
     },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.board });

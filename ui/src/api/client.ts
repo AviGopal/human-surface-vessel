@@ -365,8 +365,8 @@ export async function fetchPersonShapes(): Promise<readonly string[]> {
 }
 
 /** Verdicts kept on a run, oldest first. */
-export async function fetchVerdicts(dispatchId: string): Promise<readonly KeptVerdict[]> {
-  const res = await fetch(`/api/verdicts?dispatch_id=${encodeURIComponent(dispatchId)}`, { credentials: "same-origin" });
+export async function fetchVerdicts(dispatchId?: string): Promise<readonly KeptVerdict[]> {
+  const res = await fetch(dispatchId ? `/api/verdicts?dispatch_id=${encodeURIComponent(dispatchId)}` : "/api/verdicts", { credentials: "same-origin" });
   if (!res.ok) throw new SurfaceError(`verdicts not read (HTTP ${res.status})`, res.status);
   const j = (await res.json()) as { body?: { verdicts?: KeptVerdict[] } };
   return j.body?.verdicts ?? [];

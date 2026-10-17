@@ -46,9 +46,16 @@ export function groupThreads<T extends ThreadRun>(runs: readonly T[]): readonly 
 
 export type Mark = "reached" | "missed" | "open";
 
+/** What people said about a run, against the judge: agree, disagree, or nothing said. */
+export type PersonSaid = "agree" | "disagree" | null;
+
 /** How far this ask has got: each run's outcome oldest first, and whether the latest finished run reached. */
 export interface LearningMark {
   readonly marks: readonly Mark[];
+  /** Per mark, oldest first: whether a person's latest verdict agreed with the judge. */
+  readonly said: readonly PersonSaid[];
+  /** Runs whose judged outcome a person disputed. */
+  readonly disputed: number;
   readonly reached: number;
   readonly judged: number;
   /** Reached now after missing before; missed now after reaching before; or neither. */
@@ -58,13 +65,31 @@ export interface LearningMark {
 /** The most recent marks drawn; older runs still count in the totals. */
 export const MARKS_SHOWN = 8;
 
-export function learningMark(runs: readonly ThreadRun[]): LearningMark {
+/** Each run's latest person verdict, as reached or not; "partial" says neither. */
+export function personReachedByRun(verdicts: readonly { dispatch_id: string | null; verdict: string; observedAt: number }[]): Map<string, boolean> {
+  const latest = new Map<string, { at: number; v: string }>();
+  for (const v of verdicts) {
+    if (!v.dispatch_id) continue;
+    const prev = latest.get(v.dispatch_id);
+    if (!prev || v.observedAt > prev.at) latest.set(v.dispatch_id, { at: v.observedAt, v: v.verdict });
+  }
+  const out = new Map<string, boolean>();
+  for (const [id, { v }] of latest) if (v === "achieved" || v === "not_achieved") out.set(id, v === "achieved");
+  return out;
+}
+
+export function learningMark(runs: readonly ThreadRun[], personReached: ReadonlyMap<string, boolean> = new Map()): LearningMark {
   const oldestFirst = [...runs].sort((a, b) => a.startedAtMs - b.startedAtMs);
+  const said: PersonSaid[] = oldestFirst.map((r) => {
+    const p = personReached.get(r.dispatchId);
+    if (p === undefined || r.reached === null) return null;
+    return p === r.reached ? "agree" : "disagree";
+  });
   const marks: Mark[] = oldestFirst.map((r) => (r.status === "running" || r.reached === null ? "open" : r.reached ? "reached" : "missed"));
   const judged = marks.filter((m) => m !== "open");
   const reached = judged.filter((m) => m === "reached").length;
   const last = judged[judged.length - 1];
   const before = judged.slice(0, -1);
   const trend = last === "reached" && before.includes("missed") ? "learned" : last === "missed" && before.includes("reached") ? "lost" : null;
-  return { marks: marks.slice(-MARKS_SHOWN), reached, judged: judged.length, trend };
+  return { marks: marks.slice(-MARKS_SHOWN), said: said.slice(-MARKS_SHOWN), disputed: said.filter((x) => x === "disagree").length, reached, judged: judged.length, trend };
 }

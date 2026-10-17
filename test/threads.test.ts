@@ -8,9 +8,11 @@ GlobalRegistrator.register({ url: "http://surface.test/" });
 import { afterAll, describe, expect, test } from "bun:test";
 
 let dispatches: unknown[] = [];
+let verdicts: unknown[] = [];
 globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
   const ask = JSON.parse(String(init?.body ?? "{}")) as { type?: string };
   if (String(_input).includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
+  if (String(_input).includes("/api/verdicts")) return new Response(JSON.stringify({ body: { verdicts } }), { status: 200 });
   if (String(_input).includes("/api/mine")) return new Response(JSON.stringify({ dispatches: [] }), { status: 200 });
   if (ask.type === "activeDispatches") return new Response(JSON.stringify({ resolved: true, shape: "activeDispatches", body: { dispatches } }), { status: 200 });
   return new Response("{}", { status: 200 });
@@ -25,7 +27,7 @@ const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { RunsList } = await import("../ui/src/components/RunsList");
-const { groupThreads, learningMark, threadKey } = await import("../ui/src/lib/threads");
+const { groupThreads, learningMark, personReachedByRun, threadKey } = await import("../ui/src/lib/threads");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -106,5 +108,27 @@ describe("threads", () => {
     for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
     expect(ids(el)).toEqual(["g8", "w"]);
     expect(el.querySelector("[data-dispatch-id='g8'] .sf-thread-mark")?.getAttribute("aria-label")).toBe("1 of 7 reached, now reaches");
+  });
+
+  test("a person's verdict against the judge marks the run disputed; the latest verdict counts", () => {
+    const said = personReachedByRun([
+      { dispatch_id: "a", verdict: "achieved", observedAt: 1 },
+      { dispatch_id: "a", verdict: "not_achieved", observedAt: 2 },
+      { dispatch_id: "b", verdict: "partial", observedAt: 1 },
+    ]);
+    expect([...said]).toEqual([["a", false]]);
+    const m = learningMark([run("a", 1, true), run("b", 2, false)], said);
+    expect(m.said).toEqual(["disagree", null]);
+    expect(m.disputed).toBe(1);
+  });
+
+  test("must-fail: a run asked once that a person disputed carries a mark saying so", async () => {
+    dispatches = [{ dispatchId: "r1", goal: "Where is it raining?", operator: "human-surface", status: "completed", reached: true, startedAt: at(20) }];
+    verdicts = [{ dispatch_id: "r1", verdict: "not_achieved", note: "Wrong answer", source: "person", judge_reached: true, observedAt: 5 }];
+    const el = await mount(React.createElement(RunsList, { selectedDispatchId: null, onSelect: () => {}, filter: "mine" }));
+    const mark = el.querySelector("[data-dispatch-id='r1'] .sf-thread-mark");
+    expect(mark?.getAttribute("aria-label")).toBe("1 of 1 reached, 1 disputed by you");
+    expect(mark?.querySelector(".sf-thread-dot")?.getAttribute("data-said")).toBe("disagree");
+    verdicts = [];
   });
 });

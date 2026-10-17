@@ -119,14 +119,15 @@ const TREND_LABEL = { learned: "now reaches", lost: "stopped reaching" } as cons
 
 /** One mark per run, oldest first, then how many reached. */
 export function ThreadMark({ mark }: { mark: LearningMark }): ReactNode {
-  const summary = `${mark.reached} of ${mark.judged} reached${mark.trend ? `, ${TREND_LABEL[mark.trend]}` : ""}`;
+  const summary = `${mark.reached} of ${mark.judged} reached${mark.trend ? `, ${TREND_LABEL[mark.trend]}` : ""}${mark.disputed ? `, ${mark.disputed} disputed by you` : ""}`;
   return (
     <span className="sf-thread-mark" data-trend={mark.trend ?? "none"} title={summary} aria-label={summary}>
       {mark.marks.map((m, i) => (
-        <span key={i} className="sf-thread-dot" data-mark={m} aria-hidden="true" />
+        <span key={i} className="sf-thread-dot" data-mark={m} data-said={mark.said[i] ?? "none"} aria-hidden="true" />
       ))}
       <span className="sf-thread-count" aria-hidden="true">
         {mark.reached}/{mark.judged}
+        {mark.disputed ? <span className="sf-thread-disputed"> · {mark.disputed}✗</span> : null}
       </span>
     </span>
   );

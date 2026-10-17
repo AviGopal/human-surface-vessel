@@ -16,10 +16,10 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { useBoard } from "../api/queries";
+import { useAllVerdicts, useBoard } from "../api/queries";
 import type { ActiveDispatch } from "../api/types";
 import { sortRuns } from "../lib/sort";
-import { groupThreads, learningMark } from "../lib/threads";
+import { groupThreads, learningMark, personReachedByRun } from "../lib/threads";
 import { parseStartedAt } from "../lib/time";
 import { useNow } from "../lib/useNow";
 import { useLiveControls, useRegionFreeze } from "../state/liveControls";
@@ -98,6 +98,8 @@ export function RunsList({
   const { frozen, handlers } = useRegionFreeze();
   const now = useNow(paused);
   const board = useBoard({ enabled: !paused && !frozen, intervalMs });
+  const verdicts = useAllVerdicts({ enabled: !paused && !frozen, intervalMs });
+  const personReached = personReachedByRun(verdicts.data ?? []);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [committed, setCommitted] = useState<readonly Positioned[]>([]);
@@ -222,7 +224,11 @@ export function RunsList({
               intervalMs={intervalMs}
               tabStop={p.dispatchId === rovingId}
               onFocused={setFocusedId}
-              {...(earlier.length > 0 ? { thread: learningMark(t.runs) } : {})}
+              {...(() => {
+                // A mark for a repeated ask, or for a run a person has judged.
+                const mark = learningMark(t.runs, personReached);
+                return earlier.length > 0 || mark.said.some((x) => x !== null) ? { thread: mark } : {};
+              })()}
             />
           );
           // Earlier runs are listed only while the thread is open: one line per ask otherwise.
