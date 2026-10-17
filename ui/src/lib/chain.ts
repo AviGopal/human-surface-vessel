@@ -135,6 +135,15 @@ export function inputsOf(n: ChainNode, chains: RunChains): { inputs: readonly Ch
  * content, else the largest thing it produced with content. Null when it
  * produced nothing with content.
  */
-export function answerNode(chains: RunChains): ChainNode | null {
+export function answerNode(chains: RunChains, credited?: readonly string[] | null): ChainNode | null {
+  // When the judge named what it credited, only that can stand in for the
+  // answer. Run 1651d791 (10-17) was reached on webSearchResult, which had been
+  // reduced to a placeholder, and the first output, a 234,821-character
+  // git status of the local repository, was promoted as the "answer". If the
+  // credited output is gone, promote nothing: the basis leads instead.
+  if (credited && credited.length > 0) {
+    const want = new Set(credited);
+    return [...chains.outputs, ...chains.unused].find((n) => want.has(n.shape) && !n.placeholder) ?? null;
+  }
   return chains.outputs[0] ?? chains.unused.find((n) => !n.placeholder) ?? null;
 }

@@ -208,7 +208,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const verdictOnly = answer !== null && answerIsVerdict(answer, walk.goal ?? undefined, walk.goalReachReason);
   // A reached run whose "answer" is only the verdict: what it produced leads as
   // the answer, and the verdict follows as a line.
-  const promoted = walk.reached === true && verdictOnly ? answerNode(buildChains(walk)) : null;
+  const promoted = walk.reached === true && verdictOnly ? answerNode(buildChains(walk), walk.completionShapes) : null;
   const promotedContent = promoted ? fromProvenance(promoted.raw) : null;
   // Its outputs expired: the record the answer was reasoned from is the answer.
   const basisLead = walk.reached === true && verdictOnly && answer !== null && !(promoted && promotedContent)
