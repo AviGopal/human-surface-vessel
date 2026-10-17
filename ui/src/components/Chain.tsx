@@ -110,7 +110,7 @@ function oneLine(text: string, max: number): string {
 }
 
 /** Links the run found, leading on a run that has not reached: often the answer is one click away. */
-function FoundLinks({ links }: { links: readonly FoundLink[] }): ReactNode {
+export function FoundLinks({ links }: { links: readonly FoundLink[] }): ReactNode {
   return (
     <section className="sf-chain-links" aria-label="Links">
       <h4 className="sf-view-label">Links · {links.length}</h4>

@@ -19,11 +19,12 @@ import { useNow } from "../lib/useNow";
 import { useProgressWatch } from "../lib/useProgressWatch";
 import { useLiveControls } from "../state/liveControls";
 import { segmentAttempts } from "../lib/attempts";
-import { AnswerBody, answerIsVerdict } from "./Answer";
+import { AnswerBody, answerIsVerdict, basisContent } from "./Answer";
+import { linksIn } from "../lib/links";
 import { Attempts } from "./Attempts";
 import { answerNode, buildChains } from "../lib/chain";
 import { fromProvenance } from "../lib/content";
-import { Chain } from "./Chain";
+import { Chain, FoundLinks } from "./Chain";
 import { isHumanProvidable } from "../lib/shapes";
 import { splitVerdict } from "../lib/verdict";
 import { RunQuestion } from "./RunQuestion";
@@ -208,6 +209,12 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   // the answer, and the verdict follows as a line.
   const promoted = walk.reached === true && verdictOnly ? answerNode(buildChains(walk)) : null;
   const promotedContent = promoted ? fromProvenance(promoted.raw) : null;
+  // Its outputs expired: the record the answer was reasoned from is the answer.
+  const basisLead = walk.reached === true && verdictOnly && answer !== null && !(promoted && promotedContent)
+    ? basisContent(answer, walk.goal ?? undefined, walk.dispatchId)
+    : null;
+  // A search record answers with its links, as the outputs view already draws them.
+  const basisLinks = basisLead ? linksIn(basisLead.body) : [];
   // Several walks: say WHICH one the verdict, answer and grade belong to. It is
   // the reported walk, which is not necessarily the last one.
   const segments = segmentAttempts(walk);
@@ -254,13 +261,22 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
             <h3 className="sf-view-label">Answer</h3>
             <Rendered content={promotedContent} density="full" header={false} region="run_answer" choosable />
           </section>
+        ) : basisLead ? (
+          <section className="sf-view-section" aria-label="Answer">
+            <h3 className="sf-view-label">Answer</h3>
+            {basisLinks.length > 0 ? (
+              <FoundLinks links={basisLinks} />
+            ) : (
+              <Rendered content={basisLead} density="full" header={false} region="run_answer" choosable />
+            )}
+          </section>
         ) : null}
         <section
-          className={`sf-view-section${promoted && promotedContent ? " sf-verdict-compact" : ""}`}
+          className={`sf-view-section${(promoted && promotedContent) || basisLead ? " sf-verdict-compact" : ""}`}
           aria-label={verdictOnly ? "Verdict" : "Answer"}
         >
           <h3 className="sf-view-label">{verdictOnly ? "Verdict" : "Answer"}</h3>
-          <AnswerBody answerBody={answer} goal={walk.goal} dispatchId={walk.dispatchId} />
+          <AnswerBody answerBody={answer} goal={walk.goal} dispatchId={walk.dispatchId} hideBasis={basisLead !== null} />
         </section>
         </>
       ) : null}

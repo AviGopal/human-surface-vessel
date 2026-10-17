@@ -3,6 +3,7 @@
  * pastes into it routed through the same shape-form pipeline as every impulse.
  */
 
+import type { Content } from "../lib/content";
 import type { ReactNode } from "react";
 import { fromResponse } from "../lib/content";
 import { truncatedEnvelopePayload } from "../lib/ledger";
@@ -195,13 +196,17 @@ export function AnswerBody({
   answerBody,
   goal,
   dispatchId,
+  hideBasis = false,
 }: {
   answerBody: string;
   goal?: string;
   /** The run's own id. The answer builder pastes it into the basis; the header already shows it. */
   dispatchId?: string;
+  /** The basis already leads elsewhere on the page: do not draw it a second time. */
+  hideBasis?: boolean;
 }): ReactNode {
-  const { main, basis: rawBasis } = splitAnswer(answerBody, goal);
+  const { main, basis: rawBasisAll } = splitAnswer(answerBody, goal);
+  const rawBasis = hideBasis ? null : rawBasisAll;
   const basis = rawBasis && dispatchId ? dropLine(rawBasis, dispatchId) : rawBasis;
   // When the builder wrote no prose, the basis IS the answer: folding it left a
   // card that showed only "Basis" and hid the value (a registry count of 12).
@@ -223,6 +228,36 @@ export function AnswerBody({
       ) : null}
     </div>
   );
+}
+
+/**
+ * The record a verdict-only answer was reasoned from, as content to draw: the
+ * text after "## Basis", without the run's own id line, from its first JSON
+ * value on. Null when there is no record there.
+ *
+ * Why: goal-host keeps a run's outputs only for its newest runs, but keeps the
+ * answer. Once the outputs expire, a reached run's real answer survives only
+ * here (10-14: today's news, 2,920 characters, folded under "Basis" while
+ * "Outputs" said "Not retained").
+ */
+export function basisContent(body: string, goal: string | undefined, dispatchId: string | undefined): Content | null {
+  const { basis } = splitAnswer(body, goal);
+  const kept = basis && dispatchId ? dropLine(basis, dispatchId) : basis;
+  if (!kept) return null;
+  const at = kept.search(/[{[]/);
+  if (at < 0) return null;
+  const text = kept.slice(at).trim();
+  let shape = "basis";
+  let whole = true;
+  try {
+    const v = JSON.parse(text) as { shape?: unknown };
+    if (v && typeof v === "object" && typeof v.shape === "string") shape = v.shape;
+  } catch {
+    whole = false;
+    const m = /"shape"\s*:\s*"([^"]+)"/.exec(text);
+    if (m?.[1]) shape = m[1];
+  }
+  return { shape, origin: "impulse", body: text, state: whole ? "full" : "truncated", size: { shown: text.length, total: whole ? text.length : text.length + 1 } };
 }
 
 function dropLine(text: string, line: string): string | null {
