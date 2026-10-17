@@ -29,10 +29,13 @@ const { groupThreads, learningMark, threadKey } = await import("../ui/src/lib/th
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+let lastClient: InstanceType<typeof QueryClient> | null = null;
+
 async function mount(node: unknown): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  lastClient = qc;
   await act(async () => {
     createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, node as never))));
   });
@@ -65,28 +68,43 @@ describe("threads", () => {
     expect(learningMark([run("a", 1, false), run("b", 2, false)]).trend).toBeNull();
   });
 
-  test("must-fail: seven runs of one ask draw one line with its history; earlier runs fold under it", async () => {
-    const at = (m: number): string => new Date(Date.UTC(2026, 9, 15, 10, m)).toISOString();
-    dispatches = [
-      ...[1, 2, 3, 4, 5, 6].map((m) => ({ dispatchId: `g${m}`, goal: "What is on GitHub?", operator: "human-surface", status: "completed", reached: false, startedAt: at(m) })),
-      { dispatchId: "g7", goal: "what is on github", operator: "human-surface", status: "completed", reached: true, startedAt: at(7) },
-      { dispatchId: "w", goal: "Weather in Seattle", operator: "human-surface", status: "completed", reached: true, startedAt: at(8) },
-    ];
+  const at = (m: number): string => new Date(Date.UTC(2026, 9, 15, 10, m)).toISOString();
+  const seven = () => [
+    ...[1, 2, 3, 4, 5, 6].map((m) => ({ dispatchId: `g${m}`, goal: "What is on GitHub?", operator: "human-surface", status: "completed", reached: false, startedAt: at(m) })),
+    { dispatchId: "g7", goal: "what is on github", operator: "human-surface", status: "completed", reached: true, startedAt: at(7) },
+    { dispatchId: "w", goal: "Weather in Seattle", operator: "human-surface", status: "completed", reached: true, startedAt: at(8) },
+  ];
+  const ids = (el: HTMLElement): (string | null)[] => [...el.querySelectorAll(".sf-run-row")].map((r) => r.getAttribute("data-dispatch-id"));
+
+  test("must-fail: seven runs of one ask draw one line with its history and no extra lines", async () => {
+    dispatches = seven();
     const el = await mount(React.createElement(RunsList, { selectedDispatchId: null, onSelect: () => {}, filter: "mine" }));
-    const outside = [...el.querySelectorAll(".sf-run-row")].filter((r) => !r.closest("details")).map((r) => r.getAttribute("data-dispatch-id"));
-    expect(outside).toEqual(["w", "g7"]);
-    const thread = el.querySelector(".sf-thread")!;
-    expect(thread.querySelector(".sf-thread-mark")?.getAttribute("aria-label")).toBe("1 of 7 reached, now reaches");
-    expect(thread.querySelectorAll(".sf-thread-dot").length).toBe(7);
-    const fold = thread.querySelector("details.sf-thread-earlier")!;
-    expect(fold.querySelector("summary")?.textContent).toBe("Earlier · 6");
-    expect(fold.hasAttribute("open")).toBe(false);
+    expect(ids(el)).toEqual(["w", "g7"]);
+    const mark = el.querySelector("[data-dispatch-id='g7'] .sf-thread-mark");
+    expect(mark?.getAttribute("aria-label")).toBe("1 of 7 reached, now reaches");
+    expect(mark?.querySelectorAll(".sf-thread-dot").length).toBe(7);
     // A run asked once has no mark.
     expect(el.querySelector("[data-dispatch-id='w'] .sf-thread-mark")).toBeNull();
   });
 
-  test("the fold opens when the selected run is an earlier one", async () => {
-    const el = await mount(React.createElement(RunsList, { selectedDispatchId: "g3", onSelect: () => {}, filter: "mine" }));
-    expect(el.querySelector("details.sf-thread-earlier")?.hasAttribute("open")).toBe(true);
+  test("an open thread lists its earlier runs under the newest, newest first", async () => {
+    for (const selected of ["g7", "g3"]) {
+      const el = await mount(React.createElement(RunsList, { selectedDispatchId: selected, onSelect: () => {}, filter: "mine" }));
+      const earlier = el.querySelector(".sf-thread-earlier");
+      expect([...earlier!.querySelectorAll(".sf-run-row")].map((r) => r.getAttribute("data-dispatch-id"))).toEqual(["g6", "g5", "g4", "g3", "g2", "g1"]);
+    }
+  });
+
+  test("a repeat accepted at the top takes its thread's line: the earlier head folds in, nothing else moves", async () => {
+    dispatches = seven();
+    const el = await mount(React.createElement(RunsList, { selectedDispatchId: null, onSelect: () => {}, filter: "mine" }));
+    expect(ids(el)).toEqual(["w", "g7"]);
+    dispatches = [...seven(), { dispatchId: "g8", goal: "What is on GitHub?", operator: "human-surface", status: "running", reached: null, startedAt: at(9) }];
+    await act(async () => {
+      await lastClient!.refetchQueries();
+    });
+    for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    expect(ids(el)).toEqual(["g8", "w"]);
+    expect(el.querySelector("[data-dispatch-id='g8'] .sf-thread-mark")?.getAttribute("aria-label")).toBe("1 of 7 reached, now reaches");
   });
 });

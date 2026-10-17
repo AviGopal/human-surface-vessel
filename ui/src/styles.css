@@ -2016,11 +2016,10 @@ body { overflow: hidden; }
 .sf-how > summary { cursor: pointer; }
 .sf-how[open] > summary { margin-bottom: var(--sf-space-2); }
 
-/* Threads: repeated asks share one line; the mark is each run's outcome, oldest first. */
+/* Threads: repeated asks share one line; the mark is each run's outcome, oldest first. Earlier runs show while the thread is open. */
 .sf-thread-mark { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 .sf-thread-dot { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--sf-ink-3); }
 .sf-thread-dot[data-mark="reached"] { background: var(--sf-reached); border-color: var(--sf-reached); }
 .sf-thread-dot[data-mark="missed"] { background: transparent; border-color: var(--sf-not-reached); }
 .sf-thread-count { margin-left: var(--sf-space-1); font-size: var(--sf-text-xs); color: var(--sf-ink-3); font-variant-numeric: tabular-nums; }
-.sf-thread-earlier > summary { padding: var(--sf-space-1) var(--sf-space-4); color: var(--sf-ink-3); cursor: pointer; font-size: var(--sf-text-xs); border-bottom: 1px solid var(--sf-rule); }
 .sf-thread-earlier .sf-run-row { padding-left: var(--sf-space-6); }

@@ -225,12 +225,13 @@ export function RunsList({
               {...(earlier.length > 0 ? { thread: learningMark(t.runs) } : {})}
             />
           );
-          if (earlier.length === 0) return head;
+          // Earlier runs are listed only while the thread is open: one line per ask otherwise.
+          const open = t.runs.some((r) => r.dispatchId === selectedDispatchId);
+          if (earlier.length === 0 || !open) return head;
           return (
             <div key={p.dispatchId} className="sf-thread" data-thread-size={t.runs.length}>
               {head}
-              <details className="sf-thread-earlier" open={earlier.some((e) => e.dispatchId === selectedDispatchId)}>
-                <summary>Earlier · {earlier.length}</summary>
+              <div className="sf-thread-earlier" role="group" aria-label="Earlier runs of this ask">
                 {earlier.map((e) => (
                   <RunRow
                     key={e.dispatchId}
@@ -245,7 +246,7 @@ export function RunsList({
                     onFocused={setFocusedId}
                   />
                 ))}
-              </details>
+              </div>
             </div>
           );
         })}
