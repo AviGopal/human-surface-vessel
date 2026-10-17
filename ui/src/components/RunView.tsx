@@ -212,7 +212,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const promotedContent = promoted ? fromProvenance(promoted.raw) : null;
   // Its outputs expired: the record the answer was reasoned from is the answer.
   const basisLead = walk.reached === true && verdictOnly && answer !== null && !(promoted && promotedContent)
-    ? basisContent(answer, walk.goal ?? undefined, walk.dispatchId)
+    ? basisContent(answer, walk.goal ?? undefined, walk.dispatchId, walk.completionShapes)
     : null;
   const known = knownness(walk);
   // A search record answers with its links, as the outputs view already draws them.
@@ -278,6 +278,9 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
             )}
           </section>
         ) : null}
+        {walk.reached === true && verdictOnly && !(promoted && promotedContent) && !basisLead && (walk.completionShapes ?? []).length > 0 ? (
+          <p className="sf-note sf-muted sf-answer-lost">The answer's content wasn't kept: what the judge credited ({(walk.completionShapes ?? []).join(", ")}) survives only as a placeholder.</p>
+        ) : null}
         <section
           className={`sf-view-section${(promoted && promotedContent) || basisLead ? " sf-verdict-compact" : " sf-known"}`}
           data-known={(promoted && promotedContent) || basisLead || verdictOnly ? undefined : known}
@@ -287,7 +290,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
             {verdictOnly ? "Verdict" : "Answer"}
             {!verdictOnly && KNOWNNESS_LABEL[known] ? <span className="sf-known-label"> · {KNOWNNESS_LABEL[known]}</span> : null}
           </h3>
-          <AnswerBody answerBody={answer} goal={walk.goal} dispatchId={walk.dispatchId} hideBasis={basisLead !== null} />
+          <AnswerBody answerBody={answer} goal={walk.goal} dispatchId={walk.dispatchId} hideBasis={basisLead !== null || (walk.reached === true && verdictOnly && (walk.completionShapes ?? []).length > 0)} />
         </section>
         </>
       ) : null}

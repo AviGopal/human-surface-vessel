@@ -29,3 +29,19 @@ describe("answer promotion", () => {
     expect(answerNode(buildChains(walk(null)), null)?.shape).toBe("git_status");
   });
 });
+
+import { basisContent } from "../ui/src/components/Answer";
+describe("the basis", () => {
+  const body = [
+    "# What projects are currently popular on github?\nThe web search results provide a clear list.",
+    "## Basis", "", "d1", "",
+    '{"shape":"gitStatus","stdout":" M leases/x.json\\n?? GPT-5.md"}', "",
+    '{"producedBy":"activity:⟨learned-satisfier-web-search-result⟩","executionId":"exec_7y5bazuv"}',
+  ].join("\n");
+  test("must-fail: an uncredited record never leads from the basis", () => {
+    expect(basisContent(body, "What projects are currently popular on github?", "d1", ["webSearchResult"])).toBeNull();
+  });
+  test("a credited record leads, whatever its spelling", () => {
+    expect(basisContent(body, "What projects are currently popular on github?", "d1", ["git_status"])?.shape).toBe("gitStatus");
+  });
+});

@@ -240,14 +240,23 @@ export function AnswerBody({
  * here (10-14: today's news, 2,920 characters, folded under "Basis" while
  * "Outputs" said "Not retained").
  */
-export function basisContent(body: string, goal: string | undefined, dispatchId: string | undefined): Content | null {
+/** gitStatus, git_status and GitStatus name one shape here. */
+const shapeKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+export function basisContent(body: string, goal: string | undefined, dispatchId: string | undefined, credited?: readonly string[] | null): Content | null {
   const { basis } = splitAnswer(body, goal);
   const kept = basis && dispatchId ? dropLine(basis, dispatchId) : basis;
   if (!kept) return null;
   // The basis is blocks separated by blank lines: the record the answer came
   // from first, then one placeholder line per step. Only the first record is
   // the answer (run 3faa95f3: one search record, then eleven stub lines).
-  const first = kept.split(/\n\s*\n/).map((b) => b.trim()).find((b) => /^[{[]/.test(b));
+  const records = kept.split(/\n\s*\n/).map((b) => b.trim()).filter((b) => /^[{[]/.test(b));
+  // When the run names what was credited, only a record of that shape may lead
+  // (run 1651d791: credited webSearchResult, but the basis led with a git status
+  // of the local repository and kept the search only as a placeholder line).
+  const want = credited && credited.length > 0 ? new Set(credited.map(shapeKey)) : null;
+  const shapeOf = (b: string): string | null => /"shape"\s*:\s*"([^"]+)"/.exec(b)?.[1] ?? null;
+  const first = want ? records.find((b) => { const sh = shapeOf(b); return sh !== null && want.has(shapeKey(sh)); }) : records[0];
   if (!first) return null;
   const text = first;
   let shape = "basis";
