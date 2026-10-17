@@ -251,7 +251,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         {known === "not-understood" ? <p className="sf-known-line" data-known="not-understood">Didn't understand the question: inference returned no target.</p> : null}
       </header>
 
-      <Attempts walk={walk} segments={segments} />
+      {walk.status === "running" ? <Attempts walk={walk} segments={segments} /> : null}
 
       {walk.status === "running" ? <WalkNeeds walk={walk} /> : null}
 
@@ -288,12 +288,32 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         </>
       ) : null}
 
-      <Chain walk={walk} exclude={promoted && promotedContent ? promoted.id : null} />
-
-      <details className="sf-view-section sf-provenance" aria-label="Provenance">
-        <summary className="sf-view-label">Provenance</summary>
-        <Trace walk={walk} />
-      </details>
+      {walk.status === "running" ? (
+        <>
+          <Chain walk={walk} exclude={promoted && promotedContent ? promoted.id : null} />
+          <details className="sf-view-section sf-provenance" aria-label="Provenance">
+            <summary className="sf-view-label">Provenance</summary>
+            <Trace walk={walk} />
+          </details>
+        </>
+      ) : (
+        <>
+          {/* No answer: what the run produced is the only content, so it stays open. */}
+          {answer ? null : <Chain walk={walk} exclude={null} />}
+          <details className="sf-view-section sf-how" aria-label="How it went">
+            <summary className="sf-view-label">
+              How it went · {segments.length === 1 ? "1 attempt" : `${segments.length} attempts`}
+              {span !== null ? ` · ${duration(span)}` : ""}
+            </summary>
+            <Attempts walk={walk} segments={segments} />
+            {answer ? <Chain walk={walk} exclude={promoted && promotedContent ? promoted.id : null} /> : null}
+            <details className="sf-view-section sf-provenance" aria-label="Provenance">
+              <summary className="sf-view-label">Provenance</summary>
+              <Trace walk={walk} />
+            </details>
+          </details>
+        </>
+      )}
 
       {walk.status === "running" ? <InjectContext dispatchId={walk.dispatchId} /> : null}
 

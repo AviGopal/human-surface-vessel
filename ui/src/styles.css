@@ -2006,3 +2006,7 @@ body { overflow: hidden; }
 .sf-known[data-known="not-understood"] { border: 1px dashed var(--sf-ink-3); border-radius: 6px; padding: var(--sf-space-2) var(--sf-space-3); }
 .sf-known-label { color: var(--sf-ink-3); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .sf-known-line { color: var(--sf-ink-2); border-left: 2px dashed var(--sf-ink-3); padding-left: var(--sf-space-2); margin: var(--sf-space-2) 0 0; }
+
+/* One fold for how a finished run went: attempts, outputs, provenance. */
+.sf-how > summary { cursor: pointer; }
+.sf-how[open] > summary { margin-bottom: var(--sf-space-2); }
