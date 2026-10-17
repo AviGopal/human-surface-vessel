@@ -30,6 +30,7 @@ export function GradeGesture({
   alreadyGraded,
   humanReachNotes,
   appliesTo = null,
+  changedSomething = false,
 }: {
   renderedState: "reached" | "not-reached" | "ungraded";
   /** ABSENT when goal-host never recorded one — the key is not serialized. */
@@ -37,13 +38,15 @@ export function GradeGesture({
   goal: string;
   alreadyGraded: boolean;
   humanReachNotes: string | null;
+  /** The run made a change (a code edit), so a reached verdict is about the change, not an answer. */
+  changedSomething?: boolean;
   /** Which attempt a grade lands on, when the run walked more than once. */
   appliesTo?: string | null;
 }): ReactNode {
   const [selected, setSelected] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const grade = useSubmitGrade();
-  const options = VERDICT_OPTIONS[renderedState];
+  const options = VERDICT_OPTIONS[renderedState === "reached" && !changedSomething ? "reached-answer" : renderedState];
   const refusal = grade.isError ? gradeRefusal((grade.error as Error).message) : null;
 
   if (alreadyGraded) {

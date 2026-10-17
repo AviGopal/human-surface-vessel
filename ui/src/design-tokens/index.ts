@@ -165,10 +165,13 @@ export const CONTENT_FORMS_MIRRORED: FormsMirrorOk = true;
  * agree-affordance: a correct outcome needs no feedback, and soliciting praise
  * pollutes a corpus that is already a biased failure sample.
  */
-export const VERDICT_OPTIONS: Readonly<Record<"reached" | "not-reached" | "ungraded", readonly string[]>> = {
+export const VERDICT_OPTIONS: Readonly<Record<"reached" | "reached-answer" | "not-reached" | "ungraded", readonly string[]>> = {
   // No verdict to disagree with: the person gives one.
   ungraded: ["Reached", "Not reached"],
+  // A run that made a change (a code edit).
   reached: ["Didn't do it", "Did the wrong thing", "Right idea, wrong change", "Unsafe"],
+  // A run that answered: change-wording ("Right idea, wrong change") does not fit a news summary.
+  "reached-answer": ["Didn't answer it", "Wrong answer", "Unsafe"],
   "not-reached": [
     "It actually worked",
     "Failed for a different reason",
