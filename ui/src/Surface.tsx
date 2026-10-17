@@ -20,6 +20,8 @@ import { QuestionView } from "./components/QuestionView";
 import { RunsList, initialFilter, latestMine, rememberFilter, type RunFilter } from "./components/RunsList";
 import { RunView } from "./components/RunView";
 import { TopBar } from "./components/TopBar";
+import { boxContext } from "./lib/box";
+import { openRunQuestion } from "./lib/walk";
 import { useTokenOverrides } from "./lib/useTokenOverrides";
 import { useLiveControls } from "./state/liveControls";
 import { useStoreStream } from "./state/stream";
@@ -91,6 +93,13 @@ function Workbench(): ReactNode {
   // Nothing selected: the newest run asked from here, so the first screen shows an answer, not an empty pane.
   const latest = latestMine(board.data);
 
+  // The box answers the run on screen when that run is waiting on the person.
+  const [setAside, setSetAside] = useState<string | null>(null);
+  const shownRun = runId ?? (questionId ? null : latest);
+  const waiting = shownRun ? openRunQuestion(questions.query.data?.questions, shownRun, Date.now()) : null;
+  const shownGoal = shownRun ? (board.data?.find((r) => r.dispatchId === shownRun)?.goal ?? null) : null;
+  const context = boxContext(waiting, shownGoal, setAside);
+
   const openRun = (dispatchId: string): void => {
     setIssuesOpen(false);
     void navigate({ to: "/run/$dispatchId", params: { dispatchId } });
@@ -105,6 +114,8 @@ function Workbench(): ReactNode {
       <h1 className="sf-visually-hidden">Substrate surface</h1>
       <TopBar
         onDispatched={openRun}
+        context={context}
+        onSetAside={() => setSetAside(waiting?.id ?? null)}
         openIssues={openGaps}
         issuesOpen={issuesOpen}
         onToggleIssues={() => setIssuesOpen((v) => !v)}

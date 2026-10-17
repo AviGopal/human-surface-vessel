@@ -8,10 +8,14 @@
  * here, in one line.
  */
 
+import { useMutation } from "@tanstack/react-query";
 import { useRef, useState, type ReactNode } from "react";
 import { useDispatchGoal } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
+import { boxWords, readAs, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
+import { useQuestions } from "../state/questions";
+import { answerRunQuestion } from "./RunQuestion";
 import { StarterChips } from "./StarterChips";
 
 const MAX_BOX_LINES = 8;
@@ -84,8 +88,14 @@ export function TopBar({
   onToggleIssues,
   issuesOpen,
   calibration = null,
+  context = NEW_ASK,
+  onSetAside,
 }: {
   onDispatched: (dispatchId: string) => void;
+  /** What the next message will be read as; the chip shows it. */
+  context?: BoxContext;
+  /** × on the chip: read the next message as a new ask instead. */
+  onSetAside?: () => void;
   openIssues: number | null;
   onToggleIssues: () => void;
   issuesOpen: boolean;
@@ -97,6 +107,15 @@ export function TopBar({
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
   const dispatch = useDispatchGoal();
   const { paused, setPaused } = useLiveControls();
+  const { recordReceipt } = useQuestions();
+  const [echo, setEcho] = useState<string | null>(null);
+  const answer = useMutation({
+    retry: false,
+    mutationFn: (args: { ctx: Extract<BoxContext, { kind: "reply" }>; text: string }) => answerRunQuestion(args.ctx.question, "answered", args.text),
+    onSuccess: recordReceipt,
+  });
+  const words = boxWords(context);
+  const pending = dispatch.isPending || answer.isPending;
 
   const fit = (el: HTMLTextAreaElement | null): void => {
     if (!el) return;
@@ -118,9 +137,30 @@ export function TopBar({
     }
   };
 
+  const cleared = (): void => {
+    setGoal("");
+    window.requestAnimationFrame(() => fit(boxRef.current));
+  };
+
   const submit = (): void => {
     const text = goal.trim();
-    if (text.length === 0 || dispatch.isPending) return;
+    if (text.length === 0 || pending) return;
+    if (context.kind === "reply") {
+      const ctx = context;
+      dispatch.reset();
+      answer.mutate(
+        { ctx, text },
+        {
+          onSuccess: () => {
+            setEcho(`${readAs(ctx)} · delivered`);
+            cleared();
+          },
+        },
+      );
+      return;
+    }
+    answer.reset();
+    setEcho(null);
     dispatch.mutate(
       { goal: text, operator: "human-surface", tags: ["surface:do-anything"] },
       {
@@ -128,10 +168,7 @@ export function TopBar({
           if ((outcome.kind === "accepted" || outcome.kind === "refused") && outcome.dispatchId) {
             onDispatched(outcome.dispatchId);
           }
-          if (outcome.kind === "accepted") {
-            setGoal("");
-            window.requestAnimationFrame(() => fit(boxRef.current));
-          }
+          if (outcome.kind === "accepted") cleared();
         },
       },
     );
@@ -146,13 +183,21 @@ export function TopBar({
           submit();
         }}
       >
+        <span className="sf-box-chip" data-context={context.kind} aria-live="polite">
+          {words.chip}
+          {context.kind === "reply" && onSetAside ? (
+            <button type="button" className="sf-icon-button" aria-label="Ask something new instead" onClick={onSetAside}>
+              ×
+            </button>
+          ) : null}
+        </span>
         <div className="sf-ask-field">
           <textarea
             ref={boxRef}
             rows={1}
-            aria-label="What do you want done?"
+            aria-label={words.placeholder}
             className="sf-ask-box"
-            placeholder="What do you want done?"
+            placeholder={words.placeholder}
             value={goal}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
@@ -167,15 +212,15 @@ export function TopBar({
               }
             }}
           />
-          {focused && goal.trim().length === 0 ? (
+          {focused && goal.trim().length === 0 && context.kind === "new" ? (
             // mousedown is swallowed so choosing a chip does not blur the box first.
             <div className="sf-ask-suggest" onMouseDown={(e) => e.preventDefault()}>
               <StarterChips onInsert={(text) => put(text, true)} />
             </div>
           ) : null}
         </div>
-        <button type="submit" className="sf-button sf-button-primary" disabled={goal.trim().length === 0 || dispatch.isPending}>
-          {dispatch.isPending ? "Sending…" : "Send"}
+        <button type="submit" className="sf-button sf-button-primary" disabled={goal.trim().length === 0 || pending}>
+          {pending ? "Sending…" : words.send}
         </button>
       </form>
 
@@ -210,6 +255,22 @@ export function TopBar({
         <div className="sf-outcome-line" data-tone="error" role="status">
           <span>Not sent: {(dispatch.error as Error).message}</span>
           <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => dispatch.reset()}>
+            ×
+          </button>
+        </div>
+      ) : null}
+      {answer.isError ? (
+        <div className="sf-outcome-line" data-tone="error" role="status">
+          <span>Not delivered: {(answer.error as Error).message}</span>
+          <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => answer.reset()}>
+            ×
+          </button>
+        </div>
+      ) : null}
+      {echo && !answer.isError ? (
+        <div className="sf-outcome-line" data-tone="ok" role="status">
+          <span>{echo}</span>
+          <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => setEcho(null)}>
             ×
           </button>
         </div>

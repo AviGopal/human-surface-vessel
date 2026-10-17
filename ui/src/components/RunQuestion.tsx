@@ -30,6 +30,26 @@ function remaining(ms: number): string {
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+/**
+ * Answer a run's question: to the waiting run (`solicitationResponse_write`), then
+ * recorded on the question so the questions rail shows it answered too. The one
+ * path for the question card and the box.
+ */
+export async function answerRunQuestion(question: Question, outcome: SolicitationOutcome, answer: string) {
+  const run = question.run;
+  if (!run) throw new Error("no run");
+  const value = outcome === "answered" ? answer.trim() : outcome;
+  await answerSolicitation({ solicitationId: run.solicitationId, outcome, answer: answer.trim() });
+  const content = contributionContent({
+    panelId: question.id,
+    revision: question.revision,
+    askId: null,
+    kind: outcome === "answered" ? "answer" : "dismiss",
+    value,
+  });
+  return sendContribution({ ...content, response_id: crypto.randomUUID() });
+}
+
 function answerText(q: Question): string | null {
   const a = q.answers?.[q.answers.length - 1] as { value?: unknown } | undefined;
   if (!a) return null;
@@ -68,19 +88,7 @@ export function RunQuestion({ question, running }: { question: Question; running
 
   const mutation = useMutation({
     retry: false,
-    mutationFn: async (outcome: SolicitationOutcome) => {
-      if (!run) throw new Error("no run");
-      const value = outcome === "answered" ? answer.trim() : outcome;
-      await answerSolicitation({ solicitationId: run.solicitationId, outcome, answer: answer.trim() });
-      const content = contributionContent({
-        panelId: question.id,
-        revision: question.revision,
-        askId: null,
-        kind: outcome === "answered" ? "answer" : "dismiss",
-        value,
-      });
-      return sendContribution({ ...content, response_id: crypto.randomUUID() });
-    },
+    mutationFn: (outcome: SolicitationOutcome) => answerRunQuestion(question, outcome, answer),
     onSuccess: recordReceipt,
   });
 
