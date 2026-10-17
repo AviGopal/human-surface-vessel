@@ -6,7 +6,6 @@ import {
   fetchCapability,
   fetchFleetShapes,
   fetchGap,
-  fetchPersonShapes,
   fetchRenderPolicy,
   fetchVerdicts,
   fetchWalkState,
@@ -127,11 +126,6 @@ export function useDispatchGoal() {
       void client.invalidateQueries({ queryKey: queryKeys.board });
     },
   });
-}
-
-/** The shapes this surface answers by asking a person. Fixed for the vessel's life: read once. */
-export function usePersonShapes(): readonly string[] {
-  return useQuery({ queryKey: ["personShapes"], queryFn: fetchPersonShapes, staleTime: Infinity }).data ?? [];
 }
 
 /** Verdicts kept on a run. Read once and after each grade, not polled. */

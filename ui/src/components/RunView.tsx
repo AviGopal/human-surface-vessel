@@ -32,8 +32,7 @@ import { useQuestions } from "../state/questions";
 import { Rendered } from "./Rendered";
 import { GradeGesture } from "./GradeGesture";
 import { PersonMark } from "./PersonMark";
-import { personProvenance } from "../lib/provenance";
-import { usePersonShapes } from "../api/queries";
+import { fromAPerson, personDrivenStep } from "../lib/provenance";
 import { StateBadge } from "./StateBadge";
 import { Trace } from "./Trace";
 
@@ -87,25 +86,22 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
   const [content, setContent] = useState("");
   const [sent, setSent] = useState<string | null>(null);
   const mutation = useInjectContext();
-  // Offered only for the shapes this surface answers by asking a person (its own
-  // declaration), never by matching names.
-  const personShapes = usePersonShapes();
-  const isHumanProvidable = (s: string): boolean => personShapes.includes(s);
   const missing = walk.pendingTargets;
   if (missing.length === 0 && !sent) return null;
   const stillMissing = sent !== null && missing.includes(sent);
 
   return (
-    // Folded unless something in it is a person's to provide: it is where a running
-    // walk says what it is stuck on, but its machine shapes are not a person's to act on.
-    <details className="sf-view-section sf-walk-needs" aria-label="What the walk is missing" open={missing.some(isHumanProvidable) || sent !== null}>
+    // Folded until a person opens it or has sent something: it is where a running walk
+    // says what it is stuck on, and anything listed may be supplied.
+    <details className="sf-view-section sf-walk-needs" aria-label="What the walk is missing" open={sent !== null}>
       <summary className="sf-view-label">Missing · {missing.length}</summary>
       {missing.length > 0 ? (
         <ul className="sf-needs-list">
           {missing.map((s) => (
             <li key={s}>
               <span className="sf-shape-badge">{s}</span>
-              {!isHumanProvidable(s) ? null : (
+              {/* Anything the walk still needs may be supplied: what a person writes here
+                  is a person's input by provenance, whatever its shape. */}
               <button
                 type="button"
                 className="sf-button sf-button-quiet"
@@ -117,7 +113,6 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
               >
                 Provide
               </button>
-              )}
             </li>
           ))}
         </ul>
@@ -181,7 +176,6 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   // The LIVE question list, not the rail's accepted snapshot: a run's question must
   // appear while the run waits, without the reader accepting an update first.
   const liveQuestions = useQuestions().query.data?.questions;
-  const personShapes = usePersonShapes();
   const walk = query.data;
   const quietForMs = useProgressWatch(walk ? progressFingerprint(walk) : "", now);
 
@@ -217,7 +211,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   // the answer, and the verdict follows as a line.
   const promoted = walk.reached === true && verdictOnly ? answerNode(buildChains(walk), walk.completionShapes) : null;
   const promotedContent = promoted ? fromProvenance(promoted.raw) : null;
-  const promotedProvenance = promoted ? personProvenance(promoted.shape, personShapes, liveQuestions, walk.dispatchId) : null;
+  const promotedFromPerson = promoted ? fromAPerson(promoted.producedBy, personDrivenStep(walk.dispatchId, walk.walkLog, liveQuestions)) : false;
   // Its outputs expired: the record the answer was reasoned from is the answer.
   const basisLead = walk.reached === true && verdictOnly && answer !== null && !(promoted && promotedContent)
     ? basisContent(answer, walk.goal ?? undefined, walk.dispatchId, walk.completionShapes)
@@ -273,7 +267,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         <>
         {promoted && promotedContent ? (
           <section className="sf-view-section sf-known" data-known={known} aria-label="Answer">
-            <h3 className="sf-view-label">Answer{KNOWNNESS_LABEL[known] ? <span className="sf-known-label"> · {KNOWNNESS_LABEL[known]}</span> : null} <PersonMark shape={promoted.shape} dispatchId={walk.dispatchId} /></h3>
+            <h3 className="sf-view-label">Answer{KNOWNNESS_LABEL[known] ? <span className="sf-known-label"> · {KNOWNNESS_LABEL[known]}</span> : null} <PersonMark fromPerson={promotedFromPerson} /></h3>
             <Rendered content={promotedContent} density="full" header={false} region="run_answer" choosable />
           </section>
         ) : basisLead ? (
@@ -343,7 +337,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
             changedSomething={walk.executionPath === "feature_compose"}
             dispatchId={walk.dispatchId}
             judgeReached={walk.reached}
-            about={promoted && promotedContent ? { pool_id: promoted.id, shape: promoted.shape, ...(promoted.producedBy ? { produced_by: promoted.producedBy } : {}), ...(promotedProvenance ? { provenance: promotedProvenance } : {}) } : null}
+            about={promoted && promotedContent ? { pool_id: promoted.id, shape: promoted.shape, ...(promoted.producedBy ? { produced_by: promoted.producedBy } : {}), ...(promotedFromPerson ? { provenance: "from-a-person" } : {}) } : null}
             appliesTo={
               segments.length > 1
                 ? reportedSeg

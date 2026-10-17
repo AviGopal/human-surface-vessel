@@ -356,14 +356,6 @@ export async function submitGrade(g: GradeSubmission): Promise<void> {
 }
 
 
-/** The shapes this surface resolves by asking a person (its own declaration). */
-export async function fetchPersonShapes(): Promise<readonly string[]> {
-  const res = await fetch("/api/person-shapes", { credentials: "same-origin" });
-  if (!res.ok) throw new SurfaceError(`person shapes not read (HTTP ${res.status})`, res.status);
-  const j = (await res.json()) as { body?: { shapes?: string[] } };
-  return j.body?.shapes ?? [];
-}
-
 /** Verdicts kept on a run, oldest first. */
 export async function fetchVerdicts(dispatchId?: string): Promise<readonly KeptVerdict[]> {
   const res = await fetch(dispatchId ? `/api/verdicts?dispatch_id=${encodeURIComponent(dispatchId)}` : "/api/verdicts", { credentials: "same-origin" });

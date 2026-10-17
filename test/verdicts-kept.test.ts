@@ -7,9 +7,6 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { readParticipation } from "../src/participation-journal.ts";
-import { impulsesRouter } from "../src/routes/impulses.ts";
-import { PERSON_RESOLVED_SHAPES } from "../src/config.ts";
-import { getPanel } from "../src/store.ts";
 
 const realFetch = globalThis.fetch;
 const upstream: string[] = [];
@@ -50,21 +47,5 @@ describe("verdicts kept on the run", () => {
   test("another run's verdicts are not mixed in", async () => {
     const other = (await (await app.request("/api/verdicts?dispatch_id=d-other")).json()) as { body: { verdicts: unknown[] } };
     expect(other.body.verdicts).toHaveLength(0);
-  });
-
-  test("every shape the surface declares as person-resolved really asks a person", async () => {
-    const declared = (await (await app.request("/api/person-shapes")).json()) as { body: { shapes: string[] } };
-    expect(declared.body.shapes).toEqual([...PERSON_RESOLVED_SHAPES]);
-    const impulses = new Hono();
-    impulses.route("/", impulsesRouter);
-    for (const shape of PERSON_RESOLVED_SHAPES) {
-      const res = await impulses.request("/v2/impulses/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: shape, pointer: { type: shape, solicitation_id: `decl-${shape}`, question_markdown: "## q" } }),
-      });
-      expect(res.status).toBe(200);
-      expect(getPanel(`solicitation-decl-${shape}`)?.kind).toBe("question");
-    }
   });
 });

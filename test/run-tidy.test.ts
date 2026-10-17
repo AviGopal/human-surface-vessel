@@ -15,7 +15,6 @@ import { splitVerdict } from "../ui/src/lib/verdict";
 let walk: Record<string, unknown> = {};
 globalThis.fetch = (async (input: RequestInfo | URL) => {
   const url = String(input);
-  if (url.includes("/api/person-shapes")) return new Response(JSON.stringify({ resolved: true, body: { shapes: ["human_input"] } }), { status: 200 });
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
   if (url.includes("/api/resolve")) return new Response(JSON.stringify({ resolved: true, shape: "goalWalkState", body: walk }), { status: 200 });
   return new Response("{}", { status: 200 });
@@ -83,12 +82,14 @@ describe("verdict codes", () => {
 });
 
 describe("Missing", () => {
-  test("must-fail: Provide is offered only for what this surface answers by asking a person (09757917)", async () => {
-    // The surface's own declaration, not a name pattern: human_context matches "human_" but no
-    // person is ever asked for it, so it is not offered.
+  test("Provide is offered for anything the walk still needs, folded until opened (09757917, user rulings 10-17)", async () => {
+    // What a person writes here is a person's input by provenance, whatever its shape, so no shape is
+    // excluded by name. The list stays folded, so a walk's machine vocabulary is not put in front of
+    // the person unless they open it.
     const el = await mount(base({ status: "running", reached: null, pendingTargets: ["execution_trace", "human_context", "human_input"] }));
+    expect(el.querySelector(".sf-walk-needs")?.hasAttribute("open")).toBe(false);
     const rows = [...el.querySelectorAll(".sf-needs-list li")].map((li) => [li.querySelector(".sf-shape-badge")?.textContent, li.querySelector("button")?.textContent ?? null]);
-    expect(rows).toEqual([["execution_trace", null], ["human_context", null], ["human_input", "Provide"]]);
+    expect(rows).toEqual([["execution_trace", "Provide"], ["human_context", "Provide"], ["human_input", "Provide"]]);
   });
 });
 

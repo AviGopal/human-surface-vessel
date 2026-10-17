@@ -2034,9 +2034,8 @@ body { overflow: hidden; }
 .sf-kept-verdicts li[data-agree="false"] { border-left: 2px solid var(--sf-not-reached); padding-left: var(--sf-space-2); }
 .sf-kept-disagree { color: var(--sf-not-reached); }
 
-/* Provenance of a person-shaped output: a label, never a verdict. */
+/* An output a person's answer produced: a label, never a verdict. */
 .sf-person-mark { font-size: var(--sf-text-xs); font-weight: 500; text-transform: none; letter-spacing: 0; padding: 0 var(--sf-space-1); border-radius: 4px; border: 1px solid var(--sf-rule); color: var(--sf-ink-3); }
-.sf-person-mark[data-provenance="without-a-person"] { border-style: dashed; color: var(--sf-ink-2); }
 /* A person's verdict on a run: a ring when they disagreed with the judge. */
 .sf-thread-dot[data-said="disagree"] { outline: 2px solid var(--sf-waiting); outline-offset: 1px; }
 .sf-thread-disputed { color: var(--sf-waiting); }

@@ -35,7 +35,6 @@ import {
   GOAL_HOST_ENDPOINT,
   HOST,
   METABOB_API_KEY,
-  PERSON_RESOLVED_SHAPES,
   PORT,
   RESOLVE_PATH,
   VESSEL_ENDPOINT,
@@ -1170,11 +1169,6 @@ function aboutOf(v: unknown): Record<string, string> | null {
   }
   return Object.keys(out).length > 0 ? out : null;
 }
-
-/** The shapes this surface resolves by asking a person. */
-proxyRouter.get("/api/person-shapes", (c) =>
-  c.json({ resolved: true, body: { shapes: PERSON_RESOLVED_SHAPES } }, 200, corsHeaders(c.req.header("Origin"))),
-);
 
 /** Verdicts kept on a run (or the newest across runs), for the run page and the thread mark. */
 proxyRouter.get("/api/verdicts", (c) => {

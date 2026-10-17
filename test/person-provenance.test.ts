@@ -1,9 +1,10 @@
 /**
- * Input under a person-resolved shape is a person's only when this surface
- * delivered the run's question and holds the answer: provenance, not the name.
- * A stand-in is labelled, not hidden (user rulings 10-17). Fixture: a reached run
- * whose human_input was produced by a satisfier (its content an empty concept
- * search) and credited, with no question ever asked.
+ * An output is a person's only by provenance: this surface delivered the run's
+ * question and holds the answer, and the walk logged that the answer drove a
+ * step, which produced the output. Never by a shape's name (user rulings 10-17).
+ * Fixture: a reached run whose human_input a satisfier produced (an empty concept
+ * search) and the judge credited, with no question ever asked. It gets no
+ * person mark, and its credit line still names the satisfier.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -23,14 +24,13 @@ const grades: Record<string, unknown>[] = [];
 
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
-  if (url.includes("/api/person-shapes")) return new Response(JSON.stringify({ resolved: true, body: { shapes: ["human_input"] } }), { status: 200 });
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions } }), { status: 200 });
   if (url.includes("/api/verdicts")) return new Response(JSON.stringify({ body: { verdicts: [] } }), { status: 200 });
   if (url.includes("/api/grade")) {
     grades.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
     return new Response("{}", { status: 200 });
   }
-  if (url.includes("/api/resolve")) return new Response(JSON.stringify({ resolved: true, shape: "goalWalkState", body: walk }), { status: 200 });
+  if (url.includes("/api/resolve")) return new Response(JSON.stringify({ resolved: true, shape: "goalWalkState", body: shown }), { status: 200 });
   return new Response("{}", { status: 200 });
 }) as typeof fetch;
 
@@ -42,14 +42,17 @@ const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tans
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { RunView } = await import("../ui/src/components/RunView");
-const { personProvenance } = await import("../ui/src/lib/provenance");
+const { fromAPerson, personDrivenStep } = await import("../ui/src/lib/provenance");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
   await GlobalRegistrator.unregister();
 });
 
-async function mount(): Promise<HTMLElement> {
+let shown: Record<string, unknown> = walk;
+
+async function mount(w: Record<string, unknown> = walk): Promise<HTMLElement> {
+  shown = w;
   const el = document.createElement("div");
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -64,23 +67,26 @@ async function mount(): Promise<HTMLElement> {
 
 const answered = { id: "solicitation-s", revision: 1, title: "q", body: "q", createdAt: 0, updatedAt: 0, responses: [], answered: true, declined: false, run: { dispatchId, solicitationId: "s", deadlineAt: null, linked: true } };
 
+const USED = "[goal-host-vessel] /run-goal: human answered solicitation — retrying activity:rain_ranker with human_input context";
+
 describe("person provenance", () => {
-  test("the rule reads provenance, not names", () => {
-    expect(personProvenance("human_input", ["human_input"], [], dispatchId)).toBe("without-a-person");
-    expect(personProvenance("human_input", ["human_input"], [answered as never], dispatchId)).toBe("from-a-person");
-    expect(personProvenance("human_context", ["human_input"], [], dispatchId)).toBeNull();
-    expect(personProvenance("web_search", ["human_input"], [], dispatchId)).toBeNull();
+  test("a person's answer counts only when this surface holds it AND the walk used it", () => {
+    expect(personDrivenStep(dispatchId, [USED], [answered as never])).toBe("activity:rain_ranker");
+    expect(personDrivenStep(dispatchId, [USED], [])).toBeNull();
+    expect(personDrivenStep(dispatchId, [], [answered as never])).toBeNull();
+    expect(fromAPerson("template:rain_ranker", "activity:rain_ranker")).toBe(true);
+    expect(fromAPerson("satisfier:human_input", "activity:rain_ranker")).toBe(false);
+    expect(fromAPerson("satisfier:human_input", null)).toBe(false);
   });
 
-  test("must-fail: a stand-in's person input is shown, labelled no person asked, and a grade carries what it judged", async () => {
+  test("must-fail: a stand-in's output gets no person mark; its producer stays visible, and a grade carries what it judged", async () => {
     questions = [];
     const el = await mount();
     const answer = el.querySelector("[aria-label='Answer']");
     expect(answer).not.toBeNull();
-    expect(answer?.querySelector(".sf-person-mark")?.textContent).toBe("no person asked");
-    // Shown, not hidden: the content is still drawn.
+    expect(el.querySelector(".sf-person-mark")).toBeNull();
+    // Shown, not hidden.
     expect(answer?.textContent).toContain("raining");
-    // Grade it: the write names the result and its provenance.
     const option = el.querySelector("input[type='radio'][value='Wrong answer']") as HTMLInputElement;
     await act(async () => {
       option.click();
@@ -89,13 +95,17 @@ describe("person provenance", () => {
       (el.querySelector("form.sf-grade") as HTMLFormElement).requestSubmit();
     });
     for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
-    expect(grades.at(-1)?.["about"]).toMatchObject({ shape: "human_input", produced_by: "satisfier:human_input", provenance: "without-a-person" });
+    const about = grades.at(-1)?.["about"] as Record<string, unknown>;
+    expect(about).toMatchObject({ shape: "human_input", produced_by: "satisfier:human_input" });
+    expect(about["provenance"]).toBeUndefined();
     expect(grades.at(-1)?.["dispatch_id"]).toBe(dispatchId);
   });
 
-  test("with the run's question answered here, the same input is the person's", async () => {
+  test("an output from the step a person's answer drove is marked as theirs", async () => {
     questions = [answered];
-    const el = await mount();
-    expect(el.querySelector("[aria-label='Answer'] .sf-person-mark")?.textContent).toBe("your answer");
+    const pool = walk["poolProvenance"] as Record<string, unknown>[];
+    const ranked = { id: "r", shape: "rainRanking", producedBy: "template:rain_ranker", contentPreview: "Bergen 60.4N; Seattle 47.6N", chars: 27, consumedIds: [String(pool[0]?.["id"] ?? "g")] };
+    const el = await mount({ ...walk, walkLog: [USED], completionShapes: ["rainRanking"], poolProvenance: [...pool, ranked] });
+    expect(el.querySelector(".sf-person-mark")?.textContent).toBe("your answer");
   });
 });
