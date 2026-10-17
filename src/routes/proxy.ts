@@ -33,29 +33,67 @@ import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWi
 import {
   DISCOVERY_ENDPOINT,
   GOAL_HOST_ENDPOINT,
+  HOST,
   METABOB_API_KEY,
   PORT,
   RESOLVE_PATH,
+  VESSEL_ENDPOINT,
 } from "../config.ts";
 
-/** The host maps container ports by convention 8xxx → 18xxx. */
-const HOST_PORT_OFFSET = 10_000;
+/** An IP literal: a name no other site can point at this vessel. */
+function isIpLiteral(hostname: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.startsWith("[");
+}
 
-/** This vessel's own origin, whether reached on the container port or the conventionally mapped host port. */
-export function isOwnOrigin(requestOrigin: string): boolean {
+/**
+ * The names this vessel serves under, from its own configuration: the
+ * registered self-address, the bind when it names a host, and `localhost`
+ * (which no other site can be served from).
+ */
+export function servedHostnames(endpoint = VESSEL_ENDPOINT, bind = HOST): ReadonlySet<string> {
+  const names = new Set<string>(["localhost"]);
   try {
-    const u = new URL(requestOrigin);
-    const p = parseInt(u.port || (u.protocol === "https:" ? "443" : "80"), 10);
-    return p === PORT || p === PORT + HOST_PORT_OFFSET;
+    names.add(new URL(endpoint).hostname);
+  } catch {
+    /* no registered address */
+  }
+  if (bind && bind !== "0.0.0.0" && bind !== "::") names.add(bind);
+  return names;
+}
+
+/**
+ * Whether a request's Origin is this vessel's own page: the page was loaded
+ * from the same host and port the request was sent to, under a name this
+ * vessel serves.
+ *
+ * The port comes from the request itself, never a port rule. The rule this
+ * replaced accepted only PORT and PORT + 10000 (the default 18xxx mapping),
+ * so a node publishing under another prefix (8310 → 26310) refused every
+ * write from its own page: its run list read "Runs unavailable" and an ask
+ * could not be sent.
+ *
+ * Matching Host alone is not enough: a page on evil.example that re-points its
+ * name at this machine (DNS rebinding) sends Origin and Host both as
+ * evil.example. So the name must be an IP literal, which cannot be re-pointed,
+ * or one this vessel serves.
+ */
+export function isOwnOrigin(requestOrigin: string, requestUrl: string, served: ReadonlySet<string> = servedHostnames()): boolean {
+  try {
+    const o = new URL(requestOrigin);
+    if (o.protocol !== "http:" && o.protocol !== "https:") return false;
+    if (o.host !== new URL(requestUrl).host) return false;
+    return isIpLiteral(o.hostname) || served.has(o.hostname);
   } catch {
     return false; // malformed, or the literal "null" a sandboxed or file:// page sends
   }
 }
 
-function allowedOrigin(requestOrigin: string | undefined): string {
-  const self = `http://127.0.0.1:${PORT}`;
-  if (!requestOrigin) return self;
-  return isOwnOrigin(requestOrigin) ? requestOrigin : self;
+/**
+ * No other origin may read these responses. The surface's own page is
+ * same-origin and needs no CORS grant, so the header names the vessel itself.
+ */
+function allowedOrigin(): string {
+  return `http://127.0.0.1:${PORT}`;
 }
 
 /**
@@ -77,7 +115,7 @@ export const refuseForeignOriginWrites: MiddlewareHandler = async (c, next) => {
   const method = c.req.method;
   if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
     const origin = c.req.header("Origin");
-    if (origin !== undefined && !isOwnOrigin(origin)) {
+    if (origin !== undefined && !isOwnOrigin(origin, c.req.url)) {
       return c.json({ error: "cross-origin write refused", origin }, 403);
     }
   }
@@ -117,9 +155,9 @@ export function resolveTypeOf(raw: string): string | null {
   }
 }
 
-function corsHeaders(requestOrigin: string | undefined): Record<string, string> {
+function corsHeaders(_requestOrigin?: string): Record<string, string> {
   return {
-    "Access-Control-Allow-Origin": allowedOrigin(requestOrigin),
+    "Access-Control-Allow-Origin": allowedOrigin(),
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     Vary: "Origin",

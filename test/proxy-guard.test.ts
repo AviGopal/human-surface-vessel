@@ -8,7 +8,12 @@
  */
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
+import * as proxy from "../src/routes/proxy.ts";
 import { isOwnOrigin, proxyRouter, refuseForeignOriginWrites, resolveTypeOf } from "../src/routes/proxy.ts";
+
+// Read through the namespace so the request-level checks below still run (and fail on their own
+// assertions) against a parent that lacks this export.
+const servedHostnames = (...a: Parameters<typeof proxy.servedHostnames>) => proxy.servedHostnames(...a);
 import { PORT } from "../src/config.ts";
 
 const upstream: { url: string; body: string }[] = [];
@@ -31,8 +36,9 @@ app.route("/", proxyRouter);
 
 const own = `http://127.0.0.1:${PORT + 10_000}`;
 
-function post(path: string, body: string, headers: Record<string, string>): Promise<Response> {
-  return app.request(path, { method: "POST", body, headers });
+/** Sent to the surface at `base`, as a browser on that address would send it. */
+function post(path: string, body: string, headers: Record<string, string>, base = own): Promise<Response> {
+  return app.request(`${base}${path}`, { method: "POST", body, headers });
 }
 
 describe("refuseForeignOriginWrites", () => {
@@ -63,11 +69,43 @@ describe("refuseForeignOriginWrites", () => {
     expect(res.status).not.toBe(403);
   });
 
-  test("isOwnOrigin accepts the container and host-mapped ports only", () => {
-    expect(isOwnOrigin(`http://127.0.0.1:${PORT}`)).toBe(true);
-    expect(isOwnOrigin(own)).toBe(true);
-    expect(isOwnOrigin("http://127.0.0.1:5173")).toBe(false);
-    expect(isOwnOrigin("null")).toBe(false);
+  test("must-fail: a node publishing under another port prefix accepts its own page", async () => {
+    // compose2 publishes 8310 as 26310; its page's writes were refused (10-17).
+    const page = await post("/api/resolve", '{"type":"activeDispatches"}', { "Content-Type": "application/json", Origin: "http://127.0.0.1:26310" }, "http://127.0.0.1:26310");
+    expect(page.status).toBe(200);
+  });
+
+  test("a page on another host or port is refused, even on the surface's own port number", async () => {
+    for (const origin of ["http://evil.example:26310", "http://127.0.0.1:18310"]) {
+      const res = await post("/api/run-goal", '{"goal":"x"}', { "Content-Type": "text/plain", Origin: origin }, "http://127.0.0.1:26310");
+      expect(res.status).toBe(403);
+    }
+    expect(upstream.length).toBe(0);
+  });
+
+  test("must-fail: a rebinding page (Origin and Host both its own name) is refused", async () => {
+    // The old port rule accepted any host on the mapped port, so 18310 is the red case at the parent.
+    for (const at of [own.replace("127.0.0.1", "evil.example"), "http://evil.example:26310"]) {
+      const res = await post("/api/run-goal", '{"goal":"x"}', { "Content-Type": "text/plain", Origin: at }, at);
+      expect(res.status).toBe(403);
+    }
+    expect(upstream.length).toBe(0);
+  });
+
+  test("a name the vessel serves is accepted on any port; the served names come from its configuration", () => {
+    expect(isOwnOrigin("http://localhost:26310", "http://localhost:26310/api/resolve")).toBe(true);
+    expect(servedHostnames("http://surface.lan:8310", "0.0.0.0")).toEqual(new Set(["localhost", "surface.lan"]));
+    expect(isOwnOrigin("http://surface.lan:26310", "http://surface.lan:26310/x", servedHostnames("http://surface.lan:8310"))).toBe(true);
+    expect(isOwnOrigin("http://surface.lan:26310", "http://surface.lan:26310/x", servedHostnames())).toBe(false);
+  });
+
+  test("isOwnOrigin compares the Origin with the address the request was sent to", () => {
+    expect(isOwnOrigin(`http://127.0.0.1:${PORT}`, `http://127.0.0.1:${PORT}/api/resolve`)).toBe(true);
+    expect(isOwnOrigin(own, `${own}/api/resolve`)).toBe(true);
+    expect(isOwnOrigin("http://127.0.0.1:26310", "http://127.0.0.1:26310/api/run-goal")).toBe(true);
+    expect(isOwnOrigin("http://127.0.0.1:5173", `${own}/api/resolve`)).toBe(false);
+    expect(isOwnOrigin("http://localhost:26310", "http://127.0.0.1:26310/api/resolve")).toBe(false);
+    expect(isOwnOrigin("null", `${own}/api/resolve`)).toBe(false);
   });
 });
 

@@ -20,6 +20,9 @@ function envInt(name: string, fallback: number): number {
 export const PORT = envInt("PORT", 8310);
 export const HOST = process.env.HOST ?? "0.0.0.0";
 
+/** The self-address this vessel registers with discovery (its unit sets it). */
+export const VESSEL_ENDPOINT = process.env.VESSEL_ENDPOINT ?? `http://127.0.0.1:${PORT}`;
+
 export const VESSEL_ID =
   process.env.HUMAN_SURFACE_VESSEL_ID ?? process.env.VESSEL_ID ?? "human-surface-vessel";
 export const VESSEL_NAME = "human-surface-vessel";
