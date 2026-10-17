@@ -891,6 +891,8 @@ function planValue(shape: string, v: unknown, text: string, depth: number, parti
     let small = true;
     for (const k of keys) {
       if (k === textKey) continue;
+      // An empty list or object says nothing; it must not turn a model's reply into a record.
+      if (isEmptyContainer(o[k])) continue;
       const fv = fieldText(o[k]);
       if (fv === null) {
         small = false;
@@ -911,6 +913,11 @@ function planValue(shape: string, v: unknown, text: string, depth: number, parti
   }
 
   return { form: "record", text, decidedBy: partial ? "partial_json" : "record", ...(failureMeta.length ? { meta: failureMeta } : {}) };
+}
+
+function isEmptyContainer(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length === 0;
+  return typeof v === "object" && v !== null && Object.keys(v).filter((k) => k !== CUT_KEY).length === 0;
 }
 
 /** A field small enough to be a chip: a short scalar, or a flat object of up to four short scalars. Null otherwise. */
