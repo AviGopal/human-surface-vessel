@@ -19,6 +19,7 @@ import {
 import { useBoard } from "../api/queries";
 import type { ActiveDispatch } from "../api/types";
 import { sortRuns } from "../lib/sort";
+import { groupThreads, learningMark } from "../lib/threads";
 import { parseStartedAt } from "../lib/time";
 import { useNow } from "../lib/useNow";
 import { useLiveControls, useRegionFreeze } from "../state/liveControls";
@@ -146,7 +147,11 @@ export function RunsList({
   }, [buffered]);
 
   const inFilter = committed.filter((p) => (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row)));
-  const shown = inFilter.filter((p) => !isGoalless(p.row));
+  // One line per ask: the newest run leads its thread, earlier runs fold under it.
+  const threads = groupThreads(
+    inFilter.filter((p) => !isGoalless(p.row)).map((p) => ({ ...p, goal: p.row.goal ?? null, reached: p.row.reached, status: p.row.status })),
+  );
+  const shown = threads.map((t) => t.runs[0]!);
   const goalless = inFilter.filter((p) => isGoalless(p.row));
   // Goal-less arrivals join their fold silently; they never raise the "new" pill.
   const bufferedShown = buffered.filter((p) => !isGoalless(p.row) && (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row)));
@@ -202,20 +207,48 @@ export function RunsList({
         {failed && committed.length === 0 ? <p className="sf-rail-empty sf-error">Runs unavailable</p> : null}
         {!failed && committed.length === 0 ? <p className="sf-rail-empty">{board.isLoading ? "Loading…" : "No runs"}</p> : null}
         {committed.length > 0 && inFilter.length === 0 ? <p className="sf-rail-empty">None</p> : null}
-        {shown.map((p) => (
-          <RunRow
-            key={p.dispatchId}
-            row={p.row}
-            startedAtMs={p.startedAtMs}
-            now={now}
-            selected={p.dispatchId === selectedDispatchId}
-            liveDetail={live.has(p.dispatchId)}
-            onSelect={onSelect}
-            intervalMs={intervalMs}
-            tabStop={p.dispatchId === rovingId}
-            onFocused={setFocusedId}
-          />
-        ))}
+        {threads.map((t) => {
+          const [p, ...earlier] = t.runs;
+          if (!p) return null;
+          const head = (
+            <RunRow
+              key={p.dispatchId}
+              row={p.row}
+              startedAtMs={p.startedAtMs}
+              now={now}
+              selected={p.dispatchId === selectedDispatchId}
+              liveDetail={live.has(p.dispatchId)}
+              onSelect={onSelect}
+              intervalMs={intervalMs}
+              tabStop={p.dispatchId === rovingId}
+              onFocused={setFocusedId}
+              {...(earlier.length > 0 ? { thread: learningMark(t.runs) } : {})}
+            />
+          );
+          if (earlier.length === 0) return head;
+          return (
+            <div key={p.dispatchId} className="sf-thread" data-thread-size={t.runs.length}>
+              {head}
+              <details className="sf-thread-earlier" open={earlier.some((e) => e.dispatchId === selectedDispatchId)}>
+                <summary>Earlier · {earlier.length}</summary>
+                {earlier.map((e) => (
+                  <RunRow
+                    key={e.dispatchId}
+                    row={e.row}
+                    startedAtMs={e.startedAtMs}
+                    now={now}
+                    selected={e.dispatchId === selectedDispatchId}
+                    liveDetail={false}
+                    onSelect={onSelect}
+                    intervalMs={intervalMs}
+                    tabStop
+                    onFocused={setFocusedId}
+                  />
+                ))}
+              </details>
+            </div>
+          );
+        })}
         {goalless.length > 0 ? (
           <details className="sf-run-goalless" open={goalless.some((p) => p.dispatchId === selectedDispatchId)}>
             <summary>No goal · {goalless.length}</summary>

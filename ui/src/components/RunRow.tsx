@@ -17,6 +17,7 @@ import type { ReactNode } from "react";
 import { useWalk } from "../api/queries";
 import type { ActiveDispatch } from "../api/types";
 import { deriveRunState, rowReason, stalledForMs, type RunFacts } from "../lib/runState";
+import type { LearningMark } from "../lib/threads";
 import { formatElapsed } from "../lib/time";
 import { useProgressWatch } from "../lib/useProgressWatch";
 import { boardFingerprint, hasProgress, openRunQuestion, progressFingerprint } from "../lib/walk";
@@ -45,6 +46,8 @@ export interface RunRowProps {
    */
   readonly tabStop: boolean;
   readonly onFocused: (dispatchId: string) => void;
+  /** When this run heads a thread of repeated asks: how each one went. */
+  readonly thread?: LearningMark;
 }
 
 export function RunRow({
@@ -57,6 +60,7 @@ export function RunRow({
   intervalMs,
   tabStop,
   onFocused,
+  thread,
 }: RunRowProps): ReactNode {
   const terminal = row.status === "completed" || row.status === "failed";
 
@@ -101,11 +105,29 @@ export function RunRow({
       <span className="sf-run-line">
         <StateBadge state={state} quietForMs={stalledForMs(facts)} />
         <span className="sf-run-meta">{row.operator ?? row.trigger ?? "unattributed"}</span>
+        {thread ? <ThreadMark mark={thread} /> : null}
         <span className="sf-run-elapsed">{formatElapsed(now - startedAtMs)}</span>
       </span>
       <span className="sf-run-goal" data-missing={goalText ? "false" : "true"}>
         {goalText ?? "goal text not recorded"}
       </span>
     </button>
+  );
+}
+
+const TREND_LABEL = { learned: "now reaches", lost: "stopped reaching" } as const;
+
+/** One mark per run, oldest first, then how many reached. */
+export function ThreadMark({ mark }: { mark: LearningMark }): ReactNode {
+  const summary = `${mark.reached} of ${mark.judged} reached${mark.trend ? `, ${TREND_LABEL[mark.trend]}` : ""}`;
+  return (
+    <span className="sf-thread-mark" data-trend={mark.trend ?? "none"} title={summary} aria-label={summary}>
+      {mark.marks.map((m, i) => (
+        <span key={i} className="sf-thread-dot" data-mark={m} aria-hidden="true" />
+      ))}
+      <span className="sf-thread-count" aria-hidden="true">
+        {mark.reached}/{mark.judged}
+      </span>
+    </span>
   );
 }
