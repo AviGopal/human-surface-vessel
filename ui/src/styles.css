@@ -2000,3 +2000,9 @@ body { overflow: hidden; }
 .sf-failure-text { overflow-wrap: anywhere; }
 
 .sf-run-goalless > summary { padding: var(--sf-space-2) var(--sf-space-3); color: var(--sf-ink-3); cursor: pointer; font-size: 0.9em; }
+
+/* What the run says it knows: solid for verified or learned, dashed for not understood, plain otherwise. */
+.sf-known[data-known="verified"], .sf-known[data-known="learned"] { border-left: 3px solid var(--sf-reached); padding-left: var(--sf-space-3); }
+.sf-known[data-known="not-understood"] { border: 1px dashed var(--sf-ink-3); border-radius: 6px; padding: var(--sf-space-2) var(--sf-space-3); }
+.sf-known-label { color: var(--sf-ink-3); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.sf-known-line { color: var(--sf-ink-2); border-left: 2px dashed var(--sf-ink-3); padding-left: var(--sf-space-2); margin: var(--sf-space-2) 0 0; }

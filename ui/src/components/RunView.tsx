@@ -21,6 +21,7 @@ import { useLiveControls } from "../state/liveControls";
 import { segmentAttempts } from "../lib/attempts";
 import { AnswerBody, answerIsVerdict, basisContent } from "./Answer";
 import { linksIn } from "../lib/links";
+import { KNOWNNESS_LABEL, knownness } from "../lib/knownness";
 import { Attempts } from "./Attempts";
 import { answerNode, buildChains } from "../lib/chain";
 import { fromProvenance } from "../lib/content";
@@ -213,6 +214,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const basisLead = walk.reached === true && verdictOnly && answer !== null && !(promoted && promotedContent)
     ? basisContent(answer, walk.goal ?? undefined, walk.dispatchId)
     : null;
+  const known = knownness(walk);
   // A search record answers with its links, as the outputs view already draws them.
   const basisLinks = basisLead ? linksIn(basisLead.body) : [];
   // Several walks: say WHICH one the verdict, answer and grade belong to. It is
@@ -246,6 +248,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
           </div>
         ) : null}
         {walk.humanReachNotes ? <p className="sf-run-reason-full">“{walk.humanReachNotes}”</p> : null}
+        {known === "not-understood" ? <p className="sf-known-line" data-known="not-understood">Didn't understand the question: inference returned no target.</p> : null}
       </header>
 
       <Attempts walk={walk} segments={segments} />
@@ -257,13 +260,13 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
       {answer ? (
         <>
         {promoted && promotedContent ? (
-          <section className="sf-view-section" aria-label="Answer">
-            <h3 className="sf-view-label">Answer</h3>
+          <section className="sf-view-section sf-known" data-known={known} aria-label="Answer">
+            <h3 className="sf-view-label">Answer{KNOWNNESS_LABEL[known] ? <span className="sf-known-label"> · {KNOWNNESS_LABEL[known]}</span> : null}</h3>
             <Rendered content={promotedContent} density="full" header={false} region="run_answer" choosable />
           </section>
         ) : basisLead ? (
-          <section className="sf-view-section" aria-label="Answer">
-            <h3 className="sf-view-label">Answer</h3>
+          <section className="sf-view-section sf-known" data-known={known} aria-label="Answer">
+            <h3 className="sf-view-label">Answer{KNOWNNESS_LABEL[known] ? <span className="sf-known-label"> · {KNOWNNESS_LABEL[known]}</span> : null}</h3>
             {basisLinks.length > 0 ? (
               <FoundLinks links={basisLinks} />
             ) : (
@@ -272,10 +275,14 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
           </section>
         ) : null}
         <section
-          className={`sf-view-section${(promoted && promotedContent) || basisLead ? " sf-verdict-compact" : ""}`}
+          className={`sf-view-section${(promoted && promotedContent) || basisLead ? " sf-verdict-compact" : " sf-known"}`}
+          data-known={(promoted && promotedContent) || basisLead || verdictOnly ? undefined : known}
           aria-label={verdictOnly ? "Verdict" : "Answer"}
         >
-          <h3 className="sf-view-label">{verdictOnly ? "Verdict" : "Answer"}</h3>
+          <h3 className="sf-view-label">
+            {verdictOnly ? "Verdict" : "Answer"}
+            {!verdictOnly && KNOWNNESS_LABEL[known] ? <span className="sf-known-label"> · {KNOWNNESS_LABEL[known]}</span> : null}
+          </h3>
           <AnswerBody answerBody={answer} goal={walk.goal} dispatchId={walk.dispatchId} hideBasis={basisLead !== null} />
         </section>
         </>
