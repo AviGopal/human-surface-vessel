@@ -10,9 +10,10 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { useRef, useState, type ReactNode } from "react";
+import { trySurfaceIntent } from "../api/client";
 import { useDispatchGoal } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
-import { boxWords, readAs, type BoxContext, NEW_ASK } from "../lib/box";
+import { boxWords, presentationScope, readAs, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { answerRunQuestion } from "./RunQuestion";
@@ -44,7 +45,7 @@ function OutcomeLine({
           Interface changed:{" "}
           {outcome.changes.map((c) => (
             <span key={`${c.field}-${c.to}`} className="sf-chip sf-chip-quiet">
-              {c.field} → {c.to}
+              {c.field} → {c.to} · for {presentationScope(c.field)}
             </span>
           ))}
           {outcome.unparsed.map((u) => (
@@ -109,10 +110,18 @@ export function TopBar({
   const { paused, setPaused } = useLiveControls();
   const { recordReceipt } = useQuestions();
   const [echo, setEcho] = useState<string | null>(null);
+  const [reshaped, setReshaped] = useState<DispatchOutcome | null>(null);
   const answer = useMutation({
     retry: false,
-    mutationFn: (args: { ctx: Extract<BoxContext, { kind: "reply" }>; text: string }) => answerRunQuestion(args.ctx.question, "answered", args.text),
-    onSuccess: recordReceipt,
+    // A presentation phrase is read as one in any context: checked before the text
+    // is taken as the run's answer, so "show this as a table" never reaches the run.
+    mutationFn: async (args: { ctx: Extract<BoxContext, { kind: "reply" }>; text: string }) => {
+      const change = await trySurfaceIntent(args.text);
+      if (change) return { kind: "reshaped" as const, change };
+      const receipt = await answerRunQuestion(args.ctx.question, "answered", args.text);
+      recordReceipt(receipt);
+      return { kind: "answered" as const };
+    },
   });
   const words = boxWords(context);
   const pending = dispatch.isPending || answer.isPending;
@@ -148,11 +157,17 @@ export function TopBar({
     if (context.kind === "reply") {
       const ctx = context;
       dispatch.reset();
+      setReshaped(null);
       answer.mutate(
         { ctx, text },
         {
-          onSuccess: () => {
-            setEcho(`${readAs(ctx)} · delivered`);
+          onSuccess: (r) => {
+            if (r.kind === "reshaped") {
+              setEcho(null);
+              setReshaped(r.change);
+            } else {
+              setEcho(`${readAs(ctx)} · delivered`);
+            }
             cleared();
           },
         },
@@ -161,6 +176,7 @@ export function TopBar({
     }
     answer.reset();
     setEcho(null);
+    setReshaped(null);
     dispatch.mutate(
       { goal: text, operator: "human-surface", tags: ["surface:do-anything"] },
       {
@@ -275,6 +291,7 @@ export function TopBar({
           </button>
         </div>
       ) : null}
+      {reshaped ? <OutcomeLine outcome={reshaped} onSuggest={(t) => put(t, false)} onDismiss={() => setReshaped(null)} /> : null}
       {dispatch.data ? (
         <OutcomeLine outcome={dispatch.data} onSuggest={(t) => put(t, false)} onDismiss={() => dispatch.reset()} />
       ) : null}

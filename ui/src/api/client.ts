@@ -100,7 +100,7 @@ function asClauses(raw: unknown): readonly UnparsedClause[] {
  * PARTLY is reported with the clause it dropped, because silently applying half
  * an instruction is worse than applying none.
  */
-async function trySurfaceIntent(instruction: string): Promise<DispatchOutcome | null> {
+export async function trySurfaceIntent(instruction: string): Promise<DispatchOutcome | null> {
   let res: Response;
   try {
     res = await fetch("/api/surface-intent", {

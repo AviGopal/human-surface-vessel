@@ -38,3 +38,9 @@ export function boxWords(ctx: BoxContext): BoxWords {
 export function readAs(ctx: BoxContext): string {
   return ctx.kind === "new" ? "Read as a new ask" : `Read as your answer to “${ctx.goal ?? ctx.question.title}”`;
 }
+
+/** Who a presentation change applies to, from the field it changed. */
+export function presentationScope(field: string): string {
+  const shape = /^formByShape\.(.+)$/.exec(field)?.[1];
+  return shape ? `every ${shape} output` : "the whole surface";
+}

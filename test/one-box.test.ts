@@ -10,6 +10,7 @@ GlobalRegistrator.register({ url: "http://surface.test/" });
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 
 const calls: { url: string; body: Record<string, unknown> }[] = [];
+let intentApplies = false;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   let body: Record<string, unknown> = {};
@@ -19,6 +20,11 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     /* not json */
   }
   calls.push({ url, body });
+  if (url.includes("/api/surface-intent")) {
+    return intentApplies
+      ? new Response(JSON.stringify({ applied: true, changes: [{ field: "formByShape.webSearchResult", from: "prose", to: "rows" }], unparsed: [], policy: { revision: 9 } }), { status: 200 })
+      : new Response(JSON.stringify({ applied: false, unparsed: [] }), { status: 422 });
+  }
   if (url.includes("/api/participation")) {
     return new Response(JSON.stringify({ resolved: true, success: true, body: { id: body["response_id"], panelId: body["panel_id"], panelRevision: body["panel_revision"] } }), { status: 200 });
   }
@@ -120,5 +126,15 @@ describe("one box", () => {
       (el.querySelector(".sf-box-chip button") as HTMLButtonElement).click();
     });
     expect(asideCalled).toBe(true);
+  });
+
+  test("must-fail: a presentation phrase typed while a run waits changes the display and sends nothing to the run", async () => {
+    intentApplies = true;
+    const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
+    await type(el, "show search results as a table");
+    expect(calls.some((c) => c.body["type"] === "solicitationResponse_write")).toBe(false);
+    expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(false);
+    expect(el.textContent).toContain("formByShape.webSearchResult → rows · for every webSearchResult output");
+    intentApplies = false;
   });
 });
