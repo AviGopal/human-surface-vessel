@@ -28,14 +28,22 @@ const { RunView } = await import("../ui/src/components/RunView");
 async function mount(): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
+  const root = createRoot(el);
+  roots.push(root);
   await act(async () => {
-    createRoot(el).render(React.createElement(QueryClientProvider, { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+    root.render(React.createElement(QueryClientProvider, { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
       React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(RunView, { dispatchId: "d-f" })))));
   });
   for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
   return el;
 }
+const roots: { unmount: () => void }[] = [];
 afterAll(async () => {
+  // Unmount before the DOM goes: the grade box's verdict read can settle after a test ends,
+  // and React would then render with no window.
+  await act(async () => {
+    for (const r of roots) r.unmount();
+  });
   await GlobalRegistrator.unregister();
 });
 const search = JSON.stringify({ shape: "webSearchResult", query: "gas prices", results: [{ title: "State Gas Price Averages", url: "https://gasprices.aaa.com/state-gas-price-averages/", snippet: "National Average $4.3413" }] });
@@ -86,6 +94,15 @@ describe("one fold", () => {
     expect(fold.querySelector("summary")?.textContent).toContain("4 attempts");
     const outputs = el.querySelector("[aria-label='Outputs']");
     expect(outputs === null || fold.contains(outputs)).toBe(true);
+  });
+
+  test("must-fail: the grade box counts attempts as the fold does (9 attempts over 2 walk segments, not \"of 2\")", async () => {
+    // Shapes: a live run on one node (10-18) folded "9 attempts" while its grade box said "Reported attempt (of 3)",
+    // the attempt-count mismatch class (cf. "1 attempt" for 4, fixed in the one-fold change).
+    walk = { ...base, executionId: "e-f", status: "completed", reached: false, goalReachReason: "Only links.", answerBody: null, attemptCount: 9 };
+    const el = await mount();
+    expect(el.querySelector("details.sf-how summary")?.textContent).toContain("9 attempts");
+    expect(el.querySelector(".sf-grade-applies")?.textContent).toBe("Reported attempt (of 9)");
   });
 
   test("a running run is not folded", async () => {

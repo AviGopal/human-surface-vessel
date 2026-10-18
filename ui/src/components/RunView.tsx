@@ -282,10 +282,12 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
             judgeReached={walk.reached}
             about={promoted && promotedContent ? { pool_id: promoted.id, shape: promoted.shape, ...(promoted.producedBy ? { produced_by: promoted.producedBy } : {}), ...(promotedFromPerson ? { provenance: "from-a-person" } : {}) } : null}
             appliesTo={
-              segments.length > 1
-                ? reportedSeg
-                  ? `Attempt ${reportedSeg.number} of ${segments.length}`
-                  : `Reported attempt (of ${segments.length})`
+              // One count on the page: the same total the fold shows. An attempt is named by
+              // its number only when the walk's segments are the attempts themselves.
+              attemptsShown > 1
+                ? reportedSeg && segments.length === attemptsShown
+                  ? `Attempt ${reportedSeg.number} of ${attemptsShown}`
+                  : `Reported attempt (of ${attemptsShown})`
                 : null
             }
             humanReachNotes={walk.humanReachNotes}
