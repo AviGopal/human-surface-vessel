@@ -29,6 +29,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return new Response(JSON.stringify({ resolved: true, success: true, body: { id: body["response_id"], panelId: body["panel_id"], panelRevision: body["panel_revision"] } }), { status: 200 });
   }
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
+  if (url.includes("/api/grade")) return new Response(JSON.stringify({ error: "scope verdict:human required" }), { status: 403 });
   if (url.includes("/api/run-goal")) return new Response(JSON.stringify({ accepted: true, dispatchId: "d-new" }), { status: 202 });
   return new Response(JSON.stringify({ resolved: true, success: true, body: {} }), { status: 200 });
 }) as typeof fetch;
@@ -41,7 +42,7 @@ const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tans
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { TopBar } = await import("../ui/src/components/TopBar");
-const { boxContext, boxWords, NEW_ASK } = await import("../ui/src/lib/box");
+const { boxContext, boxWords, NEW_ASK, readVerdictPhrase } = await import("../ui/src/lib/box");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: { unmount: () => void }[] = [];
@@ -157,5 +158,32 @@ describe("one box", () => {
 
   test("a run's open question comes before a chosen input", () => {
     expect(boxContext(question, "g", null, { dispatchId: "d-run", shape: "human_input" }).kind).toBe("reply");
+  });
+
+  test("only a few exact phrases are verdicts", () => {
+    expect(readVerdictPhrase("That worked!")).toBe("achieved");
+    expect(readVerdictPhrase("correct")).toBe("achieved");
+    expect(readVerdictPhrase("Wrong answer.")).toBe("not_achieved");
+    expect(readVerdictPhrase("that didn't work")).toBe("not_achieved");
+    expect(readVerdictPhrase("is that right?")).toBeNull();
+    expect(readVerdictPhrase("what worked last time")).toBeNull();
+  });
+
+  const outcome = { dispatchId: "d-done", executionId: "e-done", goal: "Where is it raining?", judgeReached: true };
+
+  test("must-fail: with a finished run on screen, a verdict phrase is kept as a verdict, even when the corpus refuses it", async () => {
+    const el = await mount({ context: boxContext(null, null, null, null, outcome) });
+    await type(el, "wrong answer");
+    const g = calls.find((c) => c.url.includes("/api/grade"));
+    expect(g?.body).toMatchObject({ execution_id: "e-done", dispatch_id: "d-done", verdict: "not_achieved", judge_reached: true, notes: "wrong answer" });
+    expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(false);
+    expect(el.textContent).toContain("Read as your verdict on this run: not reached · kept on the run; the learning corpus didn't take it yet");
+  });
+
+  test("with a finished run on screen, anything else is still a new ask", async () => {
+    const el = await mount({ context: boxContext(null, null, null, null, outcome) });
+    await type(el, "What time is it in Bergen?");
+    expect(calls.some((c) => c.url.includes("/api/run-goal") && c.body["goal"] === "What time is it in Bergen?")).toBe(true);
+    expect(calls.some((c) => c.url.includes("/api/grade"))).toBe(false);
   });
 });

@@ -98,9 +98,15 @@ function Workbench(): ReactNode {
   const [setAside, setSetAside] = useState<string | null>(null);
   const shownRun = runId ?? (questionId ? null : latest);
   const waiting = shownRun ? openRunQuestion(questions.query.data?.questions, shownRun, Date.now()) : null;
-  const shownGoal = shownRun ? (board.data?.find((r) => r.dispatchId === shownRun)?.goal ?? null) : null;
+  const shownRow = shownRun ? (board.data?.find((r) => r.dispatchId === shownRun) ?? null) : null;
+  const shownGoal = shownRow?.goal ?? null;
   const target = useBoxTarget()?.target ?? null;
-  const context = boxContext(waiting, shownGoal, setAside, target && target.dispatchId === shownRun ? target : null);
+  // A finished run on screen with an execution id can take a verdict typed in the box.
+  const outcome =
+    shownRow && shownRow.status !== "running" && shownRow.executionId
+      ? { dispatchId: shownRow.dispatchId, executionId: shownRow.executionId, goal: shownRow.goal ?? "", judgeReached: shownRow.reached }
+      : null;
+  const context = boxContext(waiting, shownGoal, setAside, target && target.dispatchId === shownRun ? target : null, outcome);
 
   const openRun = (dispatchId: string): void => {
     setIssuesOpen(false);

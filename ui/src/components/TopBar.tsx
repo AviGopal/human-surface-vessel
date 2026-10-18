@@ -13,9 +13,9 @@ import { useRef, useState, type ReactNode } from "react";
 import { injectContext, trySurfaceIntent } from "../api/client";
 import { useBoxTarget } from "../state/boxTarget";
 import { injectPayload } from "../lib/interaction";
-import { useDispatchGoal } from "../api/queries";
+import { useDispatchGoal, useSubmitGrade } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
-import { boxWords, presentationScope, readAs, type BoxContext, NEW_ASK } from "../lib/box";
+import { boxWords, presentationScope, readAs, readVerdictPhrase, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { answerRunQuestion } from "./RunQuestion";
@@ -131,8 +131,9 @@ export function TopBar({
     mutationFn: (args: { dispatchId: string; shape: string; text: string }) =>
       injectContext(injectPayload({ dispatchId: args.dispatchId, shape: args.shape, content: args.text })),
   });
+  const grade = useSubmitGrade();
   const words = boxWords(context);
-  const pending = dispatch.isPending || answer.isPending || supply.isPending;
+  const pending = dispatch.isPending || answer.isPending || supply.isPending || grade.isPending;
 
   const fit = (el: HTMLTextAreaElement | null): void => {
     if (!el) return;
@@ -202,6 +203,22 @@ export function TopBar({
     answer.reset();
     setEcho(null);
     setReshaped(null);
+    // A verdict on the finished run on screen, when the message is one of the exact
+    // verdict phrases. The surface keeps it on the run whatever the corpus answers.
+    const verdict = context.outcome ? readVerdictPhrase(text) : null;
+    if (context.outcome && verdict) {
+      const o = context.outcome;
+      const said = verdict === "achieved" ? "reached" : "not reached";
+      const settle = (corpus: boolean): void => {
+        setEcho(`Read as your verdict on this run: ${said} · kept on the run${corpus ? "" : "; the learning corpus didn't take it yet"}`);
+        cleared();
+      };
+      grade.mutate(
+        { executionId: o.executionId, goal: o.goal, verdict, notes: text, dispatchId: o.dispatchId, judgeReached: o.judgeReached },
+        { onSuccess: () => settle(true), onError: () => settle(false) },
+      );
+      return;
+    }
     dispatch.mutate(
       { goal: text, operator: "human-surface", tags: ["surface:do-anything"] },
       {
