@@ -46,8 +46,10 @@ async function mount(w: Record<string, unknown>): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const root = createRoot(el);
+  roots.push(root);
   await act(async () => {
-    createRoot(el).render(
+    root.render(
       React.createElement(QueryClientProvider, { client: qc },
         React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(RunView, { dispatchId: "d-tidy" })))),
     );
@@ -56,7 +58,12 @@ async function mount(w: Record<string, unknown>): Promise<HTMLElement> {
   return el;
 }
 
+const roots: { unmount: () => void }[] = [];
 afterAll(async () => {
+  // Unmount before the DOM goes, so no pending render or query callback runs without a window.
+  await act(async () => {
+    for (const r of roots) r.unmount();
+  });
   await GlobalRegistrator.unregister();
 });
 
@@ -71,6 +78,14 @@ describe("verdict codes", () => {
     });
     expect(splitVerdict("partial-coverage — reached on a STRICT SUBSET").code).toBe("partial-coverage");
     expect(splitVerdict("The shellResult only shows a directory listing").code).toBeNull();
+  });
+
+  test("must-fail: a nested floor prefix is split to its findings, not left in the prose (one node, 10-18)", () => {
+    const v = splitVerdict("floor floor:upstream-not-reached: deterministic:unsourced-current-information — the goal asks for current information and the chain consulted no source in-run");
+    expect(v.code).toBe("upstream-not-reached · unsourced-current-information");
+    expect(v.text).toBe("the goal asks for current information and the chain consulted no source in-run");
+    // Prose that happens to contain a dash is left alone.
+    expect(splitVerdict("The output was partial — it listed only two sources").code).toBeNull();
   });
 
   test("must-fail: the run header draws the code as a tag, not as the reason's first words (879e672e)", async () => {
