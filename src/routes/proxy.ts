@@ -26,6 +26,7 @@
  */
 
 import { Hono, type MiddlewareHandler } from "hono";
+import { joinGapThreads, type GapThread } from "../gap-threads.ts";
 import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
@@ -1158,6 +1159,76 @@ proxyRouter.post("/api/grade", async (c) => {
     origin: c.req.header("Origin"),
   });
 });
+
+// ─── gap threads (browser read) ─────────────────────────────────────────────
+
+/**
+ * The system's own work on its gaps, as threads: each gap with the attempts the
+ * attempt ledger recorded for it, their runs, verdicts and commits.
+ *
+ * NODE-LOCAL by design: read from this node's development-vessel (a discovered
+ * candidate that is not the federation relay, else the pinned local endpoint),
+ * because the ledger is where this node's lane wrote. Joined here, once per minute,
+ * never in the browser: the ledger is megabytes.
+ */
+let gapThreadsCache: { at: number; body: unknown } | null = null;
+const GAP_THREADS_TTL_MS = 60_000;
+
+async function devVesselRead(base: string, pointer: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, "")}/v2/impulses/resolve`, {
+      method: "POST",
+      headers: upstreamHeaders(true),
+      body: JSON.stringify({ impulse: { pointer } }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { body?: Record<string, unknown> };
+    return j?.body ?? null;
+  } catch {
+    return null;
+  }
+}
+
+proxyRouter.get("/api/gap-threads", async (c) => {
+  if (gapThreadsCache && Date.now() - gapThreadsCache.at < GAP_THREADS_TTL_MS) {
+    return c.json(gapThreadsCache.body, 200, corsHeaders(c.req.header("Origin")));
+  }
+  const local = (await candidateEndpointsFor("attemptLedger")).map((x) => x.base).filter((b) => b !== FEDERATION_INGRESS);
+  const pinned = process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090";
+  for (const base of [...new Set([...local, pinned])]) {
+    const gaps = await devVesselRead(base, { type: "substrateGap", limit: 500 });
+    if (!gaps || !Array.isArray(gaps["gaps"])) continue;
+    const kind = async (k: string): Promise<Record<string, unknown>[]> => {
+      const b = await devVesselRead(base, { type: "attemptLedger", kind: k });
+      const records = Array.isArray(b?.["records"]) ? (b["records"] as Array<{ record?: Record<string, unknown> }>) : [];
+      return records.map((r) => r.record ?? {});
+    };
+    const [intents, outcomes, settlements] = await Promise.all([kind("attemptIntent"), kind("attemptOutcome"), kind("attemptSettlement")]);
+    const threads: GapThread[] = joinGapThreads(gaps["gaps"] as Record<string, unknown>[], intents, outcomes, settlements);
+    const body = {
+      resolved: true,
+      shape: "attemptLedger",
+      body: {
+        scope: "this node",
+        threads,
+        totals: {
+          attempts: intents.length,
+          landed: outcomes.filter((o) => o["landed"] === true).length,
+          withRun: intents.filter((i) => typeof i["dispatch_id"] === "string" && i["dispatch_id"]).length,
+        },
+      },
+    };
+    gapThreadsCache = { at: Date.now(), body };
+    return c.json(body, 200, corsHeaders(c.req.header("Origin")));
+  }
+  return c.json({ resolved: false, error: "no local development-vessel answered substrateGap and attemptLedger" }, 502, corsHeaders(c.req.header("Origin")));
+});
+
+/** For tests: drop the cached join. */
+export function resetGapThreadsCacheForTest(): void {
+  gapThreadsCache = null;
+}
 
 /** The judged result as the page names it: plain strings only, nothing else kept. */
 function aboutOf(v: unknown): Record<string, string> | null {
