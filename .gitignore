@@ -6,6 +6,9 @@ node_modules/
 .container-home/
 ui/.container-home/
 ui/node_modules/
+# bun's per-checkout cache: it showed as the only status line in a node's clone,
+# which reads as uncommitted work to anything checking for a clean tree.
+.bun/
 
 # NOT ui/dist/ — it is TRACKED on purpose. The substrate updates itself by
 # pulling this repo and nothing rebuilds on pull, so git is the only channel by
