@@ -26,6 +26,7 @@ import { useTokenOverrides } from "./lib/useTokenOverrides";
 import { useLiveControls } from "./state/liveControls";
 import { useStoreStream } from "./state/stream";
 import { QuestionsProvider, useQuestions } from "./state/questions";
+import { BoxTargetProvider, useBoxTarget } from "./state/boxTarget";
 
 /**
  * The layout this build renders, published for exposure records. Records made
@@ -98,7 +99,8 @@ function Workbench(): ReactNode {
   const shownRun = runId ?? (questionId ? null : latest);
   const waiting = shownRun ? openRunQuestion(questions.query.data?.questions, shownRun, Date.now()) : null;
   const shownGoal = shownRun ? (board.data?.find((r) => r.dispatchId === shownRun)?.goal ?? null) : null;
-  const context = boxContext(waiting, shownGoal, setAside);
+  const target = useBoxTarget()?.target ?? null;
+  const context = boxContext(waiting, shownGoal, setAside, target && target.dispatchId === shownRun ? target : null);
 
   const openRun = (dispatchId: string): void => {
     setIssuesOpen(false);
@@ -186,7 +188,9 @@ export function Surface(): ReactNode {
   }
   return (
     <QuestionsProvider>
+      <BoxTargetProvider>
       <Workbench />
+      </BoxTargetProvider>
     </QuestionsProvider>
   );
 }

@@ -90,6 +90,9 @@ describe("Missing", () => {
     expect(el.querySelector(".sf-walk-needs")?.hasAttribute("open")).toBe(false);
     const rows = [...el.querySelectorAll(".sf-needs-list li")].map((li) => [li.querySelector(".sf-shape-badge")?.textContent, li.querySelector("button")?.textContent ?? null]);
     expect(rows).toEqual([["execution_trace", "Provide"], ["human_context", "Provide"], ["human_input", "Provide"]]);
+    // One place to type: no second free-text control for the same run (16b).
+    expect([...el.querySelectorAll("summary")].map((x) => x.textContent)).not.toContain("Add other context");
+    expect(el.querySelector(".sf-walk-needs input, .sf-walk-needs textarea")).toBeNull();
   });
 });
 

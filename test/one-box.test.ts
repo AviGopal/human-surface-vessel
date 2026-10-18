@@ -44,7 +44,12 @@ const { TopBar } = await import("../ui/src/components/TopBar");
 const { boxContext, boxWords, NEW_ASK } = await import("../ui/src/lib/box");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+const roots: { unmount: () => void }[] = [];
 afterAll(async () => {
+  // Unmount before the DOM goes, so no pending render or mutation callback runs without a window.
+  await act(async () => {
+    for (const r of roots) r.unmount();
+  });
   await GlobalRegistrator.unregister();
 });
 beforeEach(() => {
@@ -68,8 +73,10 @@ async function mount(props: Record<string, unknown>): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const root = createRoot(el);
+  roots.push(root);
   await act(async () => {
-    createRoot(el).render(
+    root.render(
       React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { onDispatched: () => {}, openIssues: null, onToggleIssues: () => {}, issuesOpen: false, ...props })))),
     );
   });
@@ -136,5 +143,19 @@ describe("one box", () => {
     expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(false);
     expect(el.textContent).toContain("formByShape.webSearchResult → rows · for every webSearchResult output");
     intentApplies = false;
+  });
+
+  test("must-fail: with an input chosen to supply, the box adds it to that run and starts nothing else", async () => {
+    const el = await mount({ context: boxContext(null, null, null, { dispatchId: "d-run", shape: "human_input" }) });
+    expect(el.querySelector(".sf-box-chip")?.textContent).toContain("Supplying human_input to this run");
+    await type(el, "Seattle");
+    const added = calls.find((c) => c.body["type"] === "poolImpulse_write");
+    expect(added?.body).toMatchObject({ dispatchId: "d-run", shape: "human_input", content: "Seattle" });
+    expect(calls.some((c) => c.url.includes("/api/run-goal") || c.body["type"] === "solicitationResponse_write")).toBe(false);
+    expect(el.textContent).toContain("Read as human_input for this run · added to the run");
+  });
+
+  test("a run's open question comes before a chosen input", () => {
+    expect(boxContext(question, "g", null, { dispatchId: "d-run", shape: "human_input" }).kind).toBe("reply");
   });
 });

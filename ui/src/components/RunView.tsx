@@ -6,11 +6,10 @@
  * beside it, never in the place a reader scans for the outcome.
  */
 
-import { useState, type ReactNode } from "react";
-import { useInjectContext, useWalk } from "../api/queries";
+import type { ReactNode } from "react";
+import { useWalk } from "../api/queries";
+import { useBoxTarget } from "../state/boxTarget";
 import { fromText } from "../lib/content";
-import { injectPayload } from "../lib/interaction";
-import { InteractionFooter, TextInput, stateOf } from "./Interaction";
 import type { ExecutionPath, GoalWalkState } from "../api/types";
 import type { RunState } from "@avigopal/design-tokens";
 import { deriveRunState, stalledForMs, stateIsTerminal, type RunFacts } from "../lib/runState";
@@ -44,35 +43,6 @@ const PATH_LABEL: Readonly<Record<ExecutionPath, string>> = {
   fresh_derivation: "new path",
 };
 
-function InjectContext({ dispatchId }: { dispatchId: string }): ReactNode {
-  const [content, setContent] = useState("");
-  const [shape, setShape] = useState("human_context");
-  const mutation = useInjectContext();
-
-  return (
-    <details className="sf-view-section sf-inject">
-      <summary>Add other context</summary>
-      <form
-        className="sf-inject-body sf-interaction"
-        onSubmit={(e) => {
-          e.preventDefault();
-          mutation.mutate(injectPayload({ dispatchId, shape, content }));
-        }}
-      >
-        <TextInput label="Shape" value={shape} onChange={setShape} singleLine mono disabled={mutation.isPending} />
-        <TextInput label="Content" value={content} onChange={setContent} disabled={mutation.isPending} />
-        <InteractionFooter
-          state={stateOf(mutation)}
-          submitLabel="Add"
-          canSubmit={content.trim().length > 0 && shape.trim().length > 0}
-          error={mutation.isError ? (mutation.error as Error).message : null}
-          sentLabel="Added"
-        />
-      </form>
-    </details>
-  );
-}
-
 /**
  * What the walk is missing, and a way to supply it.
  *
@@ -82,64 +52,38 @@ function InjectContext({ dispatchId }: { dispatchId: string }): ReactNode {
  * shape leaves `pendingTargets` once the walk has taken it in.
  */
 function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
-  const [shape, setShape] = useState<string | null>(null);
-  const [content, setContent] = useState("");
-  const [sent, setSent] = useState<string | null>(null);
-  const mutation = useInjectContext();
+  const box = useBoxTarget();
   const missing = walk.pendingTargets;
+  const sent = box?.sent?.dispatchId === walk.dispatchId ? box.sent.shape : null;
   if (missing.length === 0 && !sent) return null;
   const stillMissing = sent !== null && missing.includes(sent);
+  const chosen = box?.target?.dispatchId === walk.dispatchId ? box.target.shape : null;
 
   return (
     // Folded until a person opens it or has sent something: it is where a running walk
     // says what it is stuck on, and anything listed may be supplied.
-    <details className="sf-view-section sf-walk-needs" aria-label="What the walk is missing" open={sent !== null}>
+    <details className="sf-view-section sf-walk-needs" aria-label="What the walk is missing" open={sent !== null || chosen !== null}>
       <summary className="sf-view-label">Missing · {missing.length}</summary>
       {missing.length > 0 ? (
         <ul className="sf-needs-list">
           {missing.map((s) => (
             <li key={s}>
               <span className="sf-shape-badge">{s}</span>
-              {/* Anything the walk still needs may be supplied: what a person writes here
-                  is a person's input by provenance, whatever its shape. */}
+              {/* Anything the walk still needs may be supplied: what a person writes is a
+                  person's input by provenance, whatever its shape. Provide chooses the
+                  target; the text goes in the one box. */}
               <button
                 type="button"
                 className="sf-button sf-button-quiet"
-                aria-pressed={shape === s}
-                onClick={() => {
-                  setShape(s);
-                  mutation.reset();
-                }}
+                aria-pressed={chosen === s}
+                disabled={!box}
+                onClick={() => box?.choose({ dispatchId: walk.dispatchId, shape: s })}
               >
                 Provide
               </button>
             </li>
           ))}
         </ul>
-      ) : null}
-      {shape ? (
-        <form
-          className="sf-interaction"
-          onSubmit={(e) => {
-            e.preventDefault();
-            mutation.mutate(injectPayload({ dispatchId: walk.dispatchId, shape, content }), {
-              onSuccess: () => {
-                setSent(shape);
-                setContent("");
-                setShape(null);
-              },
-            });
-          }}
-        >
-          <TextInput label={`Provide ${shape}`} placeholder={`Content for ${shape}`} value={content} onChange={setContent} disabled={mutation.isPending} />
-          <InteractionFooter
-            state={stateOf(mutation)}
-            submitLabel="Add to the walk"
-            canSubmit={content.trim().length > 0}
-            error={mutation.isError ? (mutation.error as Error).message : null}
-            sentLabel="In the pool"
-          />
-        </form>
       ) : null}
       {sent ? (
         <p className="sf-outcome-strip" data-outcome={stillMissing ? "waiting" : "applied"}>
@@ -324,7 +268,6 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         </>
       )}
 
-      {walk.status === "running" ? <InjectContext dispatchId={walk.dispatchId} /> : null}
 
       {stateIsTerminal(state) ? (
         <section className="sf-view-section" aria-label="Grade">

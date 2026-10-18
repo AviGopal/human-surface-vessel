@@ -10,7 +10,9 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { useRef, useState, type ReactNode } from "react";
-import { trySurfaceIntent } from "../api/client";
+import { injectContext, trySurfaceIntent } from "../api/client";
+import { useBoxTarget } from "../state/boxTarget";
+import { injectPayload } from "../lib/interaction";
 import { useDispatchGoal } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
 import { boxWords, presentationScope, readAs, type BoxContext, NEW_ASK } from "../lib/box";
@@ -123,8 +125,14 @@ export function TopBar({
       return { kind: "answered" as const };
     },
   });
+  const boxTarget = useBoxTarget();
+  const supply = useMutation({
+    retry: false,
+    mutationFn: (args: { dispatchId: string; shape: string; text: string }) =>
+      injectContext(injectPayload({ dispatchId: args.dispatchId, shape: args.shape, content: args.text })),
+  });
   const words = boxWords(context);
-  const pending = dispatch.isPending || answer.isPending;
+  const pending = dispatch.isPending || answer.isPending || supply.isPending;
 
   const fit = (el: HTMLTextAreaElement | null): void => {
     if (!el) return;
@@ -154,6 +162,23 @@ export function TopBar({
   const submit = (): void => {
     const text = goal.trim();
     if (text.length === 0 || pending) return;
+    if (context.kind === "supply") {
+      const ctx = context;
+      dispatch.reset();
+      setReshaped(null);
+      supply.mutate(
+        { dispatchId: ctx.dispatchId, shape: ctx.shape, text },
+        {
+          onSuccess: () => {
+            setEcho(`${readAs(ctx)} · added to the run`);
+            boxTarget?.markSent({ dispatchId: ctx.dispatchId, shape: ctx.shape });
+            boxTarget?.choose(null);
+            cleared();
+          },
+        },
+      );
+      return;
+    }
     if (context.kind === "reply") {
       const ctx = context;
       dispatch.reset();
@@ -201,6 +226,11 @@ export function TopBar({
       >
         <span className="sf-box-chip" data-context={context.kind} aria-live="polite">
           {words.chip}
+          {context.kind === "supply" && boxTarget ? (
+            <button type="button" className="sf-icon-button" aria-label="Ask something new instead" onClick={() => boxTarget.choose(null)}>
+              ×
+            </button>
+          ) : null}
           {context.kind === "reply" && onSetAside ? (
             <button type="button" className="sf-icon-button" aria-label="Ask something new instead" onClick={onSetAside}>
               ×
@@ -275,6 +305,14 @@ export function TopBar({
           </button>
         </div>
       ) : null}
+      {supply.isError ? (
+        <div className="sf-outcome-line" data-tone="error" role="status">
+          <span>Not added: {(supply.error as Error).message}</span>
+          <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => supply.reset()}>
+            ×
+          </button>
+        </div>
+      ) : null}
       {answer.isError ? (
         <div className="sf-outcome-line" data-tone="error" role="status">
           <span>Not delivered: {(answer.error as Error).message}</span>
@@ -283,7 +321,7 @@ export function TopBar({
           </button>
         </div>
       ) : null}
-      {echo && !answer.isError ? (
+      {echo && !answer.isError && !supply.isError ? (
         <div className="sf-outcome-line" data-tone="ok" role="status">
           <span>{echo}</span>
           <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => setEcho(null)}>
