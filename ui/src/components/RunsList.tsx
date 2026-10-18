@@ -16,7 +16,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { useAllVerdicts, useBoard } from "../api/queries";
+import { useAllVerdicts, useBoard, useGapThreads } from "../api/queries";
+import { GapThreads } from "./GapThreads";
 import type { ActiveDispatch } from "../api/types";
 import { sortRuns } from "../lib/sort";
 import { groupThreads, learningMark, personReachedByRun } from "../lib/threads";
@@ -99,6 +100,9 @@ export function RunsList({
   const now = useNow(paused);
   const board = useBoard({ enabled: !paused && !frozen, intervalMs });
   const verdicts = useAllVerdicts({ enabled: !paused && !frozen, intervalMs });
+  const gapThreads = useGapThreads({ enabled: filter === "system" && !paused && !frozen });
+  // A lane run that belongs to a gap thread is drawn inside that thread and nowhere else.
+  const inGapThread = new Set((filter === "system" ? (gapThreads.data ?? []) : []).flatMap((t) => t.attempts.map((a) => a.dispatchId).filter((d): d is string => !!d)));
   const personReached = personReachedByRun(verdicts.data ?? []);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -148,7 +152,7 @@ export function RunsList({
     scrollRef.current?.scrollTo({ top: 0 });
   }, [buffered]);
 
-  const inFilter = committed.filter((p) => (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row)));
+  const inFilter = committed.filter((p) => (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row) && !inGapThread.has(p.dispatchId)));
   // One line per ask: the newest run leads its thread, earlier runs fold under it.
   const threads = groupThreads(
     inFilter.filter((p) => !isGoalless(p.row)).map((p) => ({ ...p, goal: p.row.goal ?? null, reached: p.row.reached, status: p.row.status })),
@@ -206,6 +210,7 @@ export function RunsList({
         aria-label="Runs, newest first"
         onKeyDown={onListKeyDown}
       >
+        {filter === "system" && gapThreads.data ? <GapThreads threads={gapThreads.data} onSelect={onSelect} selectedDispatchId={selectedDispatchId} /> : null}
         {failed && committed.length === 0 ? <p className="sf-rail-empty sf-error">Runs unavailable</p> : null}
         {!failed && committed.length === 0 ? <p className="sf-rail-empty">{board.isLoading ? "Loading…" : "No runs"}</p> : null}
         {committed.length > 0 && inFilter.length === 0 ? <p className="sf-rail-empty">None</p> : null}

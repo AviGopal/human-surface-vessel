@@ -6,6 +6,7 @@ import {
   fetchCapability,
   fetchFleetShapes,
   fetchGap,
+  fetchGapThreads,
   fetchRenderPolicy,
   fetchVerdicts,
   fetchWalkState,
@@ -126,6 +127,11 @@ export function useDispatchGoal() {
       void client.invalidateQueries({ queryKey: queryKeys.board });
     },
   });
+}
+
+/** This node's gap threads; the server joins them once a minute, so they are read at that pace. */
+export function useGapThreads(opts: { enabled: boolean }) {
+  return useQuery({ queryKey: ["gapThreads"], queryFn: fetchGapThreads, enabled: opts.enabled, refetchInterval: opts.enabled ? 60_000 : false });
 }
 
 /** Verdicts kept on a run. Read once and after each grade, not polled. */

@@ -356,6 +356,36 @@ export async function submitGrade(g: GradeSubmission): Promise<void> {
 }
 
 
+export interface GapAttemptView {
+  readonly attemptId: string;
+  readonly at: string | null;
+  readonly route: string | null;
+  readonly stage: string | null;
+  readonly dispatchId: string | null;
+  readonly outcome: string | null;
+  readonly verdict: string | null;
+  readonly landed: boolean;
+  readonly commit: string | null;
+}
+export interface GapThreadView {
+  readonly gapId: string;
+  readonly summary: string | null;
+  readonly status: string | null;
+  readonly reopenCount: number;
+  readonly attempts: readonly GapAttemptView[];
+  readonly attemptCount: number;
+  readonly landedCount: number;
+  readonly lastAt: string | null;
+}
+
+/** This node's gap threads: each gap with the attempts its lane recorded. */
+export async function fetchGapThreads(): Promise<readonly GapThreadView[]> {
+  const res = await fetch("/api/gap-threads", { credentials: "same-origin" });
+  if (!res.ok) throw new SurfaceError(`gap threads not read (HTTP ${res.status})`, res.status);
+  const j = (await res.json()) as { body?: { threads?: GapThreadView[] } };
+  return j.body?.threads ?? [];
+}
+
 /** Verdicts kept on a run, oldest first. */
 export async function fetchVerdicts(dispatchId?: string): Promise<readonly KeptVerdict[]> {
   const res = await fetch(dispatchId ? `/api/verdicts?dispatch_id=${encodeURIComponent(dispatchId)}` : "/api/verdicts", { credentials: "same-origin" });
