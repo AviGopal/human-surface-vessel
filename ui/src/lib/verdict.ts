@@ -29,9 +29,22 @@ export function splitVerdict(text: string): { code: string | null; text: string 
   // A nested prefix: several code words before the dash, e.g. a floor wrapping a
   // deterministic check. Every word before the dash must be a code, or the line is prose.
   const dash = /\s+[\u2014-]+\s+/.exec(trimmed);
-  if (!dash || dash.index > 200) return { code: null, text: trimmed };
-  const tokens = trimmed.slice(0, dash.index).split(/\s+/);
-  if (tokens.length < 2 || !tokens.every((t) => CODE_TOKEN.test(t))) return { code: null, text: trimmed };
-  const findings = [...new Set(tokens.map(findingOf).filter((f): f is string => f !== null))];
-  return { code: findings.length > 0 ? findings.join(" · ") : null, text: trimmed.slice(dash.index + dash[0].length).trim() };
+  if (dash && dash.index <= 200) {
+    const tokens = trimmed.slice(0, dash.index).split(/\s+/);
+    if (tokens.length >= 2 && tokens.every((t) => CODE_TOKEN.test(t))) {
+      const findings = [...new Set(tokens.map(findingOf).filter((f): f is string => f !== null))];
+      return { code: findings.length > 0 ? findings.join(" · ") : null, text: trimmed.slice(dash.index + dash[0].length).trim() };
+    }
+  }
+  // No dash: a run of code words whose last one ends in a colon, then the sentence
+  // ("floor floor:upstream-not-reached: The output…").
+  const words = trimmed.split(/\s+/);
+  let i = 0;
+  while (i < words.length && CODE_TOKEN.test(words[i]!) && !words[i]!.endsWith(":")) i++;
+  const namespaced = i < words.length && (i >= 1 || words[i]!.slice(0, -1).includes(":"));
+  if (namespaced && words[i]!.endsWith(":") && CODE_TOKEN.test(words[i]!) && i + 1 < words.length && /[\p{Lu}]/u.test(words[i + 1]![0] ?? "")) {
+    const findings = [...new Set(words.slice(0, i + 1).map(findingOf).filter((f): f is string => f !== null))];
+    if (findings.length > 0) return { code: findings.join(" · "), text: words.slice(i + 1).join(" ") };
+  }
+  return { code: null, text: trimmed };
 }

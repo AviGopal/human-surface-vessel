@@ -84,7 +84,12 @@ describe("verdict codes", () => {
     const v = splitVerdict("floor floor:upstream-not-reached: deterministic:unsourced-current-information — the goal asks for current information and the chain consulted no source in-run");
     expect(v.code).toBe("upstream-not-reached · unsourced-current-information");
     expect(v.text).toBe("the goal asks for current information and the chain consulted no source in-run");
-    // Prose that happens to contain a dash is left alone.
+    // The same prefix ending in a colon, with no dash.
+    const c = splitVerdict("floor floor:upstream-not-reached: The output did not process any actual web search results.");
+    expect(c).toEqual({ code: "upstream-not-reached", text: "The output did not process any actual web search results." });
+    // Prose that happens to contain a dash is left alone, and so is prose that opens with a colon phrase.
+    expect(splitVerdict("Note: the run stopped early").code).toBeNull();
+    expect(splitVerdict("note: The run stopped early").code).toBeNull();
     expect(splitVerdict("The output was partial — it listed only two sources").code).toBeNull();
   });
 
