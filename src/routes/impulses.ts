@@ -213,13 +213,17 @@ function feedbackKind(p: Pointer): "answer" | "reaction" | "dismiss" {
 }
 
 /**
- * The writer's `origin`/`producer`, kept on the panel (store.ts `Panel.origin`).
- * An update that does not restate them keeps the creator's; nothing is invented
- * for a writer that sent none.
+ * The panel's provenance stamp (store.ts `Panel.origin`), never taken from the
+ * pointer's own claim. This route validates no inbound credential, so a pointer's
+ * `origin`/`producer` is unauthenticated: any caller, a test included, could claim
+ * to be live and begin the stamped era (importance-learn.ts `testOriginPanels`).
+ * Until a write path carries a validated identity, no write stamps, the era does
+ * not begin, and the legacy rule judges every panel. A stamp already on the panel
+ * is the creator's and is kept on update.
  */
-function panelStamp(p: Pointer, existing: Panel | undefined): { origin?: string; producer?: string } {
-  const origin = optStr(p, "origin") ?? existing?.origin;
-  const producer = optStr(p, "producer") ?? existing?.producer;
+function panelStamp(_p: Pointer, existing: Panel | undefined): { origin?: string; producer?: string } {
+  const origin = existing?.origin;
+  const producer = existing?.producer;
   return { ...(origin ? { origin } : {}), ...(producer ? { producer } : {}) };
 }
 

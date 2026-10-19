@@ -269,26 +269,42 @@ describe("a test panel is excluded by its provenance stamp, not by its kind's na
     expect(run.evidenceKinds).toEqual(["learnerprobe_live"]);
   });
 
-  test("must-fail: a panel write through the route keeps the writer's stamp", () => {
+  /*
+   * The route never stores a stamp from the pointer's own claim: human-surface validates
+   * no inbound credential, so a claimed origin/producer is unauthenticated and anyone,
+   * a test included, could claim to be live. A stamp already on a panel (written before
+   * this rule, or by a future authenticated path) is the creator's and is kept.
+   */
+  test("must-fail: a panel write whose pointer claims origin/producer stores neither, and a creator's stamp is kept", () => {
     const workspace = mkdtempSync(join(tmpdir(), "human-surface-panel-stamp-"));
     try {
+      mkdirSync(join(workspace, "interactor-log"));
+      writeFileSync(join(workspace, "interactor-log", "uiPanel_write.jsonl"),
+        JSON.stringify(panel("stamped-earlier", "question", at, writer)) + "\n");
       const routerModule = new URL("../src/routes/impulses.ts", import.meta.url).pathname;
       const child = Bun.spawnSync([process.execPath, "-e", `
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
         const post = async (pointer) => (await impulsesRouter.request("/v2/impulses/resolve", {
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointer }) })).json();
-        const created = await post({ type: "uiQuestion_write", id: "stamped-q", title: "t", body: "b", kind: "question", ...${JSON.stringify(writer)} });
-        // An update that does not restate the stamp keeps the creator's.
-        const updated = await post({ type: "uiQuestion_write", id: "stamped-q", title: "t2" });
-        const plain = await post({ type: "uiQuestion_write", id: "plain-q", title: "t", body: "b", kind: "question" });
-        console.log(JSON.stringify({ created: created.body, updated: updated.body, plain: plain.body }));
+        const claim = { origin: "person", producer: "claimed-by-the-pointer" };
+        const panelClaim = await post({ type: "uiPanel_write", id: "claim-p", title: "t", body: "b", kind: "info", ...claim });
+        const questionClaim = await post({ type: "uiQuestion_write", id: "claim-q", title: "t", body: "b", kind: "question", ...claim });
+        const inputClaim = await post({ type: "human_input", solicitation_id: "claim-s", brief: "a question", ...claim });
+        const inputPanel = (await post({ type: "uiQuestion", id: "solicitation-claim-s" })).body.questions[0];
+        // An update to a creator-stamped panel keeps the creator's stamp, claimed or not.
+        const kept = await post({ type: "uiQuestion_write", id: "stamped-earlier", title: "t2" });
+        const overclaimed = await post({ type: "uiQuestion_write", id: "stamped-earlier", title: "t3", ...claim });
+        console.log(JSON.stringify({ panelClaim: panelClaim.body, questionClaim: questionClaim.body, inputPanel, kept: kept.body, overclaimed: overclaimed.body }));
       `], { cwd: workspace, env: { ...process.env, WORKSPACE_ROOT: workspace } });
       expect(child.exitCode).toBe(0);
       const out = JSON.parse(child.stdout.toString().trim().split("\n").pop()!);
-      expect(out.created).toMatchObject(writer);
-      expect(out.updated).toMatchObject({ ...writer, title: "t2" });
-      expect(out.plain.origin).toBeUndefined();
-      expect(out.plain.producer).toBeUndefined();
+      for (const stored of [out.panelClaim, out.questionClaim, out.inputPanel]) {
+        expect(stored).toBeDefined();
+        expect(stored.origin).toBeUndefined();
+        expect(stored.producer).toBeUndefined();
+      }
+      expect(out.kept).toMatchObject({ ...writer, title: "t2" });
+      expect(out.overclaimed).toMatchObject({ ...writer, title: "t3" });
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }
