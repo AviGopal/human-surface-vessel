@@ -67,6 +67,7 @@ const WRITES: ReadonlyArray<{ route: string; body: Record<string, unknown> }> = 
   { route: "/api/observations", body: { obs_type: "click", panel_id: "p-1" } },
   { route: "/api/surface-intent", body: { text: "make the text bigger" } },
   { route: "/api/calibration/grade", body: { window_id: "w-1", dispatch_id: "d-1", grade: "reached" } },
+  { route: "/api/page-frame", body: { source: "<p>x</p>" } },
 ];
 
 const post = (route: string, body: unknown, headers: Record<string, string> = {}) =>
@@ -275,5 +276,36 @@ describe("/api/run-goal tags the dispatch with the admitted caller", () => {
     const r = await post("/api/run-goal", { goal: "What is 2 + 2?" }, { Authorization: "ApiKey valid-service-5" });
     expect(r.status).toBe(202);
     expect(lastDispatch()?.["tags"]).toEqual(["caller:key:svc-key-1"]);
+  });
+});
+
+/*
+ * The page frame (ad845d0) stores markup under a frame-session cookie that the shell hands to
+ * whoever loads "/", so the cookie names no caller. Its write names one through the seam like
+ * every other: the page (same-origin, keyless) is admitted, a keyless non-browser is not.
+ */
+describe("/api/page-frame names its caller", () => {
+  const frameSession = async (): Promise<string> => {
+    const r = await app.request(`${HERE}/`);
+    return (r.headers.get("set-cookie") ?? "").split(";")[0]!;
+  };
+
+  test("must-fail: a keyless caller with no Origin cannot store a frame, even with the cookie the shell handed it", async () => {
+    const cookie = await frameSession();
+    expect(cookie).toContain("=");
+    const r = await post("/api/page-frame", { source: "<p>keyless</p>" }, { cookie });
+    expect(r.status).toBe(401);
+    expect(((await r.json()) as { reason?: string }).reason).toBe("keyless_not_allowlisted");
+  });
+
+  test("must-fail: the page (same-origin, keyless) still stores a frame with its session, stamped browser-unverified", async () => {
+    const cookie = await frameSession();
+    const r = await post("/api/page-frame", { source: "<p>page</p>" }, { cookie, Origin: HERE });
+    expect(r.status).toBe(200);
+    const id = ((await r.json()) as { id?: unknown }).id;
+    expect(typeof id).toBe("string");
+    // The frame keeps the caller it was admitted as, like every other browser write.
+    const { __frameCallerForTests } = await import("../src/page-frame.ts");
+    expect(__frameCallerForTests(id as string)).toEqual({ origin: "browser-unverified", label: "browser-unverified" });
   });
 });
