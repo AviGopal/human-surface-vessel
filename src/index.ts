@@ -47,6 +47,39 @@ import {
 
 const app = new Hono();
 
+/**
+ * Every response this vessel serves carries a Content-Security-Policy: a person's
+ * sign-in token kept in the browser is only as safe as the scripts that can run
+ * beside it (user ruling 10-19). The shell is one module script from this origin,
+ * and the page talks only to its own origin (discovery and every upstream go
+ * through this vessel's proxy). Markup drawn as a page sits in a sandboxed frame
+ * with its own, stricter policy; this one does not loosen it.
+ */
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "connect-src 'self'",
+  // The page frame is a srcdoc document, and a srcdoc document inherits this policy
+  // on top of its own: a page's inline styles and data: fonts and media are blocked
+  // unless this policy allows them too. Style and data: media never run script.
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
+  "media-src 'self' data:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+app.use("*", async (c, next) => {
+  await next();
+  // A response passed through from upstream may have immutable headers: copy, then set.
+  const res = c.res;
+  const headers = new Headers(res.headers);
+  headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  c.res = new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+});
+
 // ─── Liveness ───────────────────────────────────────────────────────────────
 
 /**
