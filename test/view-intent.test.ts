@@ -11,6 +11,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { getRenderPolicy, recentObservations } from "../src/store.ts";
+import { readViewIntent } from "../src/surface-intent.ts";
 
 const REGISTRY = ["shellResult", "webSearchResult", "http_fetch", "llmCompletion"];
 let registryUp = true;
@@ -98,6 +99,24 @@ describe("the box's presentation reading", () => {
     const r = await say("explain this", prose);
     expect(r.status).toBe(422);
     expect(r.body["view"]).toBeUndefined();
+  });
+
+  test("must-fail: a long view-shaped input is read in linear time, and the route caps what it reads", async () => {
+    // A lazy capture before a trailing [\s.!]*$ backtracked over every trailing run
+    // that ends in anything else: 20k chars took ~0.4 s, 50k ~2 s, synchronously,
+    // on the surface's event loop.
+    for (const tail of [". ".repeat(50_000), " .".repeat(50_000), ".".repeat(100_000)]) {
+      const t0 = performance.now();
+      expect(readViewIntent(`show this as table${tail}x`, prose)).toBeNull();
+      expect(performance.now() - t0).toBeLessThan(50);
+    }
+    // A short ask with trailing punctuation still reads.
+    expect(readViewIntent("show this as a table!!  ..", prose)).toMatchObject({ kind: "view", form: "rows" });
+    const before = getRenderPolicy().revision;
+    const long = await say(`show this as table${" ".repeat(5_000)}`, prose);
+    expect(long.status).toBe(413);
+    expect(long.body["view"]).toBeUndefined();
+    expect(getRenderPolicy().revision).toBe(before);
   });
 
   test("a named shape pins only when the registry has it, and fails closed when the registry can't be read", async () => {

@@ -1498,11 +1498,18 @@ proxyRouter.get("/api/render-policy", (c) =>
  * response would still read as a human instruction. Everything the surface can
  * be told to do must survive the parser.
  */
+/** An instruction about this interface is a sentence or two; the cap keeps the readers cheap. */
+const SURFACE_INTENT_MAX_CHARS = 2_000;
+
 proxyRouter.post("/api/surface-intent", async (c) => {
   const origin = c.req.header("Origin");
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
   const raw = body?.["text"] ?? body?.["instruction"];
   const text = typeof raw === "string" ? raw : "";
+  // Before any reader runs: every reader here is synchronous on the event loop.
+  if (text.length > SURFACE_INTENT_MAX_CHARS) {
+    return c.json({ applied: false, understood: false, error: "too long" }, 413, corsHeaders(origin));
+  }
   if (text.trim() === "") {
     return c.json(
       { applied: false, understood: false, error: "text required", grammar: GRAMMAR },

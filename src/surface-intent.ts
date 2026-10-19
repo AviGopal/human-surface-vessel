@@ -339,11 +339,23 @@ export type ViewReading =
   | { readonly kind: "view"; readonly shape: string; readonly form: ContentForm; readonly region: string | null }
   | { readonly kind: "refused"; readonly reason: string; readonly shape: string | null; readonly region: string | null };
 
-const VIEW_ASK = /^(?:(?:show|display|render|view|draw)\s+)?(?:(?:this|it|that)\s+)?(?:as|in)\s+(.+?)[\s.!]*$/i;
+// Anchored, greedy, and run only on text whose trailing punctuation is already gone:
+// a lazy capture before a trailing [\s.!]*$ backtracked quadratically.
+const VIEW_ASK = /^(?:(?:show|display|render|view|draw)\s+)?(?:(?:this|it|that)\s+)?(?:as|in)\s+(.+)$/i;
+/** A view ask is a few words; anything longer is something else. */
+const VIEW_ASK_MAX = 120;
+
+/** The text without trailing spaces, dots and exclamation marks, in one pass. */
+function trimTail(text: string): string {
+  let end = text.length;
+  while (end > 0 && /[\s.!]/.test(text[end - 1]!)) end--;
+  return text.slice(0, end);
+}
 
 /** A view ask about the output on screen, refused, or null when the text is not a view ask at all. */
 export function readViewIntent(text: string, onScreen: OnScreen | null): ViewReading | null {
-  const m = VIEW_ASK.exec(text.trim());
+  if (text.length > VIEW_ASK_MAX) return null;
+  const m = VIEW_ASK.exec(trimTail(text.trim()));
   if (!m || m[1] === undefined) return null;
   const form = formWord(m[1]);
   // A form word the renderer doesn't know ("as a haiku") is an ask for new content: a goal.
