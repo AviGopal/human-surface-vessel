@@ -120,6 +120,9 @@ describe("every write route names its caller", () => {
       expect({ type, status: r.status }).toEqual({ type, status: 401 });
       expect(((await r.json()) as { reason?: string }).reason).toBe("keyless_not_allowlisted");
     }
+    // A write the page does not send, even one the surface forwards: refused.
+    const label = await post("/api/resolve", { type: "goal_verification_label_write", dispatchId: "d-x" }, { Origin: HERE });
+    expect(label.status).toBe(401);
     // Outside the shape list: refused before any caller is asked, as it always was.
     const executing = await post("/api/resolve", { type: "goalDispatchAsync", goal: "x" }, { Origin: HERE });
     expect(executing.status).toBe(403);
@@ -231,5 +234,22 @@ describe("a stored record carries the admitted caller, not its own claim", () =>
     expect(legacy?.["title"]).toBe("t2");
     expect(legacy?.["origin"]).toBeUndefined();
     expect(legacy?.["producer"]).toBeUndefined();
+  });
+});
+
+describe("the browser's reads on /api/resolve are their own list", () => {
+  test("must-fail: the read allowlist holds reads only, and admits them keyless from the page", async () => {
+    const { BROWSER_READ_ALLOWLIST, BROWSER_WRITE_ALLOWLIST } = await import("../src/inbound-auth.ts");
+    const reads = BROWSER_READ_ALLOWLIST.flatMap((e) => e.shapes);
+    expect(reads.sort()).toEqual(["activeDispatches", "goalWalkState"]);
+    expect(reads.some((s) => s.endsWith("_write"))).toBe(false);
+    const resolveWrites = BROWSER_WRITE_ALLOWLIST.find((e) => e.route === "/api/resolve")?.shapes ?? [];
+    expect([...resolveWrites].sort()).toEqual(["poolImpulse_write", "solicitationHeartbeat_write", "solicitationResponse_write"]);
+    for (const type of reads) {
+      const r = await post("/api/resolve", { type, dispatchId: "d-1" }, { Origin: HERE });
+      expect({ type, status: r.status }).toEqual({ type, status: 200 });
+    }
+    // Keyless with no Origin is refused, reads included: the route is gated as a whole.
+    expect((await post("/api/resolve", { type: "goalWalkState", dispatchId: "d-1" })).status).toBe(401);
   });
 });

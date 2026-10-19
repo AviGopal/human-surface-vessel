@@ -15,7 +15,8 @@
  *      this vessel's own key included.
  *   2. A keyless request whose Origin is this vessel's own page is the browser. It is
  *      accepted ONLY where BROWSER_WRITE_ALLOWLIST names the route (and, on /api/resolve,
- *      the shape), as origin "browser-unverified". That is NOT authentication: Origin is a
+ *      the shape), or BROWSER_READ_ALLOWLIST names a read the page sends on such a route,
+ *      as origin "browser-unverified". That is NOT authentication: Origin is a
  *      header, and a non-browser caller can send any value. It stays named as a residual
  *      until sign-in gives the browser a credential.
  *   3. Keyless with no Origin (curl, a vessel without a key, an in-process test) or with a
@@ -72,24 +73,34 @@ export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string; re
   { route: "/api/surface-intent" },
   // ui/src/api/client.ts:154 (ask a goal)
   { route: "/api/run-goal" },
-  // ui/src/api/client.ts:188 resolveShape. Only these shapes. The two reads: goalWalkState
-  // (:202), activeDispatches (:207). The three writes forward to goal-host and answer, extend
-  // or inject into a RUNNING walk, any walk, autonomous ones included: solicitationResponse_write
-  // (:243), solicitationHeartbeat_write (:252), poolImpulse_write (:266; ui/src/lib/interaction.ts:69).
-  // qa may cut the writes.
+  // ui/src/api/client.ts:188 resolveShape, these WRITES only. They forward to goal-host and
+  // answer, extend or inject into a RUNNING walk, any walk, autonomous ones included:
+  // solicitationResponse_write (:243), solicitationHeartbeat_write (:252), poolImpulse_write
+  // (:266; ui/src/lib/interaction.ts:69). qa may cut them. The reads the page sends on the
+  // same route are BROWSER_READ_ALLOWLIST's.
   {
     route: "/api/resolve",
-    shapes: ["goalWalkState", "activeDispatches", "solicitationResponse_write", "solicitationHeartbeat_write", "poolImpulse_write"],
+    shapes: ["solicitationResponse_write", "solicitationHeartbeat_write", "poolImpulse_write"],
   },
   // ui/src/api/client.ts:294 (fetchCapability: a capability read sent as a POST)
   { route: "/api/discovery/resolve" },
 ];
 
+/**
+ * THE KEYLESS BROWSER READS on a route that also carries writes: what the page reads
+ * through /api/resolve, kept apart from the writes so neither list can grow the other.
+ * A read here writes nothing; it is admitted because the route is gated as a whole.
+ */
+export const BROWSER_READ_ALLOWLIST: ReadonlyArray<{ readonly route: string; readonly shapes: readonly string[] }> = [
+  // ui/src/api/client.ts:202 fetchWalkState (goalWalkState), :207 fetchActiveDispatches (activeDispatches)
+  { route: "/api/resolve", shapes: ["goalWalkState", "activeDispatches"] },
+];
+
 function browserAllowed(route: string, shape: string | undefined): boolean {
-  const entry = BROWSER_WRITE_ALLOWLIST.find((e) => e.route === route);
-  if (!entry) return false;
-  if (!entry.shapes) return true;
-  return shape !== undefined && entry.shapes.includes(shape);
+  const write = BROWSER_WRITE_ALLOWLIST.find((e) => e.route === route);
+  if (write && (!write.shapes || (shape !== undefined && write.shapes.includes(shape)))) return true;
+  const read = BROWSER_READ_ALLOWLIST.find((e) => e.route === route);
+  return read !== undefined && shape !== undefined && read.shapes.includes(shape);
 }
 
 const OPERATOR_SCOPES = ["operator:direct", "admin"];
