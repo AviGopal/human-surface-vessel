@@ -798,9 +798,17 @@ proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
   // credential until sign-in, by this surface's own label, which is also how the surface
   // finds the runs it asked (backfillOwnDispatches).
   const operator = caller.kind === "browser" ? SURFACE_OPERATOR : caller.label;
+  // WHO ASKED, on the tag channel goal-host already reads into the walk's trace tags
+  // (body.tags -> effectiveTags -> runGoalWithRecovery): caller:browser-unverified for the
+  // page, caller:<validated label> for a key. A caller:* tag in the body is the caller's
+  // own claim and is dropped; the body's other tags pass as they did.
+  const ownTags = Array.isArray(req["tags"])
+    ? (req["tags"] as unknown[]).filter((t): t is string => typeof t === "string" && !t.startsWith("caller:"))
+    : [];
+  const tags = [...ownTags, `caller:${caller.label}`];
   const res = await resolveThrough(
     cand,
-    JSON.stringify({ ...req, operator, type: "goalDispatchAsync" }),
+    JSON.stringify({ ...req, operator, tags, type: "goalDispatchAsync" }),
     c.req.header("Origin"),
     unwrapDispatch,
   );
