@@ -33,9 +33,10 @@ type Channel =
  * place a format question can be answered.
  *
  * `interactor-log/*.jsonl` is a SHARED corpus, not this vessel's private file.
- * human-surface's unit sets no WORKSPACE_ROOT (so it defaults to /workspace)
- * and development-vessel sets WORKSPACE_ROOT=/workspace, so both append to the
- * same directory. Its established format is the envelope
+ * It lives under WORKSPACE_ROOT, which a deployment sets for every unit to the
+ * substrate's workspace (on a live node, the super-repo clone); /workspace is
+ * only the fallback when it is unset. Vessels that write it under the same
+ * root append to the same directory. Its established format is the envelope
  * `{id, shape, visibility, received_at, pointer:{panel_id, kind, value, …}}`
  * written by development-vessel/src/resolvers/interactor-passthrough.ts:100-107,
  * read by TWO production consumers, guarded on the write side by that same
