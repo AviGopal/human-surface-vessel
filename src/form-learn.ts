@@ -103,6 +103,8 @@ export interface FormLearningPass {
   readonly moves: readonly FormMove[];
   readonly evidence: readonly PairEvidence[];
   readonly skipped: readonly { readonly reason: string; readonly count: number }[];
+  /** Shapes removed from the table because all of their form records were excluded. */
+  readonly retired: readonly { readonly shape: string; readonly from: string; readonly excludedRecords: number }[];
   readonly reason: string;
   readonly learnerId: typeof FORM_LEARNER_ID;
 }
@@ -260,15 +262,36 @@ export function runFormLearningPass(): FormLearningPass {
   const corpus = readExposureCorpusWithExclusions();
   const { pairs, skipped } = aggregateFormEvidence([...(corpus.records as readonly Rec[]), ...readFormChoices()]);
   const { next, moves } = decideLearnedForms(pairs, current);
-  const changed = moves.length > 0;
+  // RETIRED, NOT UNSEEN (the rule importance-learn.ts `retiredKinds` states): a
+  // shape whose form records were ALL excluded at the corpus boundary leaves the
+  // table; a shape with no records at all is unseen and stays byte-identical.
+  const liveShapes = new Set(pairs.map((p) => p.shape));
+  const excludedByShape = new Map<string, number>();
+  for (const p of aggregateFormEvidence(corpus.excluded.records as readonly Rec[]).pairs) {
+    excludedByShape.set(p.shape, (excludedByShape.get(p.shape) ?? 0) + p.successes + p.failures);
+  }
+  const retired: { shape: string; from: string; excludedRecords: number }[] = [];
+  for (const [shape, from] of Object.entries(next).sort(([a], [b]) => a.localeCompare(b))) {
+    const n = excludedByShape.get(shape) ?? 0;
+    if (n > 0 && !liveShapes.has(shape)) {
+      retired.push({ shape, from, excludedRecords: n });
+      delete next[shape];
+    }
+  }
+  const changed = moves.length > 0 || retired.length > 0;
   const scoredPairs = pairs.filter((p) => p.successes + p.failures >= FORM_OBSERVATION_FLOOR).length;
-  const reason = changed
+  const reason = moves.length > 0
     ? moves.map((m) => `${m.shape}: ${m.from ?? "(default)"} -> ${m.to ?? "(lifted)"} on ${m.because.form} mean=${m.because.mean} n=${m.because.successes + m.because.failures}`).join("; ")
     : pairs.length === 0
       ? "no exposure outcome carried a form read from the DOM; nothing to score"
       : scoredPairs === 0
         ? `${pairs.length} pair(s) seen, none at the floor of ${FORM_OBSERVATION_FLOOR}; nothing moves`
         : `${scoredPairs} pair(s) at the floor, all consistent with the current table; converged`;
-  const reasonWithExclusions = `${reason}. ${exclusionClause(corpus.excluded)}`;
-  return { changed, learnedFormByShape: next, moves, evidence: pairs, skipped, reason: reasonWithExclusions, learnerId: FORM_LEARNER_ID };
+  const retiredClause = retired.length === 0
+    ? ""
+    : ` Retired ${retired.length} shape(s) whose recorded evidence is entirely provenance-excluded: ` +
+      retired.map((r) => `${r.shape} (was ${r.from}, ${r.excludedRecords} excluded record(s))`).join("; ") +
+      `. A shape with no records at all is unseen and kept.`;
+  const reasonWithExclusions = `${reason}. ${exclusionClause(corpus.excluded)}${retiredClause}`;
+  return { changed, learnedFormByShape: next, moves, evidence: pairs, skipped, retired, reason: reasonWithExclusions, learnerId: FORM_LEARNER_ID };
 }

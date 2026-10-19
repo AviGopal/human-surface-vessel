@@ -227,6 +227,8 @@ export interface LearningPass {
   readonly rendererBundles: readonly string[];
   /** What the corpus boundary dropped before this pass scored anything. */
   readonly excluded: CorpusExclusions;
+  /** Kinds removed from the table because all of their records were excluded. */
+  readonly retired: readonly RetiredKind[];
   /** The evidence, in words, for the impulse's `reason` field. */
   readonly reason: string;
 }
@@ -280,9 +282,11 @@ export interface CorpusExclusions {
   readonly unattributed: number;
   /** Stamped outcomes on a kind a test run minted. */
   readonly testKind: number;
+  /** The excluded records themselves: what retirement reads to tell "excluded" from "unseen". */
+  readonly records: readonly CorpusRecord[];
 }
 
-export const NO_EXCLUSIONS: CorpusExclusions = { unattributed: 0, testKind: 0 };
+export const NO_EXCLUSIONS: CorpusExclusions = { unattributed: 0, testKind: 0, records: [] };
 
 /**
  * The kind prefix the learner's own falsifier minted until it moved to probekind_*
@@ -319,6 +323,7 @@ function reporterStamped(rec: CorpusRecord): boolean {
  */
 export function readExposureCorpusWithExclusions(): { records: CorpusRecord[]; excluded: CorpusExclusions } {
   const out: CorpusRecord[] = [];
+  const dropped: CorpusRecord[] = [];
   let unattributed = 0;
   let testKind = 0;
   for (const raw of readParticipation("interactorObservation_write")) {
@@ -328,15 +333,56 @@ export function readExposureCorpusWithExclusions(): { records: CorpusRecord[]; e
     if (!isExposureObservation(rec.type as ObservationType)) continue;
     if (!reporterStamped(rec)) {
       unattributed += 1;
+      dropped.push(rec);
       continue;
     }
     if (typeof rec.panelKind === "string" && rec.panelKind.startsWith(TEST_RUN_KIND_PREFIX)) {
       testKind += 1;
+      dropped.push(rec);
       continue;
     }
     out.push(rec);
   }
-  return { records: out, excluded: { unattributed, testKind } };
+  return { records: out, excluded: { unattributed, testKind, records: dropped } };
+}
+
+/** A learned entry removed because every record behind it was excluded. */
+export interface RetiredKind {
+  readonly kind: string;
+  readonly from: number;
+  /** Excluded outcome records naming this kind. */
+  readonly excludedRecords: number;
+}
+
+/**
+ * RETIRED, NOT UNSEEN. The table in force is copied verbatim so that a kind with
+ * no records keeps its weight byte-identical (never shown moves nothing). A kind
+ * whose records all fell to the provenance exclusion is a different case: it HAS
+ * records, and none of them is evidence, so its weight was learned from lines the
+ * corpus boundary now refuses. Carrying it forward would keep it in force forever
+ * (the leaked learnerprobe_* kinds survived every pass that way). It is retired
+ * when at least one excluded outcome names it and no admitted outcome does. Pure.
+ */
+export function retiredKinds(
+  inForce: Readonly<Record<string, number>>,
+  admitted: readonly CorpusRecord[],
+  excluded: readonly CorpusRecord[],
+): RetiredKind[] {
+  const live = new Set<string>();
+  for (const rec of admitted) {
+    if (rec.type === "exposure_outcome" && typeof rec.panelKind === "string") live.add(rec.panelKind);
+  }
+  const counts = new Map<string, number>();
+  for (const rec of excluded) {
+    if (rec.type !== "exposure_outcome" || typeof rec.panelKind !== "string") continue;
+    counts.set(rec.panelKind, (counts.get(rec.panelKind) ?? 0) + 1);
+  }
+  const out: RetiredKind[] = [];
+  for (const [kind, from] of Object.entries(inForce).sort(([a], [b]) => a.localeCompare(b))) {
+    const n = counts.get(kind) ?? 0;
+    if (n > 0 && !live.has(kind)) out.push({ kind, from, excludedRecords: n });
+  }
+  return out;
 }
 
 /** The reason clause both learners append, so an exclusion is never silent. */
@@ -651,6 +697,16 @@ export function learnImportanceWeights(
     });
   }
 
+  // Retirement runs after the moves and cannot touch a moved kind: a kind that
+  // moved has admitted evidence, and retirement requires none.
+  const retired = retiredKinds(current.byKind, records, excluded.records);
+  for (const r of retired) delete nextByKind[r.kind];
+  const retiredClause = retired.length === 0
+    ? ""
+    : ` Retired ${retired.length} kind(s) whose recorded evidence is entirely provenance-excluded: ` +
+      retired.map((r) => `${r.kind} (was ${r.from}, ${r.excludedRecords} excluded record(s))`).join("; ") +
+      `. A kind with no records at all is unseen and kept.`;
+
   const parts = moves.map((m) => {
     const e = evidence.find((x) => x.kind === m.kind);
     const counts = e
@@ -673,7 +729,7 @@ export function learnImportanceWeights(
         `${skipped.shownOnceOrUnknown} ignored record(s) that could not demonstrate a second presentation, ` +
         `${skipped.uncorroborated} outcome(s) for a panel no exposure tick showed, ` +
         `${failedScans} failed exposure scan(s). ` +
-        exclusionClause(excluded)
+        exclusionClause(excluded) + retiredClause
       : `learned from what was shown. ${parts.join("; ")}. ` +
         `Bound: no weight moves more than ${MAX_STEP_FRACTION} of the way to its target in one pass, ` +
         `floor ${MIN_KIND_WEIGHT} (a zero-weight kind could never be shown again and so could never earn its way back). ` +
@@ -688,7 +744,7 @@ export function learnImportanceWeights(
         `${failedScans} failed exposure scan(s) (measurement broken, not an empty slice). ` +
         `Corpus spans renderer bundle(s): ${rendererBundles.length > 0 ? rendererBundles.join(", ") : "none recorded"}. ` +
         `Kinds with no records were not touched: never shown is not a negative outcome. ` +
-        exclusionClause(excluded);
+        exclusionClause(excluded) + retiredClause;
 
   return {
     weights: { ...current, byKind: nextByKind },
@@ -697,6 +753,7 @@ export function learnImportanceWeights(
     skipped: { ...skipped, failedScans },
     rendererBundles,
     excluded,
+    retired,
     reason,
   };
 }
@@ -747,6 +804,7 @@ export function runImportanceLearningPass(): PassResult {
       },
       rendererBundles: [],
       excluded: NO_EXCLUSIONS,
+      retired: [],
       reason: "a learning pass was already running; this trigger was dropped rather than nested",
     };
     return {
@@ -763,7 +821,7 @@ export function runImportanceLearningPass(): PassResult {
   try {
     const { records, excluded } = readExposureCorpusWithExclusions();
     const pass = learnImportanceWeights(records, current, anchorWeights(), excluded);
-    if (pass.moves.length === 0) {
+    if (pass.moves.length === 0 && pass.retired.length === 0) {
       // Nothing moved. NOT written: a write that moves no field would be refused
       // anyway, and attempting it would put a "learned" revision claim in the
       // journal for a pass that learned nothing.
