@@ -65,6 +65,12 @@ export interface Feedback {
   kind: "answer" | "reaction" | "dismiss";
   visibility: Visibility;
   receivedAt: number;
+  /**
+   * How a reply was read when it came from the box's words rather than an
+   * explicit choice: `by` names the reader ("box-phrase"), `phrase` what matched.
+   * Kept so a misread decline is attributable in the record.
+   */
+  classifiedBy?: { by: string; phrase: string };
 }
 
 /**

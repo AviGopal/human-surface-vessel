@@ -21,7 +21,7 @@ import { RunsList, initialFilter, latestMine, rememberFilter, type RunFilter } f
 import { RunView } from "./components/RunView";
 import { TopBar } from "./components/TopBar";
 import { boxContext } from "./lib/box";
-import { openRunQuestion } from "./lib/walk";
+import { waitingQuestion } from "./lib/walk";
 import { useTokenOverrides } from "./lib/useTokenOverrides";
 import { useLiveControls } from "./state/liveControls";
 import { useStoreStream } from "./state/stream";
@@ -98,7 +98,8 @@ function Workbench(): ReactNode {
   // The box answers the run on screen when that run is waiting on the person.
   const [setAside, setSetAside] = useState<string | null>(null);
   const shownRun = runId ?? (questionId ? null : latest);
-  const waiting = shownRun ? openRunQuestion(questions.query.data?.questions, shownRun, Date.now()) : null;
+  // The question the box answers: the run on screen's, or the one open on the questions page.
+  const waiting = waitingQuestion(questions.query.data?.questions, shownRun, questionId, Date.now());
   const shownRow = shownRun ? (board.data?.find((r) => r.dispatchId === shownRun) ?? null) : null;
   const shownGoal = shownRow?.goal ?? null;
   const target = useBoxTarget()?.target ?? null;

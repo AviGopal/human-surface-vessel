@@ -115,7 +115,7 @@ describe("one box", () => {
     expect(JSON.stringify(answer?.body)).toContain("Seattle");
     expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(true);
     expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(false);
-    expect(el.textContent).toContain("Read as your answer to “Where is it raining?” · delivered");
+    expect(el.querySelector(".sf-outcome-line")?.textContent).toBe("Answer×");
     expect(el.querySelector("textarea")?.value).toBe("");
   });
 
@@ -125,6 +125,46 @@ describe("one box", () => {
     await type(el, "What time is it?");
     expect(calls.some((c) => c.url.includes("/api/run-goal") && c.body["goal"] === "What time is it?")).toBe(true);
     expect(calls.some((c) => c.body["type"] === "solicitationResponse_write")).toBe(false);
+  });
+
+  test("must-fail (G2, G3): \"not now\" declines and \"need more\" asks for more, and the record says it was read from those words", async () => {
+    for (const [text, outcome, kind, echo] of [
+      ["not now", "declined", "dismiss", "Declined×"],
+      ["Need more.", "insufficient_context", "dismiss", "Need more×"],
+    ] as const) {
+      calls.length = 0;
+      const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
+      await type(el, text);
+      const answer = calls.find((c) => c.body["type"] === "solicitationResponse_write");
+      expect(answer?.body).toMatchObject({ solicitationId: "s-1", outcome });
+      const kept = calls.find((c) => c.url.includes("/api/participation"));
+      expect(kept?.body).toMatchObject({ kind, value: outcome, classified_by: "box-phrase", classified_phrase: text.toLowerCase().replace(/[.]$/, "") });
+      expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(false);
+      expect(el.querySelector(".sf-outcome-line")?.textContent).toBe(echo);
+    }
+  });
+
+  test("G4: only those two exact phrases; anything else, these included, is an answer", async () => {
+    for (const text of ["not now, try Seattle", "No", "I don't know", "skip", "decline", "what do you mean", "need more time to think: Seattle"]) {
+      calls.length = 0;
+      const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
+      await type(el, text);
+      const answer = calls.find((c) => c.body["type"] === "solicitationResponse_write");
+      expect([text, answer?.body["outcome"]]).toEqual([text, "answered"]);
+      const kept = calls.find((c) => c.url.includes("/api/participation"));
+      expect(kept?.body["classified_by"]).toBeUndefined();
+    }
+  });
+
+  test("G5: with a run waiting, the box offers \"not now\" and \"need more\"; choosing one fills the box and sends nothing", async () => {
+    const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
+    const chips = [...el.querySelectorAll(".sf-ask-suggest button")].map((b) => b.textContent);
+    expect(chips).toEqual(["not now", "need more"]);
+    await act(async () => {
+      ([...el.querySelectorAll(".sf-ask-suggest button")].find((b) => b.textContent === "not now") as HTMLButtonElement).click();
+    });
+    expect(el.querySelector("textarea")?.value).toBe("not now");
+    expect(calls.some((c) => c.body["type"] === "solicitationResponse_write" || c.url.includes("/api/participation"))).toBe(false);
   });
 
   test("× on the chip sets the question aside", async () => {

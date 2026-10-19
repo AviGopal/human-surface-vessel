@@ -57,6 +57,21 @@ export function readVerdictPhrase(text: string): "achieved" | "not_achieved" | n
   return null;
 }
 
+/**
+ * A reply to a waiting run read from one of the two exact phrases the box offers
+ * beside it: "not now" declines, "need more" asks for more. Anything else is an
+ * answer, including words like "skip" or "decline" that answer some questions.
+ * The set is closed on purpose; the walk's own reading of a reply is where any
+ * wider understanding belongs (the D1 gap).
+ */
+export const REPLY_PHRASES = { "not now": "declined", "need more": "insufficient_context" } as const;
+
+export function readReplyPhrase(text: string): { outcome: "declined" | "insufficient_context"; phrase: string } | null {
+  const t = text.trim().toLowerCase().replace(/[.!\s]+$/u, "").replace(/\s+/g, " ");
+  const outcome = (REPLY_PHRASES as Record<string, "declined" | "insufficient_context">)[t];
+  return outcome ? { outcome, phrase: t } : null;
+}
+
 export interface BoxWords {
   /** What the chip beside the box says the next message will be. */
   readonly chip: string;

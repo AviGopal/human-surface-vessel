@@ -25,6 +25,10 @@ participationRouter.post("/api/participation", async c => {
   return resolve({
     type: "uiFeedback", panel_id: body.panel_id, panel_revision: body.panel_revision,
     response_id: body.response_id, ask_id: body.ask_id, kind: body.kind, value: body.value,
+    // How the box read a reply, when it read one from its words (16f-2); strings only.
+    ...(typeof body.classified_by === "string" && typeof body.classified_phrase === "string"
+      ? { classified_by: body.classified_by, classified_phrase: body.classified_phrase }
+      : {}),
     visibility: "public",
   });
 });

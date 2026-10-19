@@ -232,9 +232,9 @@ describe("<RunQuestion>", () => {
     const section = el.querySelector("section.sf-run-question");
     expect(section).not.toBeNull();
     expect(section?.textContent).toContain("What is happening today?");
-    // No surface-added heading or label beyond the controls.
+    // No surface-added heading or label, and no controls: the one box answers it (16f-2).
     expect(section?.querySelector(".sf-view-label")).toBeNull();
-    expect([...(section?.querySelectorAll("button") ?? [])].map((b) => b.textContent)).toEqual(["Send", "Need more", "Decline"]);
+    expect([...(section?.querySelectorAll("button, textarea, input") ?? [])].length).toBe(0);
     expect(section?.querySelector(".sf-run-question-deadline")?.textContent).toMatch(/^\d+m$/);
     const beats = posted.filter((p) => p.url.includes("/api/resolve") && p.body.includes("solicitationHeartbeat_write"));
     expect(beats.length).toBeGreaterThanOrEqual(1);

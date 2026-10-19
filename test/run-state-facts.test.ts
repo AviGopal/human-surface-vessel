@@ -7,7 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Question } from "../ui/src/api/participation";
 import { deriveRunState, rowReason, stalledForMs, STALL_AFTER_MS, type RunFacts } from "../ui/src/lib/runState";
-import { openRunQuestion } from "../ui/src/lib/walk";
+import { openRunQuestion, waitingQuestion } from "../ui/src/lib/walk";
 
 const NOW = 1_000_000;
 
@@ -67,5 +67,18 @@ describe("rowReason", () => {
     expect(rowReason({ goalReachReason: " no chart " })).toBe("no chart");
     expect(rowReason({ goalReachReason: null, error: "timeout" })).toBe("timeout");
     expect(rowReason({ goalReachReason: "  " })).toBeNull();
+  });
+});
+
+describe("waitingQuestion (the box's reply context, 16f-2)", () => {
+  test("must-fail: an open run question on the questions page is what the box answers there", () => {
+    const qs = [question({})];
+    expect(waitingQuestion(qs, null, "q1", NOW)?.id).toBe("q1");
+    expect(waitingQuestion(qs, "d1", null, NOW)?.id).toBe("q1");
+    expect(waitingQuestion(qs, null, null, NOW)).toBeNull();
+    // A question with no waiting run, or one already settled, is not answered through the box.
+    expect(waitingQuestion([question(undefined)], null, "q1", NOW)).toBeNull();
+    expect(waitingQuestion([question({}, { answered: true })], null, "q1", NOW)).toBeNull();
+    expect(waitingQuestion([question({ deadlineAt: NOW - 1 })], null, "q1", NOW)).toBeNull();
   });
 });

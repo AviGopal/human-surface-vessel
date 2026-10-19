@@ -1,6 +1,6 @@
 /**
- * A run's question has one path wherever it is opened. Before this, the question
- * page recorded an answer on the question only, and the waiting run never got it.
+ * A run's question has one path wherever it is opened: the one box (16f-2). Before
+ * that, the run page and the questions page each drew their own form for it.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -42,7 +42,9 @@ afterAll(async () => {
 });
 
 describe("a run's question on the questions page", () => {
-  test("must-fail: answering it there reaches the waiting run, as on the run page", async () => {
+  test("must-fail (G1): it is drawn without a second input; the one box answers it (16f-2)", async () => {
+    // The box's reply context there is waitingQuestion(…, questionId) (run-state-facts.test.ts);
+    // the answer path itself is the box's (one-box.test.ts).
     const el = document.createElement("div");
     document.body.appendChild(el);
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -50,18 +52,15 @@ describe("a run's question on the questions page", () => {
       createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(QuestionView, { questionId: "solicitation-s-9" })))));
     });
     for (let i = 0; i < 5; i++) await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
-    const box = el.querySelector("textarea[aria-label='Answer']") as HTMLTextAreaElement;
-    expect(box).not.toBeNull();
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
-      setter.call(box, "Bergen");
-      box.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await act(async () => {
-      (el.querySelector("form.sf-run-question-form") as HTMLFormElement).requestSubmit();
-    });
-    for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
-    const delivered = calls.find((c) => c.body["type"] === "solicitationResponse_write");
-    expect(delivered?.body).toMatchObject({ solicitationId: "s-9", outcome: "answered" });
+    const section = el.querySelector("[aria-label='Question']");
+    expect(section).not.toBeNull();
+    expect(section?.textContent).toContain("Where should it look?");
+    expect(el.querySelector("form.sf-run-question-form, textarea[aria-label='Answer']")).toBeNull();
+    const buttons = [...el.querySelectorAll("[aria-label='Question'] button")].map((b) => b.textContent);
+    expect(buttons).not.toContain("Need more");
+    expect(buttons).not.toContain("Decline");
+    expect(buttons).not.toContain("Send");
+    // The run is still kept waiting while its question is on screen.
+    expect(calls.some((c) => c.body["type"] === "solicitationHeartbeat_write")).toBe(true);
   });
 });

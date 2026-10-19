@@ -16,13 +16,16 @@ import { onScreenReport, useOnScreen } from "../state/onScreen";
 import { injectPayload } from "../lib/interaction";
 import { useDispatchGoal, useSubmitGrade } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
-import { boxWords, presentationScope, readAs, readVerdictPhrase, type BoxContext, NEW_ASK } from "../lib/box";
+import { boxWords, presentationScope, readAs, readReplyPhrase, readVerdictPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { answerRunQuestion } from "./RunQuestion";
 import { StarterChips } from "./StarterChips";
 
 const MAX_BOX_LINES = 8;
+
+/** The echo for a reply delivered to a waiting run. */
+const REPLY_ECHO: Readonly<Record<string, string>> = { answered: "Answer", declined: "Declined", insufficient_context: "Need more" };
 
 /** The word the echo uses for a form the box redrew the answer in. */
 const FORM_WORD: Readonly<Record<string, string>> = { rows: "table", record: "fields", text: "text", prose: "prose", page: "page", terminal: "terminal", diff: "diff", scalar: "value" };
@@ -131,9 +134,12 @@ export function TopBar({
     mutationFn: async (args: { ctx: Extract<BoxContext, { kind: "reply" }>; text: string }) => {
       const change = await trySurfaceIntent(args.text, onScreenReport(onScreen));
       if (change) return { kind: "reshaped" as const, change };
-      const receipt = await answerRunQuestion(args.ctx.question, "answered", args.text);
+      // "not now" and "need more", exactly, are the replies offered beside the box.
+      const phrase = readReplyPhrase(args.text);
+      const outcome = phrase?.outcome ?? "answered";
+      const receipt = await answerRunQuestion(args.ctx.question, outcome, args.text, phrase ? { by: "box-phrase", phrase: phrase.phrase } : undefined);
       recordReceipt(receipt);
-      return { kind: "answered" as const };
+      return { kind: "answered" as const, outcome };
     },
   });
   const boxTarget = useBoxTarget();
@@ -214,7 +220,7 @@ export function TopBar({
               setEcho(null);
               setReshaped(r.change);
             } else {
-              setEcho(`${readAs(ctx)} · delivered`);
+              setEcho(REPLY_ECHO[r.outcome] ?? "Answer");
             }
             cleared();
           },
@@ -302,6 +308,16 @@ export function TopBar({
               }
             }}
           />
+          {goal.trim().length === 0 && context.kind === "reply" ? (
+            // The replies a waiting run can take besides an answer. They fill the box; they never send.
+            <div className="sf-ask-suggest" onMouseDown={(e) => e.preventDefault()}>
+              {Object.keys(REPLY_PHRASES).map((p) => (
+                <button key={p} type="button" className="sf-chip" onClick={() => put(p, false)}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {focused && goal.trim().length === 0 && context.kind === "new" ? (
             // mousedown is swallowed so choosing a chip does not blur the box first.
             <div className="sf-ask-suggest" onMouseDown={(e) => e.preventDefault()}>

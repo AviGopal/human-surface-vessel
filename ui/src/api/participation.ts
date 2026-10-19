@@ -54,6 +54,9 @@ export interface Contribution {
   ask_id?: string;
   kind: "answer" | "dismiss";
   value: unknown;
+  /** How the box read a reply from its words (16f-2): the reader and the phrase matched. */
+  classified_by?: string;
+  classified_phrase?: string;
 }
 
 /**

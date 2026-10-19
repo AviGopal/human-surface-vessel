@@ -672,6 +672,11 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         value: pointer["value"],
         kind: feedbackKind(pointer),
         visibility: asVisibility(pointer["visibility"], "public"),
+        ...(() => {
+          const by = optStr(pointer, "classified_by");
+          const phrase = optStr(pointer, "classified_phrase");
+          return by && phrase ? { classifiedBy: { by, phrase } } : {};
+        })(),
       });
       } catch (error) {
         if (error instanceof ParticipationConflict) {

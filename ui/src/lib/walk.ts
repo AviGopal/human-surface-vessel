@@ -104,3 +104,20 @@ export function openRunQuestion(
   );
 }
 
+
+/**
+ * The question the one box answers: the open question of the run on screen, or,
+ * on the questions page, the open question shown there when it has a waiting run.
+ * There is no other place to answer it (16f-2: one input).
+ */
+export function waitingQuestion(
+  questions: readonly Question[] | undefined,
+  shownRun: string | null,
+  questionId: string | null,
+  now: number | null,
+): Question | null {
+  if (shownRun) return openRunQuestion(questions, shownRun, now);
+  if (!questionId) return null;
+  const q = questions?.find((x) => x.id === questionId);
+  return q?.run?.dispatchId ? openRunQuestion([q], q.run.dispatchId, now) : null;
+}

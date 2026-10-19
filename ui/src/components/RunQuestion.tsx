@@ -1,8 +1,9 @@
 /**
  * A question a run asked, shown on that run: the brief exactly as the asker
- * wrote it, then the controls. The surface adds no headings or explanation —
+ * wrote it, and the time it waits. The surface adds no headings or explanation —
  * the brief is the activity's content, and how well it lets a person answer is
- * graded by the outcome, not designed into the interface.
+ * graded by the outcome, not designed into the interface. The answer is typed in
+ * the one box (16f-2); there is no second input here.
  *
  * While it is on screen and open, the run is kept waiting (a heartbeat every
  * 30 s extends goal-host's deadline, up to its cap); off screen, the asker's own
@@ -10,7 +11,6 @@
  * is recorded on the question, so the questions rail shows it answered too.
  */
 
-import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { answerSolicitation, heartbeatSolicitation, SurfaceError } from "../api/client";
 import { sendContribution, type Question } from "../api/participation";
@@ -18,7 +18,6 @@ import type { SolicitationOutcome } from "../api/types";
 import { fromPanel } from "../lib/content";
 import { contributionContent } from "../lib/interaction";
 import { useNow } from "../lib/useNow";
-import { useQuestions } from "../state/questions";
 import { Rendered } from "./Rendered";
 
 const HEARTBEAT_MS = 30_000;
@@ -35,7 +34,13 @@ function remaining(ms: number): string {
  * recorded on the question so the questions rail shows it answered too. The one
  * path for the question card and the box.
  */
-export async function answerRunQuestion(question: Question, outcome: SolicitationOutcome, answer: string) {
+export async function answerRunQuestion(
+  question: Question,
+  outcome: SolicitationOutcome,
+  answer: string,
+  /** How the outcome was read, when it came from the box's words ("not now"). */
+  classified?: { by: string; phrase: string },
+) {
   const run = question.run;
   if (!run) throw new Error("no run");
   const value = outcome === "answered" ? answer.trim() : outcome;
@@ -47,7 +52,11 @@ export async function answerRunQuestion(question: Question, outcome: Solicitatio
     kind: outcome === "answered" ? "answer" : "dismiss",
     value,
   });
-  return sendContribution({ ...content, response_id: crypto.randomUUID() });
+  return sendContribution({
+    ...content,
+    response_id: crypto.randomUUID(),
+    ...(classified ? { classified_by: classified.by, classified_phrase: classified.phrase } : {}),
+  });
 }
 
 function answerText(q: Question): string | null {
@@ -58,8 +67,6 @@ function answerText(q: Question): string | null {
 
 export function RunQuestion({ question, running }: { question: Question; running: boolean }): ReactNode {
   const run = question.run;
-  const { recordReceipt } = useQuestions();
-  const [answer, setAnswer] = useState("");
   const [deadline, setDeadline] = useState<number | null>(run?.deadlineAt ?? null);
   const [closed, setClosed] = useState(false);
   const settled = question.answered || question.declined;
@@ -86,12 +93,6 @@ export function RunQuestion({ question, running }: { question: Question; running
     };
   }, [open, run]);
 
-  const mutation = useMutation({
-    retry: false,
-    mutationFn: (outcome: SolicitationOutcome) => answerRunQuestion(question, outcome, answer),
-    onSuccess: recordReceipt,
-  });
-
   const given = answerText(question);
 
   return (
@@ -102,45 +103,7 @@ export function RunQuestion({ question, running }: { question: Question; running
       ) : question.declined ? (
         <p className="sf-muted sf-note">Declined</p>
       ) : open ? (
-        <form
-          className="sf-run-question-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (answer.trim()) mutation.mutate("answered");
-          }}
-        >
-          <textarea
-            className="sf-run-question-input"
-            aria-label="Answer"
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            disabled={mutation.isPending}
-            rows={3}
-          />
-          <div className="sf-run-question-actions">
-            <button type="submit" className="sf-button" disabled={mutation.isPending || !answer.trim()}>
-              Send
-            </button>
-            <button
-              type="button"
-              className="sf-button sf-button-quiet"
-              disabled={mutation.isPending}
-              onClick={() => mutation.mutate("insufficient_context")}
-            >
-              Need more
-            </button>
-            <button
-              type="button"
-              className="sf-button sf-button-quiet"
-              disabled={mutation.isPending}
-              onClick={() => mutation.mutate("declined")}
-            >
-              Decline
-            </button>
-            {deadline !== null ? <span className="sf-muted sf-run-question-deadline">{remaining(deadline - now)}</span> : null}
-          </div>
-          {mutation.isError ? <p className="sf-error-inline">Not delivered: {(mutation.error as Error).message}</p> : null}
-        </form>
+        deadline !== null ? <p className="sf-muted sf-run-question-deadline">{remaining(deadline - now)}</p> : null
       ) : (
         <p className="sf-muted sf-note">Closed</p>
       )}
