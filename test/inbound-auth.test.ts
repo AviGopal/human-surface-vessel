@@ -253,3 +253,27 @@ describe("the browser's reads on /api/resolve are their own list", () => {
     expect((await post("/api/resolve", { type: "goalWalkState", dispatchId: "d-1" })).status).toBe(401);
   });
 });
+
+/*
+ * qa ruling (3): the operator stays "human-surface" for the page (so "Mine" matches), and
+ * the admitted caller rides the dispatch's existing tag channel, which goal-host reads into
+ * the walk's trace tags (gh 7b048e2 src/index.ts:18639 body.tags, :19111 effectiveTags,
+ * :19158 runGoalWithRecovery tags). A body's own caller:* tag is dropped, never forwarded.
+ */
+describe("/api/run-goal tags the dispatch with the admitted caller", () => {
+  const lastDispatch = () => outbound.filter((o) => o.body["type"] === "goalDispatchAsync").at(-1)?.body;
+
+  test("must-fail: a keyless same-origin ask is tagged caller:browser-unverified, keeping its operator and its own tags", async () => {
+    const r = await post("/api/run-goal", { goal: "What is 2 + 2?", tags: ["probe:x", "caller:operator:claude-avi"] }, { Origin: HERE });
+    expect(r.status).toBe(202);
+    const sent = lastDispatch();
+    expect(sent?.["operator"]).toBe("human-surface");
+    expect(sent?.["tags"]).toEqual(["probe:x", "caller:browser-unverified"]);
+  });
+
+  test("must-fail: a keyed ask is tagged caller:<validated label>", async () => {
+    const r = await post("/api/run-goal", { goal: "What is 2 + 2?" }, { Authorization: "ApiKey valid-service-5" });
+    expect(r.status).toBe(202);
+    expect(lastDispatch()?.["tags"]).toEqual(["caller:key:svc-key-1"]);
+  });
+});
