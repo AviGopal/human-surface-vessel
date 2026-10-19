@@ -44,7 +44,7 @@ const PATH_LABEL: Readonly<Record<ExecutionPath, string>> = {
 };
 
 /**
- * What the walk is missing, and a way to supply it.
+ * What the walk still needs, and a way to supply it.
  *
  * `pendingTargets` are the shapes the walk still needs; an impulse of one of those
  * shapes is the only human contribution that can satisfy the walk (free-form
@@ -62,8 +62,8 @@ function WalkNeeds({ walk }: { walk: GoalWalkState }): ReactNode {
   return (
     // Folded until a person opens it or has sent something: it is where a running walk
     // says what it is stuck on, and anything listed may be supplied.
-    <details className="sf-view-section sf-walk-needs" aria-label="What the walk is missing" open={sent !== null || chosen !== null}>
-      <summary className="sf-view-label">Missing · {missing.length}</summary>
+    <details className="sf-view-section sf-walk-needs" aria-label="What the walk still needs" open={sent !== null || chosen !== null}>
+      <summary className="sf-view-label">Needed · {missing.length}</summary>
       {missing.length > 0 ? (
         <ul className="sf-needs-list">
           {missing.map((s) => (
@@ -192,8 +192,8 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
           {query.isError ? <span className="sf-error-inline">refresh failed</span> : null}
         </p>
         {reason ? (
-          <div className="sf-run-reason-full">
-            {splitVerdict(reason).code ? <span className="sf-verdict-code sf-mono">{splitVerdict(reason).code}</span> : null}
+          // The system's code for the reason stays on hover; the fold draws it beside each attempt.
+          <div className="sf-run-reason-full" title={splitVerdict(reason).code ?? undefined}>
             <Rendered content={fromText("goal_reach_reason", splitVerdict(reason).text)} density="inline" header={false} region="run_reason" />
           </div>
         ) : null}

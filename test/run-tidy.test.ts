@@ -93,11 +93,16 @@ describe("verdict codes", () => {
     expect(splitVerdict("The output was partial — it listed only two sources").code).toBeNull();
   });
 
-  test("must-fail: the run header draws the code as a tag, not as the reason's first words (879e672e)", async () => {
+  test("must-fail: the run header reads the reason, not the system's code for it (879e672e, 16g)", async () => {
+    // The code is the system's label, not words for a person: it leaves the lead and stays on hover;
+    // the fold ("How it went") still draws it beside each attempt's verdict.
     const el = await mount(base({ goalReachReason: "deterministic:hollow_walklog_capped — all 1 logged walk step(s) produced 0 new shapes" }));
     const head = el.querySelector(".sf-run-reason-full");
-    expect(head?.querySelector(".sf-verdict-code")?.textContent).toBe("hollow_walklog_capped");
+    expect(head?.querySelector(".sf-verdict-code")).toBeNull();
+    expect(head?.textContent).not.toContain("hollow_walklog_capped");
     expect(head?.textContent).not.toContain("deterministic:");
+    expect(head?.textContent).toContain("all 1 logged walk step(s) produced 0 new shapes");
+    expect(head?.getAttribute("title")).toBe("hollow_walklog_capped");
   });
 });
 
@@ -108,6 +113,8 @@ describe("Missing", () => {
     // the person unless they open it.
     const el = await mount(base({ status: "running", reached: null, pendingTargets: ["execution_trace", "human_context", "human_input"] }));
     expect(el.querySelector(".sf-walk-needs")?.hasAttribute("open")).toBe(false);
+    // What the walk still needs, not a defect: "Needed", not "Missing" (16g).
+    expect(el.querySelector(".sf-walk-needs summary")?.textContent).toBe("Needed · 3");
     const rows = [...el.querySelectorAll(".sf-needs-list li")].map((li) => [li.querySelector(".sf-shape-badge")?.textContent, li.querySelector("button")?.textContent ?? null]);
     expect(rows).toEqual([["execution_trace", "Provide"], ["human_context", "Provide"], ["human_input", "Provide"]]);
     // One place to type: no second free-text control for the same run (16b).
