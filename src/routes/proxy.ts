@@ -893,7 +893,10 @@ async function backfillOwnDispatches(): Promise<void> {
       const j = JSON.parse(unwrapFederated(await res.text())) as { body?: { dispatches?: Array<Record<string, unknown>>; nextOffset?: number | null } };
       const now = Date.now();
       for (const d of j.body?.dispatches ?? []) {
-        if (d["operator"] !== SURFACE_OPERATOR || typeof d["dispatchId"] !== "string") continue;
+        // The surface's label is operator_label once goal-host's auth fix is live (operator then
+        // carries authority, null for this vessel's key); operator on rows written before it.
+        const label = typeof d["operator_label"] === "string" ? d["operator_label"] : d["operator"];
+        if (label !== SURFACE_OPERATOR || typeof d["dispatchId"] !== "string") continue;
         const started = typeof d["startedAt"] === "number" ? d["startedAt"] : Date.parse(String(d["startedAt"] ?? ""));
         recordOwnDispatch({
           dispatchId: d["dispatchId"],
