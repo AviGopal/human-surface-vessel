@@ -28,6 +28,8 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { joinGapThreads, type GapThread } from "../gap-threads.ts";
 import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
+import { admitCaller, admittedCaller, carry, requireCaller, type Caller } from "../inbound-auth.ts";
+import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, verdictDelivery, writeRenderPolicy } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
@@ -677,6 +679,24 @@ async function passthrough(opts: PassthroughOpts): Promise<Response> {
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+/**
+ * This vessel's own impulse route, IN PROCESS, carrying the caller this route admitted.
+ * It used to re-post over HTTP to 127.0.0.1 under the fleet key, which made every
+ * browser write arrive as the fleet's own; the shape still travels the one path every
+ * record does (the impulse route's case), just without leaving the process.
+ */
+async function resolveHere(pointer: Record<string, unknown>, caller: Caller, origin: string | undefined): Promise<Response> {
+  const res = await impulsesRouter.request(
+    RESOLVE_PATH,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ impulse: { pointer } }) },
+    carry(caller),
+  );
+  const headers: Record<string, string> = { ...corsHeaders(origin) };
+  const ct = res.headers.get("content-type");
+  if (ct) headers["Content-Type"] = ct;
+  return new Response(res.body, { status: res.status, headers });
+}
+
 async function rawBodyOf(c: { req: { text: () => Promise<string> } }): Promise<string> {
   try {
     const t = await c.req.text();
@@ -757,7 +777,8 @@ async function resolveThrough(
  * local or remote producer", which reads as a missing capability and is a
  * missing INDEX ENTRY. Use the advertised spelling.
  */
-proxyRouter.post("/api/run-goal", async (c) => {
+proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
+  const caller = admittedCaller(c);
   const cand = await resolveGoalHostEndpoint();
   const raw = await rawBodyOf(c);
   let req: Record<string, unknown>;
@@ -766,14 +787,20 @@ proxyRouter.post("/api/run-goal", async (c) => {
   } catch {
     req = {};
   }
+  // THE OPERATOR IS THE ADMITTED CALLER'S, never the body's. goal-host keeps it only as an
+  // unverified operator_label and takes authority from the credential it is sent (this
+  // vessel's). A keyed caller is named by its validated label; the browser, which has no
+  // credential until sign-in, by this surface's own label, which is also how the surface
+  // finds the runs it asked (backfillOwnDispatches).
+  const operator = caller.kind === "browser" ? SURFACE_OPERATOR : caller.label;
   const res = await resolveThrough(
     cand,
-    JSON.stringify({ ...req, type: "goalDispatchAsync" }),
+    JSON.stringify({ ...req, operator, type: "goalDispatchAsync" }),
     c.req.header("Origin"),
     unwrapDispatch,
   );
   // Only this surface knows which runs it asked; goal-host cannot list by operator.
-  if (res.ok && typeof req["operator"] === "string" && req["operator"] === SURFACE_OPERATOR) {
+  if (res.ok && caller.kind === "browser") {
     try {
       const body = (await res.clone().json()) as { dispatchId?: unknown };
       if (typeof body.dispatchId === "string" && body.dispatchId) {
@@ -890,6 +917,9 @@ proxyRouter.post("/api/resolve", async (c) => {
       corsHeaders(c.req.header("Origin")),
     );
   }
+  // Then a caller, by shape (inbound-auth.ts BROWSER_WRITE_ALLOWLIST names the browser's).
+  const gate = await admitCaller(c, "/api/resolve", type);
+  if (gate.refused) return gate.refused;
   // The candidate's OWN path, and the answer unwrapped. This is the line that
   // was `${base}/resolve` with a streamed body.
   const cand = await resolveGoalHostEndpoint();
@@ -1060,7 +1090,7 @@ async function tryResolve(
   }
 }
 
-proxyRouter.post("/api/discovery/resolve", async (c) => {
+proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve"), async (c) => {
   const rawBody = await rawBodyOf(c);
   const origin = c.req.header("Origin");
   const local = DISCOVERY_ENDPOINT.replace(/\/+$/, "");
@@ -1111,7 +1141,7 @@ proxyRouter.post("/api/discovery/resolve", async (c) => {
  * latch. A verdict recorded without it is inert, so the proxy sets it here
  * rather than trusting a browser to.
  */
-proxyRouter.post("/api/grade", async (c) => {
+proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
   if (!body || typeof body["execution_id"] !== "string" || typeof body["verdict"] !== "string") {
     return c.json(
@@ -1457,7 +1487,7 @@ proxyRouter.get("/api/gaps/:id", async (c) => {
   return c.json({ gap: null, error: "no vessel serving substrateGap answered" }, 502, corsHeaders(origin));
 });
 
-proxyRouter.post("/api/feedback", async (c) => {
+proxyRouter.post("/api/feedback", requireCaller("/api/feedback"), async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
   if (!body || typeof body["panel_id"] !== "string" || !body["value"]) {
     return c.json(
@@ -1466,23 +1496,18 @@ proxyRouter.post("/api/feedback", async (c) => {
       corsHeaders(c.req.header("Origin")),
     );
   }
-  return passthrough({
-    url: `http://127.0.0.1:${PORT}${RESOLVE_PATH}`,
-    method: "POST",
-    rawBody: JSON.stringify({
-      impulse: {
-        pointer: {
-          type: "uiFeedback",
-          panel_id: body["panel_id"],
-          value: body["value"],
-          kind: "reaction",
-          complaint_kind: body["kind"] ?? "wrong",
-          visibility: "public",
-        },
-      },
-    }),
-    origin: c.req.header("Origin"),
-  });
+  return resolveHere(
+    {
+      type: "uiFeedback",
+      panel_id: body["panel_id"],
+      value: body["value"],
+      kind: "reaction",
+      complaint_kind: body["kind"] ?? "wrong",
+      visibility: "public",
+    },
+    admittedCaller(c),
+    c.req.header("Origin"),
+  );
 });
 
 // ─── exposure record (browser write) ────────────────────────────────────────
@@ -1505,7 +1530,7 @@ proxyRouter.post("/api/feedback", async (c) => {
  * development-vessel/src/resolvers/interactor-passthrough.ts:72 now refuses
  * them). Nothing in this route touches it.
  */
-proxyRouter.post("/api/observations", async (c) => {
+proxyRouter.post("/api/observations", requireCaller("/api/observations"), async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
   if (!body || typeof body["obs_type"] !== "string") {
     return c.json(
@@ -1519,20 +1544,15 @@ proxyRouter.post("/api/observations", async (c) => {
   // of reaches the corpus instead of being filtered out by a stale allowlist
   // here — two places that both have to know the field list is how a producer
   // and its consumer diverge.
-  return passthrough({
-    url: `http://127.0.0.1:${PORT}${RESOLVE_PATH}`,
-    method: "POST",
-    rawBody: JSON.stringify({
-      impulse: {
-        pointer: {
-          ...body,
-          type: "interactorObservation",
-          visibility: body["visibility"] ?? "operator_only",
-        },
-      },
-    }),
-    origin: c.req.header("Origin"),
-  });
+  return resolveHere(
+    {
+      ...body,
+      type: "interactorObservation",
+      visibility: body["visibility"] ?? "operator_only",
+    },
+    admittedCaller(c),
+    c.req.header("Origin"),
+  );
 });
 
 // ─── render policy (browser read) ───────────────────────────────────────────
@@ -1569,7 +1589,7 @@ proxyRouter.get("/api/render-policy", (c) =>
 /** An instruction about this interface is a sentence or two; the cap keeps the readers cheap. */
 const SURFACE_INTENT_MAX_CHARS = 2_000;
 
-proxyRouter.post("/api/surface-intent", async (c) => {
+proxyRouter.post("/api/surface-intent", requireCaller("/api/surface-intent"), async (c) => {
   const origin = c.req.header("Origin");
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
   const raw = body?.["text"] ?? body?.["instruction"];
@@ -1755,7 +1775,7 @@ proxyRouter.get("/api/calibration/windows", async (c) => {
  * whatever the browser believes: the dispatch must be in an attested open
  * window whose sink is "system". Anything else writes nothing.
  */
-proxyRouter.post("/api/calibration/grade", async (c) => {
+proxyRouter.post("/api/calibration/grade", requireCaller("/api/calibration/grade"), async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
   const windowId = typeof body?.["window_id"] === "string" ? body["window_id"] : null;
   const dispatchId = typeof body?.["dispatch_id"] === "string" ? body["dispatch_id"] : null;

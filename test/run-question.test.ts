@@ -5,6 +5,7 @@
  * forged dispatch id must not put a question on someone's run.
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import { impulsesRouter } from "../src/routes/impulses.ts";
 import { getPanel } from "../src/store.ts";
@@ -49,7 +50,7 @@ async function ask(pointer: Record<string, unknown>): Promise<{ status: number; 
   // The exact envelope goal-host's solicitHumanInput posts.
   const res = await app.request("/v2/impulses/resolve", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...testAuth() },
     body: JSON.stringify({ type: "human_input", pointer: { type: "human_input", ...pointer } }),
   });
   return { status: res.status, json: (await res.json()) as Record<string, unknown> };

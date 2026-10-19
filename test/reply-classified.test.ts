@@ -5,6 +5,7 @@
  */
 // First, before any src module: a throwaway workspace from any cwd (see participation.test.ts).
 import "./setup.ts";
+import { testAuth } from "./setup.ts";
 import { describe, expect, test } from "bun:test";
 import { participationRouter } from "../src/routes/participation.ts";
 import { impulsesRouter } from "../src/routes/impulses.ts";
@@ -14,7 +15,7 @@ import { REPLY_PHRASES } from "../ui/src/lib/box.ts";
 async function question(id: string): Promise<number> {
   const r = await impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...testAuth() },
     body: JSON.stringify({ pointer: { type: "uiQuestion_write", id, title: "Where should it look?", body: "## Where should it look?" } }),
   });
   expect(r.status).toBe(200);
@@ -24,7 +25,7 @@ async function question(id: string): Promise<number> {
 }
 
 async function contribute(body: Record<string, unknown>) {
-  const r = await participationRouter.request("/api/participation", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const r = await participationRouter.request("/api/participation", { method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify(body) });
   return { status: r.status, json: (await r.json()) as { body?: Record<string, unknown> } };
 }
 

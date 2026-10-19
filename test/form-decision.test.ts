@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { app } from "../src/index.ts";
 import { buildUiView } from "../src/ui-view.ts";
 import { buildFormCensus } from "../src/form-census.ts";
@@ -16,7 +17,7 @@ const RESOLVE = "/v2/impulses/resolve";
 async function resolve(pointer: Record<string, unknown>): Promise<{ status: number; body: any }> {
   const res = await app.request(RESOLVE, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...testAuth() },
     body: JSON.stringify({ impulse: { pointer } }),
   });
   return { status: res.status, body: await res.json() };

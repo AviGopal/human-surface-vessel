@@ -4,6 +4,7 @@
  * refused upstream for want of a human-scoped credential and nothing was kept.
  */
 import { afterAll, describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { readParticipation } from "../src/participation-journal.ts";
@@ -26,7 +27,7 @@ describe("verdicts kept on the run", () => {
   test("must-fail: a grade the corpus refuses is still kept, with its source and the judge's verdict", async () => {
     const res = await app.request("/api/grade", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...testAuth() },
       body: JSON.stringify({ execution_id: "e-1", dispatch_id: "d-rain", goal: "Where is it raining?", verdict: "not_achieved", notes: "Wrong answer — an empty search", judge_reached: true, about: { pool_id: "p-7", shape: "human_input", produced_by: "satisfier:human_input", provenance: "without-a-person", extra: { x: 1 } } }),
     });
     // The corpus's answer is passed through unchanged.

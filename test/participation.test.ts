@@ -3,6 +3,7 @@
 // repo's root; importing it here gives the 501 feedback appends below a throwaway
 // workspace from any cwd (one module, so a preloaded run evaluates it once).
 import "./setup.ts";
+import { testAuth } from "./setup.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,7 +14,7 @@ import { questionView, listPanels, recentFeedback, recordFeedback } from "../src
 
 async function resolve(pointer: Record<string, unknown>) {
   return impulsesRouter.request("/v2/impulses/resolve", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointer }),
+    method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify({ pointer }),
   });
 }
 async function question(body: unknown = "What evidence is missing?", extras = {}) {
@@ -24,7 +25,7 @@ async function question(body: unknown = "What evidence is missing?", extras = {}
 }
 async function respond(panel: { id: string; revision: number }, value: unknown, extra = {}) {
   return participationRouter.request("/api/participation", {
-    method: "POST", headers: { "content-type": "application/json" },
+    method: "POST", headers: { "content-type": "application/json", ...testAuth() },
     body: JSON.stringify({ panel_id: panel.id, panel_revision: panel.revision,
       response_id: crypto.randomUUID(), kind: "answer", value, ...extra }),
   });
@@ -126,7 +127,7 @@ describe("activity → question → browser contribution → activity read", () 
     const response = await participationRouter.request("/api/questions");
     expect((await response.json()).body.questions.some((p: { id: string }) => p.id === panel.id)).toBe(true);
     const invalid = await participationRouter.request("/api/participation", {
-      method: "POST", headers: { "content-type": "application/json" },
+      method: "POST", headers: { "content-type": "application/json", ...testAuth() },
       body: JSON.stringify({ panel_id: panel.id, value: 0 }),
     });
     expect(invalid.status).toBe(400);

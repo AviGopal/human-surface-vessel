@@ -7,6 +7,7 @@
  * every learning pass reported "no exposure outcome carried a form".
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { testAuth } from "./setup.ts";
 const registeredHere = !GlobalRegistrator.isRegistered;
 if (registeredHere) GlobalRegistrator.register({ url: "http://surface.test/" });
 
@@ -26,7 +27,7 @@ const conditions = { rendererBundle: "test-bundle", viewport: { width: 1440, hei
 async function writeObservation(record: Record<string, unknown>): Promise<number> {
   const res = await impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...testAuth() },
     body: JSON.stringify({ impulse: { pointer: { ...record, type: "interactorObservation", visibility: "operator_only" } } }),
   });
   return res.status;

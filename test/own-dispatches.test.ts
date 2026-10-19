@@ -5,9 +5,13 @@
  * showed "None" while all 247 of them still existed.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+// Bun's own Request, kept before happy-dom replaces it: happy-dom's drops the forbidden Origin
+// header, and the page's Origin is what the write gate admits a keyless browser ask by.
+const NativeRequest = globalThis.Request;
 GlobalRegistrator.register({ url: "http://127.0.0.1:28310/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import {
   FINISHED_RECHECK_MS,
@@ -52,8 +56,12 @@ const app = new Hono();
 app.route("/", proxyRouter);
 
 const own = "http://127.0.0.1:28310";
+/** The person's page: same-origin and keyless (src/inbound-auth.ts admits it as browser-unverified). */
 const ask = (goal: string, operator: string) =>
-  app.request("/api/run-goal", { method: "POST", body: JSON.stringify({ goal, operator }), headers: { "content-type": "application/json", origin: own } });
+  app.fetch(new NativeRequest(`${own}/api/run-goal`, { method: "POST", body: JSON.stringify({ goal, operator }), headers: { "content-type": "application/json", origin: own } }));
+/** A system caller: keyed, no Origin. */
+const systemAsk = (goal: string, operator: string) =>
+  app.request(`${own}/api/run-goal`, { method: "POST", body: JSON.stringify({ goal, operator }), headers: { "content-type": "application/json", ...testAuth() } });
 
 beforeEach(() => {
   resetOwnDispatchesForTest();
@@ -66,7 +74,10 @@ describe("the surface's own record", () => {
   test("a person's ask is recorded once; a system dispatch through the same route is not", async () => {
     const res = await ask("Who am I?", "human-surface");
     expect(res.status).toBeLessThan(300);
-    await ask("internal", "rhythm-conductor-drain");
+    // The record follows the admitted caller, not the body's operator: a keyed system
+    // caller is not the person, whatever operator it names.
+    await systemAsk("internal", "rhythm-conductor-drain");
+    await systemAsk("claims to be the surface", "human-surface");
     const rows = listOwnDispatches(50);
     expect(rows.map((r) => r.goal)).toEqual(["Who am I?"]);
     expect(recordOwnDispatch(rows[0]!)).toBe(false);

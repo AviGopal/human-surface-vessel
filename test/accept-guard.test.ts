@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { impulsesRouter } from "../src/routes/impulses.ts";
 import { listPanels, questionView } from "../src/store.ts";
 
@@ -22,7 +23,7 @@ import { listPanels, questionView } from "../src/store.ts";
 
 async function resolve(pointer: Record<string, unknown>) {
   return impulsesRouter.request("/v2/impulses/resolve", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointer }),
+    method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify({ pointer }),
   });
 }
 

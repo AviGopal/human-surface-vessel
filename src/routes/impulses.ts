@@ -13,7 +13,7 @@
  */
 
 import { Hono } from "hono";
-import { DISCOVERY_SHAPES, METABOB_API_KEY, type DiscoveryShape } from "../config.ts";
+import { DISCOVERY_SHAPES, METABOB_API_KEY, RESOLVE_PATH, type DiscoveryShape } from "../config.ts";
 import {
   acceptedClassification,
   asVisibility,
@@ -44,6 +44,7 @@ import { readWalkState } from "./proxy.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
+import { admitCaller } from "../inbound-auth.ts";
 
 type Pointer = Record<string, unknown>;
 
@@ -435,6 +436,9 @@ async function fileFeedbackGap(entry: {
 
 export const impulsesRouter = new Hono();
 
+/** The shapes this route answers without a caller: they read, and write nothing. */
+const IMPULSE_READ_TYPES: ReadonlySet<string> = new Set(["uiQuestion", "renderPolicy", "human_surface:ui_view"]);
+
 impulsesRouter.post("/v2/impulses/resolve", async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | {
     impulse?: { pointer?: Pointer };
@@ -455,6 +459,14 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       },
       400,
     );
+  }
+
+  // EVERY WRITE NAMES ITS CALLER (inbound-auth.ts). Only the reads below pass without one.
+  // No keyless browser entry exists for this route: a browser write reaches it only from
+  // the browser routes that admitted it (participation, feedback, observations).
+  if (!IMPULSE_READ_TYPES.has(type)) {
+    const gate = await admitCaller(c, RESOLVE_PATH, type);
+    if (gate.refused) return gate.refused;
   }
 
   switch (type) {

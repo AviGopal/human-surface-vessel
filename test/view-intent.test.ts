@@ -8,6 +8,7 @@
  * shape will ever match; the ask itself never ran.
  */
 import { afterAll, describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { getRenderPolicy, recentObservations } from "../src/store.ts";
@@ -36,7 +37,7 @@ const markup = { shape: "http_fetch", form: "text", markup: true, region: "answe
 async function say(instruction: string, onScreen: unknown) {
   const res = await app.request("/api/surface-intent", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...testAuth() },
     body: JSON.stringify({ instruction, onScreen }),
   });
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };

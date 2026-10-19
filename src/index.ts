@@ -31,6 +31,7 @@ import {
   startDiscoveryRegistration,
 } from "./discovery-registration.ts";
 import { impulsesRouter } from "./routes/impulses.ts";
+import { inboundAuthCounts } from "./inbound-auth.ts";
 import { participationRouter } from "./routes/participation.ts";
 import { corsHeaders, proxyRouter, refuseForeignOriginWrites } from "./routes/proxy.ts";
 import {
@@ -106,6 +107,8 @@ app.get("/health", (c) =>
     shapes: DISCOVERY_SHAPES,
     store: counts(),
     discovery: discoveryStatus(),
+    // Write refusals by reason and (unverified) caller hint; see inbound-auth.ts.
+    inbound_auth: inboundAuthCounts(),
   }),
 );
 

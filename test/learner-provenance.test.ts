@@ -285,7 +285,7 @@ describe("a test panel is excluded by its provenance stamp, not by its kind's na
       const child = Bun.spawnSync([process.execPath, "-e", `
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
         const post = async (pointer) => (await impulsesRouter.request("/v2/impulses/resolve", {
-          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointer }) })).json();
+          method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY }, body: JSON.stringify({ pointer }) })).json();
         const claim = { origin: "person", producer: "claimed-by-the-pointer" };
         const panelClaim = await post({ type: "uiPanel_write", id: "claim-p", title: "t", body: "b", kind: "info", ...claim });
         const questionClaim = await post({ type: "uiQuestion_write", id: "claim-q", title: "t", body: "b", kind: "question", ...claim });

@@ -5,6 +5,7 @@
  * `purpose:"calibration"` label, which goal-host and every credit reader skip.
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import { corpusVerdict, isOwnSubstrate, parseWindow } from "../src/calibration.ts";
 import { proxyRouter } from "../src/routes/proxy.ts";
@@ -129,7 +130,7 @@ app.route("/", proxyRouter);
 function grade(body: Record<string, unknown>): Promise<Response> {
   return app.request("/api/calibration/grade", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...testAuth() },
     body: JSON.stringify(body),
   });
 }
@@ -226,7 +227,7 @@ describe("/api/grade", () => {
     labelWrites.length = 0;
     const res = await app.request("/api/grade", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...testAuth() },
       body: JSON.stringify({ execution_id: "exec_a", verdict: "achieved" }),
     });
     expect(res.status).toBe(200);

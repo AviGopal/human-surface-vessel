@@ -5,6 +5,7 @@
  * choice that names no forms.
  */
 import { describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import { aggregateFormEvidence, decideLearnedForms, FORM_OBSERVATION_FLOOR } from "../src/form-learn.ts";
 import { impulsesRouter } from "../src/routes/impulses.ts";
@@ -55,7 +56,7 @@ describe("the route", () => {
   const app = new Hono();
   app.route("/", impulsesRouter);
   const post = (pointer: Record<string, unknown>) =>
-    app.request("/v2/impulses/resolve", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointer: { type: "interactorObservation", ...pointer } }) });
+    app.request("/v2/impulses/resolve", { method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify({ pointer: { type: "interactorObservation", ...pointer } }) });
 
   test("must-fail: a choice naming no target form, or the same form, is refused", async () => {
     expect((await post({ obs_type: "form_choice", shape: "s", form_from: "record" })).status).toBe(400);

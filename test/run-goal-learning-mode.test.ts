@@ -6,6 +6,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
+import { testAuth } from "./setup.ts";
 
 const dispatched: Record<string, unknown>[] = [];
 globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -24,7 +25,7 @@ const app = new Hono();
 app.route("/", proxyRouter);
 
 const post = (body: Record<string, unknown>) =>
-  app.request("/api/run-goal", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+  app.request("/api/run-goal", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", ...testAuth() } });
 
 describe("/api/run-goal and learning_mode", () => {
   test("an observe probe reaches goal-host with learning_mode observe, at the top level goal-host reads", async () => {

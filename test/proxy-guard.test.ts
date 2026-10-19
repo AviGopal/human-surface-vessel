@@ -7,6 +7,7 @@
  * with the fleet key — any page open on the host could dispatch goals.
  */
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import * as proxy from "../src/routes/proxy.ts";
 import { isOwnOrigin, proxyRouter, refuseForeignOriginWrites, resolveTypeOf } from "../src/routes/proxy.ts";
@@ -57,11 +58,14 @@ describe("refuseForeignOriginWrites", () => {
     expect(upstream.length).toBe(0);
   });
 
-  test("the surface's own page and service callers (no Origin) pass", async () => {
+  test("the surface's own page and keyed service callers (no Origin) pass; a keyless one does not", async () => {
     const page = await post("/api/resolve", '{"type":"activeDispatches"}', { "Content-Type": "application/json", Origin: own });
     expect(page.status).toBe(200);
-    const service = await post("/api/resolve", '{"type":"activeDispatches"}', { "Content-Type": "application/json" });
+    const service = await post("/api/resolve", '{"type":"activeDispatches"}', { "Content-Type": "application/json", ...testAuth() });
     expect(service.status).toBe(200);
+    // Every write route now names its caller (src/inbound-auth.ts): no key and no Origin is refused.
+    const keyless = await post("/api/resolve", '{"type":"activeDispatches"}', { "Content-Type": "application/json" });
+    expect(keyless.status).toBe(401);
   });
 
   test("reads are never refused for their Origin", async () => {
@@ -126,7 +130,7 @@ describe("/api/resolve forwards only the UI's shapes", () => {
 
   test("an allowed shape is forwarded unchanged", async () => {
     const body = JSON.stringify({ type: "goalWalkState", dispatchId: "d-1" });
-    const res = await post("/api/resolve", body, { "Content-Type": "application/json" });
+    const res = await post("/api/resolve", body, { "Content-Type": "application/json", ...testAuth() });
     expect(res.status).toBe(200);
     expect(upstream.some((u) => u.body === body)).toBe(true);
   });

@@ -91,7 +91,7 @@ const SCENARIO = `
 
   async function resolve(pointer) {
     const res = await impulsesRouter.request("/v2/impulses/resolve", {
-      method: "POST", headers: { "content-type": "application/json" },
+      method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY },
       body: JSON.stringify({ pointer }),
     });
     return { status: res.status, json: await res.json() };
@@ -317,7 +317,7 @@ describe("the uiQuestion read is ordered by importance weights taken off the imp
       const writer = inFreshProcess(ws, `
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
         const res = await impulsesRouter.request("/v2/impulses/resolve", {
-          method: "POST", headers: { "content-type": "application/json" },
+          method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY },
           body: JSON.stringify({ pointer: {
             type: "renderPolicy_write",
             importance_weights: { by_kind: { gap_needs_human: 99, info: 0.1 }, age_per_day: 2, unanswered_boost: 5 },
@@ -361,7 +361,7 @@ describe("the uiQuestion read is ordered by importance weights taken off the imp
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
         const call = async (pointer) => {
           const res = await impulsesRouter.request("/v2/impulses/resolve", {
-            method: "POST", headers: { "content-type": "application/json" },
+            method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY },
             body: JSON.stringify({ pointer }),
           });
           return { status: res.status, json: await res.json() };

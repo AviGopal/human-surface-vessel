@@ -32,6 +32,7 @@
  * test/render-policy-durability.test.ts does.
  */
 import { describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -89,7 +90,7 @@ const REPORTER = { origin: "machine", producer: "human-surface-vessel/ui/exposur
 async function resolve(pointer: Record<string, unknown>) {
   const res = await impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...testAuth() },
     body: JSON.stringify({ pointer }),
   });
   return { status: res.status, json: (await res.json()) as any };
@@ -490,7 +491,7 @@ describe("(f) what was learned survives a restart", () => {
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
         const post = async (pointer) => {
           const r = await impulsesRouter.request("/v2/impulses/resolve", {
-            method: "POST", headers: { "content-type": "application/json" },
+            method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY },
             body: JSON.stringify({ pointer }),
           });
           return r.json();
@@ -533,7 +534,7 @@ describe("(f) what was learned survives a restart", () => {
           `
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
         const r = await impulsesRouter.request("/v2/impulses/resolve", {
-          method: "POST", headers: { "content-type": "application/json" },
+          method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY },
           body: JSON.stringify({ pointer: { type: "renderPolicy" } }),
         });
         const pol = (await r.json()).body;
@@ -568,7 +569,7 @@ describe("(f) what was learned survives a restart", () => {
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
         const post = async (pointer) => {
           const r = await impulsesRouter.request("/v2/impulses/resolve", {
-            method: "POST", headers: { "content-type": "application/json" },
+            method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY },
             body: JSON.stringify({ pointer }),
           });
           return r.json();

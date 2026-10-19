@@ -5,6 +5,7 @@
  * survives a reload and says why in aa's words. Nothing retries the write.
  */
 import { afterAll, describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { readParticipation } from "../src/participation-journal.ts";
@@ -32,7 +33,7 @@ async function grade(dispatchId: string, upstream: Upstream) {
   next = upstream;
   return app.request("/api/grade", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...testAuth() },
     body: JSON.stringify({ execution_id: `e-${dispatchId}`, dispatch_id: dispatchId, goal: "Where is it raining?", verdict: "not_achieved", notes: "Wrong answer", judge_reached: true }),
   });
 }

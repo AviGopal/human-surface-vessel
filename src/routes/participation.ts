@@ -1,14 +1,16 @@
 import { Hono } from "hono";
 import { impulsesRouter } from "./impulses.ts";
+import { admittedCaller, carry, requireCaller, type Caller } from "../inbound-auth.ts";
 
 /** Browser adapter for the existing shapes. No private question/answer store. */
 export const participationRouter = new Hono();
 
-async function resolve(pointer: Record<string, unknown>): Promise<Response> {
+/** In process; a write carries the caller this route admitted (inbound-auth.ts `carry`). */
+async function resolve(pointer: Record<string, unknown>, caller?: Caller): Promise<Response> {
   return impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ pointer }),
-  });
+  }, caller ? carry(caller) : undefined);
 }
 
 participationRouter.get("/api/questions", () => resolve({ type: "uiQuestion" }));
@@ -16,7 +18,7 @@ participationRouter.get("/api/questions", () => resolve({ type: "uiQuestion" }))
 /** A reply is a sentence or a short paste; the cap bounds what one contribution adds to the journal. */
 export const PARTICIPATION_MAX_VALUE_CHARS = 20_000;
 
-participationRouter.post("/api/participation", async c => {
+participationRouter.post("/api/participation", requireCaller("/api/participation"), async c => {
   const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
   if (body && Object.hasOwn(body, "value") && (JSON.stringify(body.value) ?? "").length > PARTICIPATION_MAX_VALUE_CHARS) {
     return c.json({ error: "too long" }, 413);
@@ -36,5 +38,5 @@ participationRouter.post("/api/participation", async c => {
       ? { classified_by: body.classified_by, classified_phrase: body.classified_phrase }
       : {}),
     visibility: "public",
-  });
+  }, admittedCaller(c));
 });

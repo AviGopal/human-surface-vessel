@@ -17,12 +17,13 @@
 // `toHaveLength(n)` or `total === n`: it would pass today and flap the moment a
 // sibling file is added, renamed, or reordered.
 import { describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { impulsesRouter } from "../src/routes/impulses.ts";
 import { participationRouter } from "../src/routes/participation.ts";
 
 async function write(pointer: Record<string, unknown>) {
   const r = await impulsesRouter.request("/v2/impulses/resolve", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointer }),
+    method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify({ pointer }),
   });
   return { status: r.status, json: await r.json() as any };
 }

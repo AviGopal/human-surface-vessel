@@ -24,6 +24,7 @@
  *      revision does not advance, and the caller is told what the parser does read).
  */
 import { describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -35,7 +36,7 @@ const routerModule = new URL("../src/routes/impulses.ts", import.meta.url).pathn
 async function resolve(pointer: Record<string, unknown>) {
   const res = await impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...testAuth() },
     body: JSON.stringify({ pointer }),
   });
   return { status: res.status, json: (await res.json()) as any };
@@ -67,7 +68,7 @@ describe("renderPolicy is durable, attributable, and refuses a write that moves 
       const writer = inFreshProcess(workspace, `
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
         const res = await impulsesRouter.request("/v2/impulses/resolve", {
-          method: "POST", headers: { "content-type": "application/json" },
+          method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY },
           body: JSON.stringify({ pointer: {
             type: "renderPolicy_write",
             presentation: "stacked",

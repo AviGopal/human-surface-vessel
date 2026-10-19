@@ -25,6 +25,7 @@
 
 // First, before any src module: a throwaway workspace from any cwd (see participation.test.ts).
 import "./setup.ts";
+import { testAuth } from "./setup.ts";
 import { describe, expect, test } from "bun:test";
 import { impulsesRouter } from "../src/routes/impulses.ts";
 import { participationRouter } from "../src/routes/participation.ts";
@@ -32,14 +33,14 @@ import { recentFeedback } from "../src/store.ts";
 
 async function write(pointer: Record<string, unknown>) {
   const r = await impulsesRouter.request("/v2/impulses/resolve", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointer }),
+    method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify({ pointer }),
   });
   return { status: r.status, json: await r.json() as any };
 }
 
 async function participate(body: Record<string, unknown>) {
   const r = await participationRouter.request("/api/participation", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify(body),
   });
   return { status: r.status, json: await r.json() as any };
 }

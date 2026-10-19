@@ -46,6 +46,17 @@ export const DISCOVERY_ENDPOINT =
 export const GOAL_HOST_ENDPOINT =
   process.env.GOAL_HOST_ENDPOINT ?? "http://127.0.0.1:8210";
 
+/**
+ * identity-vessel, the fleet's single credential validator: a bootstrap
+ * address only, never behaviour. Every write route asks it about a caller's
+ * key through src/caller-credential.ts (whose pinned source bytes read the
+ * same variable at use time; that read goes with the shared package). Unset
+ * means no key other than this vessel's own can be validated, so those writes
+ * are refused: there is no mode in which an unset address opens a route.
+ * Read here so /health can say whether it is configured.
+ */
+export const IDENTITY_VESSEL_URL = (process.env.IDENTITY_VESSEL_URL ?? "").trim();
+
 export const METABOB_API_KEY =
   process.env.HUMAN_SURFACE_VESSEL_API_KEY ?? process.env.METABOB_API_KEY ?? "";
 

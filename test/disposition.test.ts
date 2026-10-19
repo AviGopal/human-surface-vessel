@@ -9,6 +9,7 @@
  *  - a filed complaint returns the id of the issue it becomes.
  */
 import { describe, expect, test } from "bun:test";
+import { testAuth } from "./setup.ts";
 import { existsSync, readFileSync } from "node:fs";
 import {
   DISPOSITIONS,
@@ -141,7 +142,7 @@ describe("a filed complaint names its issue", () => {
       const post = (pointer: Record<string, unknown>) =>
         impulsesRouter.request("/v2/impulses/resolve", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...testAuth() },
           body: JSON.stringify({ impulse: { pointer } }),
         });
       const complaint = await (await post({ type: "uiFeedback", panel_id: "the surface", response_id: crypto.randomUUID(), value: "unreadable", kind: "reaction", complaint_kind: "wrong" })).json();
