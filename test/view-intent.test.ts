@@ -119,6 +119,41 @@ describe("the box's presentation reading", () => {
     expect(getRenderPolicy().revision).toBe(before);
   });
 
+  test("paraphrases: an ask that carries a form word among other content stays a goal", () => {
+    // A guard on the grammar, not on today's wording: any loosening that lets one of
+    // these through has started reading goals as display changes again.
+    for (const goal of [
+      "Give me the top rivers in a table",
+      "Put the results of my last search as a list",
+      "I'd like this summarized as bullet points",
+      "Show me the weather in a table",
+      "render the sales numbers as a chart",
+      "show this week's news as a table",
+      "Display all open gaps as rows",
+      "Render apnews.com as a webpage.",
+      "List the five largest cities as a table",
+      "show this as a haiku",
+    ]) {
+      expect([goal, readViewIntent(goal, prose)]).toEqual([goal, null]);
+    }
+  });
+
+  test("the grammar's own phrasings are view asks", () => {
+    for (const [ask, form] of [
+      ["show this as a table", "rows"],
+      ["Show This As A Table.", "rows"],
+      ["as text", "text"],
+      ["in a table", "rows"],
+      ["display it as rows", "rows"],
+      ["view that in a table", "rows"],
+      ["render it as prose", "prose"],
+      ["show this as fields", "record"],
+    ] as const) {
+      expect([ask, readViewIntent(ask, prose)]).toEqual([ask, { kind: "view", shape: "webSearchResult", form, region: "answer" }]);
+    }
+    expect(readViewIntent("draw this as a page", markup)).toEqual({ kind: "view", shape: "http_fetch", form: "page", region: "answer" });
+  });
+
   test("a named shape pins only when the registry has it, and fails closed when the registry can't be read", async () => {
     const pinned = await say("show shellResult as rows", null);
     expect(pinned.status).toBe(200);
