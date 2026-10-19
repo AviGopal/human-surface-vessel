@@ -9,6 +9,8 @@
  * goal-host" is read off the record, not assumed.
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { restoreNativeGlobals, testAuth } from "./setup.ts";
 
 // First: in one process an earlier file may have left happy-dom or a fetch stub installed (test/setup.ts).
@@ -35,6 +37,15 @@ afterAll(() => identity.stop(true));
 
 const outbound: Array<{ url: string; body: Record<string, unknown> }> = [];
 const realFetch = globalThis.fetch;
+// Undo what this file leaves in the one process (test/setup.ts): its fetch stub, and the runs its
+// keyless same-origin /api/run-goal records as this surface's own (src/routes/proxy.ts), on disk
+// under the shared WORKSPACE_ROOT and in the module's cache. A later file that needs that record
+// empty (own-dispatches-backfill) otherwise never sees the backfill run.
+afterAll(async () => {
+  globalThis.fetch = realFetch;
+  rmSync(join(process.env.WORKSPACE_ROOT!, "state", "human-surface", "own-dispatches.jsonl"), { force: true });
+  (await import("../src/own-dispatches.ts")).resetOwnDispatchesForTest();
+});
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   if (url.endsWith("/v1/auth/resolve")) return realFetch(input as never, init);
