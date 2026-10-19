@@ -6,6 +6,8 @@
 import { describe, expect, test } from "bun:test";
 import { participationRouter } from "../src/routes/participation.ts";
 import { impulsesRouter } from "../src/routes/impulses.ts";
+import { droppedReplyClassifications, REPLY_CLASSIFIED_PHRASES, REPLY_CLASSIFIERS } from "../src/store.ts";
+import { REPLY_PHRASES } from "../ui/src/lib/box.ts";
 
 async function question(id: string): Promise<number> {
   const r = await impulsesRouter.request("/v2/impulses/resolve", {
@@ -38,5 +40,29 @@ describe("a reply read from the box's words", () => {
     expect(plain.json.body?.["classifiedBy"]).toBeUndefined();
     const odd = await contribute({ panel_id: "q-plain", panel_revision: revision, response_id: "r-odd", kind: "dismiss", value: "declined", classified_by: 7 });
     expect(odd.json.body?.["classifiedBy"]).toBeUndefined();
+  });
+
+  test("must-fail: a classification outside the closed vocabulary is dropped and counted", async () => {
+    const revision = await question("q-closed");
+    const before = droppedReplyClassifications();
+    for (const [i, [by, phrase]] of [["operator-click", "not now"], ["box-phrase", "skip"], ["box-phrase", "x".repeat(500)]].entries()) {
+      const r = await contribute({ panel_id: "q-closed", panel_revision: revision, response_id: `r-closed-${i}`, kind: "dismiss", value: "declined", classified_by: by, classified_phrase: phrase });
+      expect(r.status).toBe(200);
+      expect(r.json.body?.["classifiedBy"]).toBeUndefined();
+    }
+    expect(droppedReplyClassifications() - before).toBe(3);
+  });
+
+  test("must-fail: a contribution whose value is over the cap is refused before it is kept", async () => {
+    const revision = await question("q-big");
+    const r = await contribute({ panel_id: "q-big", panel_revision: revision, response_id: "r-big", kind: "answer", value: "y".repeat(20_001) });
+    expect(r.status).toBe(413);
+    const ok = await contribute({ panel_id: "q-big", panel_revision: revision, response_id: "r-ok", kind: "answer", value: "y".repeat(5_000) });
+    expect(ok.status).toBe(200);
+  });
+
+  test("the server's vocabulary mirrors the phrases the box offers", () => {
+    expect([...REPLY_CLASSIFIED_PHRASES].sort()).toEqual(Object.keys(REPLY_PHRASES).sort());
+    expect(REPLY_CLASSIFIERS).toEqual(["box-phrase"]);
   });
 });

@@ -56,6 +56,28 @@ export interface RunLink {
   linked: boolean;
 }
 
+/**
+ * The closed vocabulary a reply's classification may use: the box's reader and
+ * the two phrases it offers (ui/src/lib/box.ts REPLY_PHRASES; a test pins the
+ * mirror). Anything else is dropped and counted, so a record's classification
+ * names only readers and phrases that exist.
+ */
+export const REPLY_CLASSIFIERS: readonly string[] = ["box-phrase"];
+export const REPLY_CLASSIFIED_PHRASES: readonly string[] = ["not now", "need more"];
+let droppedClassifications = 0;
+/** How many reply classifications were dropped for naming an unknown reader or phrase. */
+export function droppedReplyClassifications(): number {
+  return droppedClassifications;
+}
+/** The classification to keep, or undefined (counted and logged when one was offered and refused). */
+export function acceptedClassification(by: string | undefined, phrase: string | undefined): { by: string; phrase: string } | undefined {
+  if (by === undefined && phrase === undefined) return undefined;
+  if (by !== undefined && phrase !== undefined && REPLY_CLASSIFIERS.includes(by) && REPLY_CLASSIFIED_PHRASES.includes(phrase)) return { by, phrase };
+  droppedClassifications += 1;
+  console.warn(`[participation] reply classification dropped: by=${JSON.stringify(by)?.slice(0, 40)} phrase=${JSON.stringify(phrase)?.slice(0, 40)} dropped_total=${droppedClassifications}`);
+  return undefined;
+}
+
 export interface Feedback {
   id: string; // Added to uniquely identify feedback entries
   panelId: string;

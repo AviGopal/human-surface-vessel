@@ -15,6 +15,7 @@
 import { Hono } from "hono";
 import { DISCOVERY_SHAPES, METABOB_API_KEY, type DiscoveryShape } from "../config.ts";
 import {
+  acceptedClassification,
   asVisibility,
   recordAssertion,
   recordAttachment,
@@ -673,9 +674,8 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         kind: feedbackKind(pointer),
         visibility: asVisibility(pointer["visibility"], "public"),
         ...(() => {
-          const by = optStr(pointer, "classified_by");
-          const phrase = optStr(pointer, "classified_phrase");
-          return by && phrase ? { classifiedBy: { by, phrase } } : {};
+          const kept = acceptedClassification(optStr(pointer, "classified_by"), optStr(pointer, "classified_phrase"));
+          return kept ? { classifiedBy: kept } : {};
         })(),
       });
       } catch (error) {
