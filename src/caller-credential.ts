@@ -1,4 +1,4 @@
-// COPY, NAMED DEBT. Source: development-vessel src/lib/caller-credential.ts at commit 1e987b3086810808c01ac131d36cbd75e6d77da7.
+// COPY, NAMED DEBT. Source: development-vessel src/lib/caller-credential.ts at commit 8b32196e36b09cef53566a8e3cd35f50419960bc.
 // human-surface-vessel has no shared package to import the fleet's credential check from, so it carries this module byte
 // for byte until a shared package replaces every copy (goal-host-vessel carries the same one). Do not edit below the
 // marker: test/caller-credential-golden.test.ts pins those bytes to the shared table test/fixtures/caller-credential-cases.json,
