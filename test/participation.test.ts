@@ -1,3 +1,8 @@
+// FIRST, before any src module: participation-journal.ts fixes its directory when it
+// loads. bunfig.toml's preload of setup.ts only fires when `bun test` starts in this
+// repo's root; importing it here gives the 501 feedback appends below a throwaway
+// workspace from any cwd (one module, so a preloaded run evaluates it once).
+import "./setup.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
