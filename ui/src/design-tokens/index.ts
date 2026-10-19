@@ -100,7 +100,7 @@ export const CONTENT_FORMS = [
   "scalar",
   "stub",
   // Markup drawn as a page, in a sandboxed frame with nothing granted. Never a
-  // default: a person asks for it (Show as, or "show svg as a page").
+  // default: a person asks for it ("show this as a page" in the box).
   "page",
 ] as const;
 export type ContentForm = (typeof CONTENT_FORMS)[number];

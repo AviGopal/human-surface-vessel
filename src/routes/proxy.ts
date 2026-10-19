@@ -29,7 +29,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { joinGapThreads, type GapThread } from "../gap-threads.ts";
 import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
-import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
+import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
   DISCOVERY_ENDPOINT,
@@ -954,7 +954,8 @@ async function readShapesFrom(base: string): Promise<readonly string[] | null> {
   }
 }
 
-proxyRouter.get("/api/discovery/shapes", async (c) => {
+/** The union of the local and fleet registries' shapes, and which of them answered. */
+async function readShapeVocabulary(): Promise<{ union: Set<string>; registries: Array<{ registry: string; ok: boolean; count: number }> }> {
   const local = DISCOVERY_ENDPOINT.replace(/\/+$/, "");
   const fleet = goalShapeResolutionEndpoint();
 
@@ -975,6 +976,11 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
     if (shapes) for (const s of shapes) union.add(s);
     return { registry: leg.name, ok: shapes !== null, count: shapes?.length ?? 0 };
   });
+  return { union, registries };
+}
+
+proxyRouter.get("/api/discovery/shapes", async (c) => {
+  const { union, registries } = await readShapeVocabulary();
 
   // Registry names only — never the resolved URL, which is upstream detail the
   // browser has no use for.
@@ -1505,7 +1511,37 @@ proxyRouter.post("/api/surface-intent", async (c) => {
     );
   }
 
+  // About the output on screen: a whole-ask reading that changes one view and writes no policy.
+  const view = readViewIntent(text, parseOnScreen(body?.["onScreen"]));
+  if (view?.kind === "view") {
+    return c.json({ applied: false, understood: true, view: { shape: view.shape, form: view.form, region: view.region } }, 200, corsHeaders(origin));
+  }
+  if (view?.kind === "refused") {
+    recordObservation({
+      type: "surface_intent_refused",
+      visibility: "operator_only",
+      body: { text, reason: view.reason, shape: view.shape, region: view.region, origin: "box" },
+    });
+    return c.json({ applied: false, understood: true, refused: { reason: view.reason } }, 200, corsHeaders(origin));
+  }
+
   const reading = readSurfaceIntent(text, getRenderPolicy());
+
+  // A pin names a shape the registry knows, or the sentence was about something
+  // else and is a goal. Unread registries prove nothing, so they refuse the pin too.
+  const named = pinnedShapes(reading);
+  if (named.length > 0) {
+    const { union } = await readShapeVocabulary();
+    const unknown = named.filter((n) => !union.has(n));
+    if (unknown.length > 0) {
+      recordSurfaceIntent({ text, changedFields: [], unparsed: [text], appliedRevision: null });
+      return c.json(
+        { applied: false, understood: false, changes: [], unparsed: [], error: `not a shape: ${unknown.join(", ")}` },
+        422,
+        corsHeaders(origin),
+      );
+    }
+  }
 
   if (!reading.understood) {
     recordSurfaceIntent({

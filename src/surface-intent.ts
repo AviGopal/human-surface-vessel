@@ -45,7 +45,7 @@ export const CONTENT_FORMS = [
   "scalar",
   "stub",
   // Markup drawn as a page, in a sandboxed frame with nothing granted. Never a
-  // default: a person asks for it (Show as, or "show svg as a page").
+  // default: a person asks for it ("show this as a page" in the box).
   "page",
 ] as const;
 export type ContentForm = (typeof CONTENT_FORMS)[number];
@@ -315,6 +315,67 @@ function clauses(text: string): string[] {
         .trim(),
     )
     .filter((c) => c.length > 0 && !/^(?:please|thanks|thank you|ok|okay)$/i.test(c));
+}
+
+/* ── the output on screen ───────────────────────────────────────────────────
+ * The box carries what "Show as" did (user ruling 10-19): a person changes how the
+ * output in front of them is drawn. That is a reading of the WHOLE ask, never a
+ * clause found inside one. "List the five largest cities as a table" ends in a
+ * form and is a goal; "Render apnews.com as a webpage." names something else and
+ * is a goal. Only a bare view ask — an optional verb, an optional this/it/that,
+ * then "as"/"in" and a form word — is about the screen, and it writes nothing to
+ * the policy: it changes one view, as a click on "Show as" did.
+ */
+
+/** What the person is looking at when they type, as the page reports it. */
+export interface OnScreen {
+  readonly shape: string;
+  readonly form: string;
+  readonly markup: boolean;
+  readonly region: string | null;
+}
+
+export type ViewReading =
+  | { readonly kind: "view"; readonly shape: string; readonly form: ContentForm; readonly region: string | null }
+  | { readonly kind: "refused"; readonly reason: string; readonly shape: string | null; readonly region: string | null };
+
+const VIEW_ASK = /^(?:(?:show|display|render|view|draw)\s+)?(?:(?:this|it|that)\s+)?(?:as|in)\s+(.+?)[\s.!]*$/i;
+
+/** A view ask about the output on screen, refused, or null when the text is not a view ask at all. */
+export function readViewIntent(text: string, onScreen: OnScreen | null): ViewReading | null {
+  const m = VIEW_ASK.exec(text.trim());
+  if (!m || m[1] === undefined) return null;
+  const form = formWord(m[1]);
+  // A form word the renderer doesn't know ("as a haiku") is an ask for new content: a goal.
+  if (form === null) return null;
+  if (!onScreen) return { kind: "refused", reason: "Nothing on screen", shape: null, region: null };
+  if ((NON_PINNABLE_FORMS as readonly ContentForm[]).includes(form)) {
+    return { kind: "refused", reason: "Not a way to show it", shape: onScreen.shape, region: onScreen.region };
+  }
+  if (form === "page" && !onScreen.markup) {
+    return { kind: "refused", reason: "Not a page", shape: onScreen.shape, region: onScreen.region };
+  }
+  return { kind: "view", shape: onScreen.shape, form, region: onScreen.region };
+}
+
+/** The page's report of what is on screen, or null when it sent none that can be read. */
+export function parseOnScreen(raw: unknown): OnScreen | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r["shape"] !== "string" || r["shape"].trim() === "" || typeof r["form"] !== "string") return null;
+  return {
+    shape: r["shape"],
+    form: r["form"],
+    markup: r["markup"] === true,
+    region: typeof r["region"] === "string" ? r["region"] : null,
+  };
+}
+
+/** The shapes a pin from this reading would name (removals excluded: clearing a key is always allowed). */
+export function pinnedShapes(reading: IntentReading): string[] {
+  return reading.changes
+    .filter((c) => c.field.startsWith("formByShape.") && (PINNABLE_FORMS as readonly string[]).includes(c.to))
+    .map((c) => c.field.slice("formByShape.".length));
 }
 
 /** Words that name no shape — "show everything as prose" cannot be honoured. */

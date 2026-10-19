@@ -106,7 +106,14 @@ export type ObservationType =
    * dispatch_id, execution_id, goal, verdict, note, source and judge_reached.
    * READER: personVerdicts (the run page's "You: …" line and the thread mark).
    */
-  | "verdict";
+  | "verdict"
+  /**
+   * The box read an ask as about the output on screen and could not apply it
+   * ("as a page" on prose, nothing on screen): `body.text`, `body.reason`,
+   * `body.shape`, `body.region`, `body.origin`. A refusal is a decision, kept so
+   * a misread one is visible to whatever later reads the corpus.
+   */
+  | "surface_intent_refused";
 
 /**
  * The four states a SHOWN solicitation can end in, kept distinct here because
@@ -473,7 +480,9 @@ export function recordObservation(
   // `readExposureCorpus`), so its corpus is neither bounded by MAX_HISTORY nor
   // lost on restart.
   // A person's form choice is learner evidence too (src/form-learn.ts readFormChoices).
-  if (exposure || o.type === "form_choice" || o.type === "verdict") appendParticipation("interactorObservation_write", entry);
+  if (exposure || o.type === "form_choice" || o.type === "verdict" || o.type === "surface_intent_refused") {
+    appendParticipation("interactorObservation_write", entry);
+  }
   if (o.type === "verdict") indexVerdict(entry);
   emit("observation_recorded", entry);
   return entry;

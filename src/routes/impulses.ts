@@ -132,6 +132,8 @@ const OBSERVATION_TYPES = [
   "form_choice",
   /** A verdict on a run from any source, kept as an observation (body: dispatch_id, verdict, source, …). */
   "verdict",
+  /** The box refused a reading about the output on screen (body: text, reason, shape, region, origin). */
+  "surface_intent_refused",
 ] as const;
 const EXPOSURE_OUTCOMES = ["answered", "declined", "complained", "shown_not_acted"] as const;
 
