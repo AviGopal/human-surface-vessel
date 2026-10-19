@@ -121,3 +121,97 @@ describe("the learners read only provenance-stamped, non-test evidence", () => {
     expect(liveOnly.formTable).toEqual({ real_shape: "text" });
   });
 });
+
+/*
+ * RETIREMENT (gap a-learned-kind-with-no-remaining-evidence-never-decays-out-of-the-in-force-table).
+ * Excluding the leaked lines stops a kind being RE-learned, but the learners copy the
+ * table in force, so a test kind already in it was carried forward by every pass. A kind
+ * (or form shape) whose recorded evidence is ALL provenance-excluded is retired through
+ * the learner's own write, with the reason in the revision. A kind with no records at
+ * all is merely unseen and stays byte-identical.
+ */
+const startTable = {
+  byKind: { gap_needs_human: 4, unseen_live: 3.25, learnerprobe_rising_1: 7.5, learnerprobe_refuse_25: 9.5, learnerprobe_unseen_9: 2 },
+  learnedFormByShape: { probe_shape: "text", unseen_shape: "text" },
+};
+
+/** Put `startTable` in force as an operator write, run both passes as the route does, report the policy. */
+function passFrom(records: readonly unknown[]): any {
+  const workspace = mkdtempSync(join(tmpdir(), "human-surface-retire-"));
+  try {
+    mkdirSync(join(workspace, "interactor-log"));
+    writeFileSync(join(workspace, "interactor-log", "interactorObservation_write.jsonl"),
+      records.map(r => JSON.stringify(r)).join("\n") + "\n");
+    const child = Bun.spawnSync([process.execPath, "-e", `
+      const { runImportanceLearningPass, IMPORTANCE_LEARNER_ID } = await import(${JSON.stringify(learnerModule)});
+      const { runFormLearningPass, FORM_LEARNER_ID } = await import(${JSON.stringify(formModule)});
+      const store = await import(${JSON.stringify(storeModule)});
+      const start = ${JSON.stringify(startTable)};
+      store.writeRenderPolicy({ importanceWeights: { byKind: { ...store.getRenderPolicy().importanceWeights.byKind, ...start.byKind } },
+        learnedFormByShape: start.learnedFormByShape, assignedBy: "operator:fixture", reason: "start" });
+      const startRevision = store.getRenderPolicy().revision;
+      const importance = runImportanceLearningPass();
+      const afterImportance = store.getRenderPolicy();
+      const form = runFormLearningPass();
+      if (form.changed) store.writeRenderPolicy({ learnedFormByShape: form.learnedFormByShape, assignedBy: FORM_LEARNER_ID, reason: form.reason });
+      const end = store.getRenderPolicy();
+      console.log(JSON.stringify({
+        startRevision,
+        importanceRevision: afterImportance.revision,
+        importanceAssignedBy: afterImportance.assignedBy,
+        learnerId: IMPORTANCE_LEARNER_ID,
+        byKind: afterImportance.importanceWeights.byKind,
+        reason: importance.pass.reason,
+        formTable: end.learnedFormByShape,
+        formReason: form.reason,
+      }));
+    `], { cwd: workspace, env: { ...process.env, WORKSPACE_ROOT: workspace } });
+    if (child.exitCode !== 0) throw new Error(child.stderr.toString());
+    const lines = child.stdout.toString().trim().split("\n");
+    return JSON.parse(lines[lines.length - 1]!);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+describe("a learned kind whose evidence is entirely provenance-excluded retires", () => {
+  test("must-fail: the next revision drops a test kind with only excluded evidence, records why, and leaves live kinds unchanged", () => {
+    const mixed = passFrom([...real, ...testOrigin]);
+    const liveOnly = passFrom(real);
+    expect(mixed.importanceRevision).toBeGreaterThan(mixed.startRevision);
+    expect(mixed.importanceAssignedBy).toBe(mixed.learnerId);
+    expect(mixed.byKind).not.toHaveProperty("learnerprobe_rising_1");
+    expect(mixed.byKind).not.toHaveProperty("learnerprobe_refuse_25");
+    expect(mixed.reason).toContain("Retired 2 kind(s) whose recorded evidence is entirely provenance-excluded");
+    expect(mixed.reason).toContain("learnerprobe_rising_1");
+    expect(mixed.reason).toContain("learnerprobe_refuse_25");
+    // Live kinds: exactly where the same pass over the live lines alone puts them.
+    expect(mixed.byKind.gap_needs_human).toBe(liveOnly.byKind.gap_needs_human);
+    expect(mixed.byKind.unseen_live).toBe(3.25);
+    // Form shapes, same rule: probe_shape's only evidence is excluded.
+    expect(mixed.formTable).not.toHaveProperty("probe_shape");
+    expect(mixed.formTable).toMatchObject({ unseen_shape: "text", real_shape: "text" });
+    expect(mixed.formReason).toContain("Retired 1 shape(s) whose recorded evidence is entirely provenance-excluded: probe_shape");
+  });
+
+  test("must-fail: a corpus holding only excluded lines still retires through the learner's write", () => {
+    const leakedOnly = passFrom(testOrigin);
+    expect(leakedOnly.importanceRevision).toBeGreaterThan(leakedOnly.startRevision);
+    expect(leakedOnly.importanceAssignedBy).toBe(leakedOnly.learnerId);
+    expect(Object.keys(leakedOnly.byKind).filter(k => k === "learnerprobe_rising_1" || k === "learnerprobe_refuse_25")).toEqual([]);
+    expect(leakedOnly.byKind.gap_needs_human).toBe(4);
+  });
+
+  test("control: an unseen kind, live or test-named, stays byte-identical", () => {
+    for (const run of [passFrom(real), passFrom([...real, ...testOrigin])]) {
+      expect(run.byKind.unseen_live).toBe(3.25);
+      expect(run.byKind.learnerprobe_unseen_9).toBe(2);
+      expect(run.formTable.unseen_shape).toBe("text");
+    }
+    // With no excluded evidence, nothing retires: the test kinds are merely unseen.
+    const liveOnly = passFrom(real);
+    expect(liveOnly.byKind.learnerprobe_rising_1).toBe(7.5);
+    expect(liveOnly.byKind.learnerprobe_refuse_25).toBe(9.5);
+    expect(liveOnly.formTable.probe_shape).toBe("text");
+  });
+});
