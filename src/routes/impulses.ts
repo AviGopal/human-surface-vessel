@@ -135,6 +135,8 @@ const OBSERVATION_TYPES = [
   "verdict",
   /** The box refused a reading about the output on screen (body: text, reason, shape, region, origin). */
   "surface_intent_refused",
+  /** What upstream answered when a verdict was forwarded (body: dispatch_id, verdict_at, status, recorded, reason). */
+  "verdict_delivery",
 ] as const;
 const EXPOSURE_OUTCOMES = ["answered", "declined", "complained", "shown_not_acted"] as const;
 

@@ -82,7 +82,7 @@ export function GradeGesture({
 
   return (
     <>
-    {kept.length > 0 ? <KeptVerdicts kept={kept} judgeReached={judgeReached} corpusRefused={refusal ?? null} /> : null}
+    {kept.length > 0 ? <KeptVerdicts kept={kept} judgeReached={judgeReached} /> : null}
     <form
       className="sf-grade sf-interaction"
       onSubmit={(e) => {
@@ -116,7 +116,7 @@ export function GradeGesture({
  * What people said about this run, kept here as observations, beside what the
  * judge said. Agreement and disagreement are both evidence; neither is hidden.
  */
-function KeptVerdicts({ kept, judgeReached, corpusRefused }: { kept: readonly KeptVerdict[]; judgeReached: boolean | null; corpusRefused: string | null }): ReactNode {
+function KeptVerdicts({ kept, judgeReached }: { kept: readonly KeptVerdict[]; judgeReached: boolean | null }): ReactNode {
   return (
     <ul className="sf-kept-verdicts" aria-label="Verdicts kept on this run">
       {kept.map((v) => {
@@ -127,10 +127,12 @@ function KeptVerdicts({ kept, judgeReached, corpusRefused }: { kept: readonly Ke
             <span className="sf-kept-who">{v.source === "person" ? "You" : v.source}</span>: {said}
             {v.note ? <span className="sf-muted"> · {v.note}</span> : null}
             {agree === false ? <span className="sf-kept-disagree"> · the judge said {judgeReached ? "reached" : "not reached"}</span> : null}
+            {v.delivery && !v.delivery.recorded ? (
+              <span className="sf-kept-unrecorded sf-muted" title={v.delivery.reason ?? undefined}> · not recorded</span>
+            ) : null}
           </li>
         );
       })}
-      {corpusRefused ? <li className="sf-muted sf-note">Kept here; the learning corpus didn't take it yet.</li> : null}
     </ul>
   );
 }

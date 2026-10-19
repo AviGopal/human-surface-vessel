@@ -28,7 +28,7 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { joinGapThreads, type GapThread } from "../gap-threads.ts";
 import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
-import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
+import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, verdictDelivery, writeRenderPolicy } from "../store.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
@@ -634,6 +634,8 @@ interface PassthroughOpts {
   method: "GET" | "POST";
   rawBody?: string;
   origin: string | undefined;
+  /** Called when the upstream could not be reached at all (not on an upstream error status). */
+  onUnreachable?: () => void;
 }
 
 /**
@@ -650,6 +652,7 @@ async function passthrough(opts: PassthroughOpts): Promise<Response> {
       ...(method === "POST" ? { body: rawBody ?? "{}" } : {}),
     });
   } catch (err) {
+    opts.onUnreachable?.();
     // Never surface key material or the raw upstream URL's credentials.
     return new Response(
       JSON.stringify({
@@ -1119,7 +1122,7 @@ proxyRouter.post("/api/grade", async (c) => {
   // A verdict is an observation, kept with its source before anything else and
   // whatever the learning corpus does with it: a refusal there must not lose
   // what the person said (user ruling 10-17).
-  recordObservation({
+  const kept = recordObservation({
     type: "verdict",
     visibility: "operator_only",
     body: {
@@ -1136,7 +1139,8 @@ proxyRouter.post("/api/grade", async (c) => {
       about: aboutOf(body["about"]),
     },
   });
-  return passthrough({
+  let unreachable = false;
+  const upstream = await passthrough({
     url: `${ACTIVITY_API_ENDPOINT}/v2/impulses/resolve`,
     method: "POST",
     rawBody: JSON.stringify({
@@ -1163,7 +1167,34 @@ proxyRouter.post("/api/grade", async (c) => {
       },
     }),
     origin: c.req.header("Origin"),
+    onUnreachable: () => (unreachable = true),
   });
+  // What upstream answered, kept beside the verdict in its own words, so a
+  // refusal reads as "not recorded" after a reload. Observation only: nothing
+  // retries the write.
+  const text = await upstream.clone().text().catch(() => "");
+  let answer: Record<string, unknown> | null = null;
+  try {
+    answer = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    answer = null;
+  }
+  const recorded = !unreachable && upstream.status >= 200 && upstream.status < 300 && answer?.["success"] !== false;
+  const said = typeof answer?.["error"] === "string" ? answer["error"] : typeof answer?.["message"] === "string" ? answer["message"] : null;
+  recordObservation({
+    type: "verdict_delivery",
+    visibility: "operator_only",
+    body: {
+      dispatch_id: kept.body?.["dispatch_id"] ?? null,
+      execution_id: body["execution_id"],
+      verdict_at: kept.observedAt,
+      status: upstream.status,
+      recorded,
+      reason: unreachable ? "unreachable" : recorded ? null : (said ?? `HTTP ${upstream.status}`).slice(0, 300),
+      upstream: "activity-api",
+    },
+  });
+  return upstream;
 });
 
 // ─── gap threads (browser read) ─────────────────────────────────────────────
@@ -1250,7 +1281,10 @@ function aboutOf(v: unknown): Record<string, string> | null {
 /** Verdicts kept on a run (or the newest across runs), for the run page and the thread mark. */
 proxyRouter.get("/api/verdicts", (c) => {
   const id = c.req.query("dispatch_id") || undefined;
-  const verdicts = personVerdicts(id).map((o) => ({ ...o.body, observedAt: o.observedAt }));
+  const verdicts = personVerdicts(id).map((o) => {
+    const d = typeof o.body?.["dispatch_id"] === "string" ? verdictDelivery(o.body["dispatch_id"] as string, o.observedAt) : undefined;
+    return { ...o.body, observedAt: o.observedAt, ...(d ? { delivery: { recorded: d["recorded"] === true, status: d["status"] ?? null, reason: d["reason"] ?? null } } : {}) };
+  });
   return c.json({ resolved: true, shape: "interactorObservation", body: { verdicts } }, 200, corsHeaders(c.req.header("Origin")));
 });
 

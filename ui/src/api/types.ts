@@ -232,6 +232,8 @@ export interface KeptVerdict {
   readonly judge_reached: boolean | null;
   readonly about?: Readonly<Record<string, string>> | null;
   readonly observedAt: number;
+  /** What upstream answered when this verdict was forwarded, kept beside it; absent when no answer was kept. */
+  readonly delivery?: { readonly recorded: boolean; readonly status: number | null; readonly reason: string | null };
 }
 
 export type SolicitationOutcome = "answered" | "declined" | "insufficient_context";

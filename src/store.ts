@@ -141,7 +141,15 @@ export type ObservationType =
    * `body.shape`, `body.region`, `body.origin`. A refusal is a decision, kept so
    * a misread one is visible to whatever later reads the corpus.
    */
-  | "surface_intent_refused";
+  | "surface_intent_refused"
+  /**
+   * What upstream answered when a verdict was forwarded: `body.dispatch_id`,
+   * `body.execution_id`, `body.verdict_at` (the verdict observation's observedAt,
+   * the join), `body.status`, `body.recorded`, `body.reason` (upstream's own
+   * words, or "unreachable"), `body.upstream`. The verdict is kept either way;
+   * this says whether the corpus took it, so "not recorded" outlives a reload.
+   */
+  | "verdict_delivery";
 
 /**
  * The four states a SHOWN solicitation can end in, kept distinct here because
@@ -269,6 +277,23 @@ function indexFeedback(f: Feedback): void {
   if (list) list.push(f); else feedbackByPanel.set(f.panelId, [f]);
 }
 const observations: Observation[] = [];
+/** The latest upstream answer for each kept verdict, by dispatch and the verdict's observedAt. */
+const deliveries = new Map<string, Observation>();
+function deliveryKey(dispatchId: unknown, verdictAt: unknown): string | null {
+  return typeof dispatchId === "string" && dispatchId.length > 0 && typeof verdictAt === "number" ? `${dispatchId}\u0000${verdictAt}` : null;
+}
+function indexDelivery(o: Observation): void {
+  const key = deliveryKey(o.body?.["dispatch_id"], o.body?.["verdict_at"]);
+  if (!key) return;
+  const prev = deliveries.get(key);
+  if (!prev || o.observedAt >= prev.observedAt) deliveries.set(key, o);
+}
+/** What upstream answered for the verdict kept at `verdictAt` on this run, if an answer was kept. */
+export function verdictDelivery(dispatchId: string, verdictAt: number): Record<string, unknown> | undefined {
+  const key = deliveryKey(dispatchId, verdictAt);
+  return key ? deliveries.get(key)?.body : undefined;
+}
+
 /** Verdict observations by dispatch, replayed from the journal at init so they outlive restarts. */
 const verdictsByDispatch = new Map<string, Observation[]>();
 function indexVerdict(o: Observation): void {
@@ -444,6 +469,7 @@ for (const raw of readParticipation("uiPanel_write")) {
 for (const raw of readParticipation("interactorObservation_write")) {
   const o = raw as Observation | null;
   if (o && o.type === "verdict" && typeof o.observedAt === "number") indexVerdict(o);
+  if (o && o.type === "verdict_delivery" && typeof o.observedAt === "number") indexDelivery(o);
 }
 for (const raw of readParticipation("uiFeedback_write")) {
   const f = raw as Feedback | null;
@@ -508,10 +534,11 @@ export function recordObservation(
   // `readExposureCorpus`), so its corpus is neither bounded by MAX_HISTORY nor
   // lost on restart.
   // A person's form choice is learner evidence too (src/form-learn.ts readFormChoices).
-  if (exposure || o.type === "form_choice" || o.type === "verdict" || o.type === "surface_intent_refused") {
+  if (exposure || o.type === "form_choice" || o.type === "verdict" || o.type === "surface_intent_refused" || o.type === "verdict_delivery") {
     appendParticipation("interactorObservation_write", entry);
   }
   if (o.type === "verdict") indexVerdict(entry);
+  if (o.type === "verdict_delivery") indexDelivery(entry);
   emit("observation_recorded", entry);
   return entry;
 }
