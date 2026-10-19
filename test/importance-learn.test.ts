@@ -185,7 +185,7 @@ async function ranks(): Promise<Map<string, number>> {
 
 let seq = 0;
 // Not `learnerprobe_`: that prefix marks the kinds an earlier run of this file leaked
-// into a live corpus, and the learner now excludes it (TEST_RUN_KIND_PREFIX).
+// into a live corpus (the learner excludes those by the test panels' provenance, not this name).
 const uniqueKind = (label: string) => `probekind_${label}_${++seq}`;
 
 // ─── (a) answered raises a kind, and the rise reaches the next read ──────────

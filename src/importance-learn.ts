@@ -99,6 +99,8 @@ import {
   getRenderPolicy,
   writeRenderPolicy,
   isExposureObservation,
+  listPanels,
+  type Panel,
   type ExposureOutcome,
   type Observation,
   type ObservationType,
@@ -280,22 +282,63 @@ export function readExposureCorpus(): CorpusRecord[] {
 export interface CorpusExclusions {
   /** Exposure records without the reporter's `origin`/`producer` stamp. */
   readonly unattributed: number;
-  /** Stamped outcomes on a kind a test run minted. */
-  readonly testKind: number;
+  /** Stamped outcomes on a panel whose provenance marks it test-origin (`testOriginPanels`). */
+  readonly testPanel: number;
   /** The excluded records themselves: what retirement reads to tell "excluded" from "unseen". */
   readonly records: readonly CorpusRecord[];
 }
 
-export const NO_EXCLUSIONS: CorpusExclusions = { unattributed: 0, testKind: 0, records: [] };
+export const NO_EXCLUSIONS: CorpusExclusions = { unattributed: 0, testPanel: 0, records: [] };
+
+/** A panel carries its writer's stamp: the same two fields an observation carries. */
+function panelStamped(p: Panel): boolean {
+  return typeof p.origin === "string" && p.origin.length > 0 && typeof p.producer === "string" && p.producer.length > 0;
+}
 
 /**
- * The kind prefix the learner's own falsifier minted until it moved to probekind_*
- * (test/importance-learn.test.ts `uniqueKind`). From 09-22 to 09-27 those test panels leaked into the live store,
- * the browser was shown them, and its STAMPED acts on them are still in the corpus.
- * A panel carries no provenance of its own, so this name is the only marker those
- * acts have. Panel-level provenance would replace it.
+ * The panels a STAMPED browser act may not count for. From 09-22 to 09-27 test panels
+ * leaked into the live store, the browser was shown them, and its stamped acts on
+ * them are in the corpus; only the panel can say those acts are about a test.
+ *
+ * - A stamped panel is live, whatever its kind is called.
+ * - THE STAMPED ERA. Once any panel carries its writer's stamp, an unstamped panel
+ *   created after the first stamped one is test-origin: its writer did not say who
+ *   it was. Until a writer stamps, the era has not begun and nothing changes.
+ * - LEGACY (created before the era, or before any stamp exists). A legacy panel is
+ *   test-origin when an UNSTAMPED exposure record names it, in a tick's visible slice
+ *   or as an outcome's panel. The leaked runs ticked every panel they seeded with
+ *   their own unstamped ticks, and the live reporter stamps everything, so no live
+ *   panel is named by one (checked on the live corpus: the 28 stamped acts on test
+ *   panels are exactly the acts this rule excludes).
+ *
+ * A panel id with no stored panel is judged by the legacy rule.
  */
-export const TEST_RUN_KIND_PREFIX = "learnerprobe_";
+function testOriginPanels(unstamped: readonly CorpusRecord[]): (panelId: string) => boolean {
+  const named = new Set<string>();
+  for (const rec of unstamped) {
+    if (typeof rec.panelId === "string" && rec.panelId.length > 0) named.add(rec.panelId);
+    const slice = (rec.body as { visible_in_viewport?: unknown } | undefined)?.visible_in_viewport;
+    if (!Array.isArray(slice)) continue;
+    for (const entry of slice) {
+      const id = typeof entry === "string"
+        ? entry
+        : (entry as { panel_id?: unknown } | null)?.panel_id ?? (entry as { solicitation_id?: unknown } | null)?.solicitation_id;
+      if (typeof id === "string" && id.length > 0) named.add(id);
+    }
+  }
+  const panels = new Map<string, Panel>();
+  let eraStart = Infinity;
+  for (const p of listPanels()) {
+    panels.set(p.id, p);
+    if (panelStamped(p) && p.createdAt < eraStart) eraStart = p.createdAt;
+  }
+  return (panelId) => {
+    const p = panels.get(panelId);
+    if (p && panelStamped(p)) return false;
+    if (p && p.createdAt > eraStart) return true;
+    return named.has(panelId);
+  };
+}
 
 /**
  * The provenance the exposure reporter stamps on every record it sends
@@ -322,28 +365,29 @@ function reporterStamped(rec: CorpusRecord): boolean {
  * leaked lines (renderPolicy revisions 17044 -> 17045 and 17997 -> 18000).
  */
 export function readExposureCorpusWithExclusions(): { records: CorpusRecord[]; excluded: CorpusExclusions } {
-  const out: CorpusRecord[] = [];
+  const stamped: CorpusRecord[] = [];
   const dropped: CorpusRecord[] = [];
-  let unattributed = 0;
-  let testKind = 0;
   for (const raw of readParticipation("interactorObservation_write")) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
     const rec = raw as CorpusRecord;
     if (typeof rec.type !== "string") continue;
     if (!isExposureObservation(rec.type as ObservationType)) continue;
-    if (!reporterStamped(rec)) {
-      unattributed += 1;
-      dropped.push(rec);
-      continue;
-    }
-    if (typeof rec.panelKind === "string" && rec.panelKind.startsWith(TEST_RUN_KIND_PREFIX)) {
-      testKind += 1;
+    if (reporterStamped(rec)) stamped.push(rec);
+    else dropped.push(rec);
+  }
+  const unattributed = dropped.length;
+  const isTestPanel = testOriginPanels(dropped);
+  const out: CorpusRecord[] = [];
+  let testPanel = 0;
+  for (const rec of stamped) {
+    if (rec.type === "exposure_outcome" && typeof rec.panelId === "string" && isTestPanel(rec.panelId)) {
+      testPanel += 1;
       dropped.push(rec);
       continue;
     }
     out.push(rec);
   }
-  return { records: out, excluded: { unattributed, testKind, records: dropped } };
+  return { records: out, excluded: { unattributed, testPanel, records: dropped } };
 }
 
 /** A learned entry removed because every record behind it was excluded. */
@@ -389,7 +433,8 @@ export function retiredKinds(
 export function exclusionClause(excluded: CorpusExclusions): string {
   return `Excluded before scoring: ${excluded.unattributed} record(s) without the exposure reporter's origin/producer stamp ` +
     `(test runs and hand-appended lines carry none), ` +
-    `${excluded.testKind} stamped outcome(s) on a test-run kind (${TEST_RUN_KIND_PREFIX}*).`;
+    `${excluded.testPanel} stamped outcome(s) on a test-origin panel ` +
+    `(unstamped and written after panels began carrying their writer's stamp, or a legacy panel an unstamped exposure record names).`;
 }
 
 /**

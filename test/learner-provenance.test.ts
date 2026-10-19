@@ -41,8 +41,9 @@ const real = [
 /** What the leaked suite runs left: no stamp, the test bundle, test kinds. */
 const testOrigin = [
   { type: "exposure", visibility: "operator_only", scanStatus: "observed", panelKind: null, observedAt: at + 30,
-    body: { visible_in_viewport: [0, 1, 2, 3].map(i => ({ panel_id: `a-answered-2-${i}`, rank: i + 1 })),
-      visible_in_viewport_count: 4, candidates_total: 4, renderer_bundle: "test-bundle", tick_seq: 1 } },
+    // The leaked runs ticked every panel they seeded, refuse-24 included.
+    body: { visible_in_viewport: [...[0, 1, 2, 3].map(i => `a-answered-2-${i}`), "refuse-24"].map((panel_id, i) => ({ panel_id, rank: i + 1 })),
+      visible_in_viewport_count: 5, candidates_total: 5, renderer_bundle: "test-bundle", tick_seq: 1 } },
   ...[0, 1, 2, 3].map(i => ({
     type: "exposure_outcome", panelId: `a-answered-2-${i}`, visibility: "operator_only", outcome: "answered",
     outcomeScope: "panel", exposureCount: 2, panelKind: "learnerprobe_rising_1", observedAt: at + 31 + i })),
@@ -50,8 +51,8 @@ const testOrigin = [
     type: "exposure_outcome", panelId: `d-7-${i}`, visibility: "operator_only", outcome: "complained",
     outcomeScope: "panel", exposureCount: 2, panelKind: "learnerprobe_complained_7", observedAt: at + 40 + i,
     body: { form: "record", form_source: "dom", shape: "probe_shape" } })),
-  // Stamped, but on a panel a test run seeded: the panel carries no provenance,
-  // so its kind is the only marker.
+  // Stamped, but on a panel a test run seeded: the panel's provenance (an unstamped
+  // tick names it) is what excludes it, not its kind's name.
   { type: "exposure_outcome", panelId: "refuse-24", visibility: "operator_only", outcome: "shown_not_acted",
     outcomeScope: "panel", exposureCount: 2, inferred: true, panelKind: "learnerprobe_refuse_25", observedAt: at + 50,
     body: { ...stamp, renderer_bundle: "index-real.js" } },
@@ -106,10 +107,10 @@ describe("the learners read only provenance-stamped, non-test evidence", () => {
     expect(mixed.reason).not.toContain("test-bundle");
     expect(mixed.formShapes).not.toContain("probe_shape");
     expect(mixed.formTable).not.toHaveProperty("probe_shape");
-    // Each reason states what it excluded: 10 unstamped records, 1 stamped act on a test kind.
+    // Each reason states what it excluded: 10 unstamped records, 1 stamped act on a test panel.
     for (const reason of [mixed.reason, mixed.formReason]) {
       expect(reason).toContain("Excluded before scoring: 10 record(s) without the exposure reporter's origin/producer stamp");
-      expect(reason).toContain("1 stamped outcome(s) on a test-run kind");
+      expect(reason).toContain("1 stamped outcome(s) on a test-origin panel");
     }
     expect(liveOnly.reason).toContain("Excluded before scoring: 0 record(s)");
     // The live kinds' weights are exactly where a live-only corpus puts them.

@@ -44,6 +44,15 @@ export interface Panel {
   updatedAt: number;
   /** Set when a run asked this question (`human_input`); see routes/impulses.ts. */
   run?: RunLink;
+  /**
+   * The writer's provenance stamp: the same `origin`/`producer` pair the exposure
+   * reporter puts on every observation, sent by the panel's writer and kept as
+   * written. Top level, not under `body`, because a panel's body is the content a
+   * person reads. An update that does not restate it keeps the creator's.
+   * READER: src/importance-learn.ts `testOriginPanels`.
+   */
+  origin?: string;
+  producer?: string;
 }
 
 export interface RunLink {
@@ -352,7 +361,7 @@ export function upsertPanel(
     createdAt: existing?.createdAt ?? p.createdAt ?? now,
     updatedAt: now,
   };
-  if (existing && ["title", "body", "kind", "importance", "asks", "visibility", "run"].every(key =>
+  if (existing && ["title", "body", "kind", "importance", "asks", "visibility", "run", "origin", "producer"].every(key =>
     JSON.stringify(existing[key as keyof Panel]) === JSON.stringify(stored[key as keyof Panel]))) return existing;
   appendParticipation("uiPanel_write", stored);
   panels.set(p.id, stored);

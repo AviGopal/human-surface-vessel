@@ -29,6 +29,7 @@ import {
   isSolicitation,
   ParticipationConflict,
   type Ask,
+  type Panel,
   type InteractorEvent,
   type Observation,
   type ExposureOutcome,
@@ -209,6 +210,17 @@ function feedbackKind(p: Pointer): "answer" | "reaction" | "dismiss" {
   return (FEEDBACK_KINDS as readonly string[]).includes(String(v))
     ? (v as "answer" | "reaction" | "dismiss")
     : "answer";
+}
+
+/**
+ * The writer's `origin`/`producer`, kept on the panel (store.ts `Panel.origin`).
+ * An update that does not restate them keeps the creator's; nothing is invented
+ * for a writer that sent none.
+ */
+function panelStamp(p: Pointer, existing: Panel | undefined): { origin?: string; producer?: string } {
+  const origin = optStr(p, "origin") ?? existing?.origin;
+  const producer = optStr(p, "producer") ?? existing?.producer;
+  return { ...(origin ? { origin } : {}), ...(producer ? { producer } : {}) };
 }
 
 function asks(p: Pointer): Ask[] | undefined {
@@ -508,6 +520,9 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         visibility: Object.hasOwn(pointer, "visibility")
           ? asVisibility(pointer["visibility"], existing?.visibility ?? "public")
           : (existing?.visibility ?? "public"),
+        // The writer's stamp, as the exposure reporter's is kept on observations:
+        // what the learner reads to tell a live panel from a test's.
+        ...panelStamp(pointer, existing),
       });
       return c.json({ resolved: true, success: true, shape: type, body: panel });
     }
@@ -545,6 +560,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         kind: "question",
         importance: "high",
         run: { dispatchId, solicitationId, deadlineAt, linked },
+        ...panelStamp(pointer, getPanel(`solicitation-${solicitationId}`)),
       });
       return c.json({ resolved: true, success: true, shape: type, body: { panelId: panel.id, linked } });
     }
