@@ -1,5 +1,5 @@
 /**
- * A person's "Show as" choice is evidence the form learner reads: against the
+ * A person's form choice (from the box since 16f-1, from "Show as" before it) is evidence the form learner reads: against the
  * form left, for the form chosen. Enough explicit choices of one form promote
  * it for that kind of content; a few never move anything; the route refuses a
  * choice that names no forms.
@@ -18,6 +18,13 @@ describe("aggregateFormEvidence with form_choice", () => {
     const by = Object.fromEntries(pairs.map((p) => [p.form, p]));
     expect(by["record"]).toMatchObject({ successes: 0, failures: 1, chosen: 0 });
     expect(by["rows"]).toMatchObject({ successes: 1, failures: 0, chosen: 1 });
+  });
+
+  test("F5: a choice made in the box tallies exactly as one made on Show as did", () => {
+    const fromBox = { type: "form_choice", body: { shape: "http_fetch", form_from: "text", form_to: "page", region: "run_answer", origin: "box" } };
+    const fromButton = { type: "form_choice", body: { shape: "http_fetch", form_from: "text", form_to: "page", region: "run_answer" } };
+    expect(aggregateFormEvidence([fromBox])).toEqual(aggregateFormEvidence([fromButton]));
+    expect(aggregateFormEvidence([fromBox]).pairs.find((p) => p.form === "page")).toMatchObject({ successes: 1, chosen: 1 });
   });
 
   test("an incomplete choice is skipped and said to be skipped", () => {

@@ -27,6 +27,7 @@ import { useLiveControls } from "./state/liveControls";
 import { useStoreStream } from "./state/stream";
 import { QuestionsProvider, useQuestions } from "./state/questions";
 import { BoxTargetProvider, useBoxTarget } from "./state/boxTarget";
+import { OnScreenProvider } from "./state/onScreen";
 
 /**
  * The layout this build renders, published for exposure records. Records made
@@ -195,7 +196,9 @@ export function Surface(): ReactNode {
   return (
     <QuestionsProvider>
       <BoxTargetProvider>
+      <OnScreenProvider>
       <Workbench />
+      </OnScreenProvider>
       </BoxTargetProvider>
     </QuestionsProvider>
   );

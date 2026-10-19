@@ -48,15 +48,11 @@ function CreditBadge({ row }: { row: CreditRow | null }): ReactNode {
   );
 }
 
-/** Whether outputs here offer "Show as": never in the blind calibration view. */
-const Choosable = createContext(true);
 /** The step a person's answer drove on this run, for the provenance mark. */
 const PersonStep = createContext<string | null>(null);
 
-function NodeContent({ n, density, credit, choosable: forced }: { n: ChainNode; density: "full" | "inline"; credit: RunCredit | null; choosable?: boolean }): ReactNode {
-  const allowed = useContext(Choosable);
+function NodeContent({ n, density, credit }: { n: ChainNode; density: "full" | "inline"; credit: RunCredit | null }): ReactNode {
   const personStep = useContext(PersonStep);
-  const choosable = allowed && forced !== false;
   const content = fromProvenance(n.raw);
   if (!content) return null;
   return (
@@ -64,7 +60,6 @@ function NodeContent({ n, density, credit, choosable: forced }: { n: ChainNode; 
       content={content}
       density={density}
       region="run_chain"
-      choosable={choosable}
       extraHeader={
         <>
           {n.producerExecutionId ? <span className="sf-muted sf-mono">{n.producerExecutionId}</span> : null}
@@ -78,7 +73,7 @@ function NodeContent({ n, density, credit, choosable: forced }: { n: ChainNode; 
 
 /** Forms that are content to read: they lead open even on a run that has not reached. */
 // Not "text": on live runs that was raw JSON (a 766,693-char variantMetricsSummary)
-// and lists of machine ids. Anything else opens when a person asks (Show as).
+// and lists of machine ids. Anything else opens when a person opens it.
 const READ_FORMS: ReadonlySet<string> = new Set(["prose", "scalar"]);
 
 type Policy = Parameters<typeof planFor>[1];
@@ -300,7 +295,6 @@ export function Chain({
   // view, where the layout must not carry the verdict.
   return (
     <PersonStep.Provider value={personStep}>
-    <Choosable.Provider value={!blind}>
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
 
@@ -340,7 +334,7 @@ export function Chain({
       ) : (
         lead.map((n) => (
           <article key={n.id} className="sf-chain-output">
-            <NodeContent n={n} density="full" credit={credit} choosable={!blind} />
+            <NodeContent n={n} density="full" credit={credit} />
             <Inputs n={n} chains={chains} depth={0} seen={new Set()} credit={credit} />
           </article>
         ))
@@ -382,7 +376,6 @@ export function Chain({
       <CreditSection credit={credit} />
       <RouteArounds items={routes} />
     </section>
-    </Choosable.Provider>
     </PersonStep.Provider>
   );
 }

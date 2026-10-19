@@ -179,6 +179,10 @@ export type DispatchOutcome =
       readonly unparsed: readonly UnparsedClause[];
       readonly revision: number;
     }
+  /** The output on screen redrawn in another form; nothing dispatched, nothing written. */
+  | { readonly kind: "view"; readonly form: string }
+  /** A reading about the output on screen that could not be applied ("as a page" on prose). */
+  | { readonly kind: "viewRefused"; readonly reason: string }
   | { readonly kind: "accepted"; readonly dispatchId: string; readonly coalesced: boolean }
   | { readonly kind: "refused"; readonly dispatchId: string; readonly reason: string | null }
   | { readonly kind: "draining"; readonly message: string }
@@ -190,6 +194,16 @@ export interface DispatchRequest {
   readonly variables?: Record<string, unknown>;
   readonly tags?: readonly string[];
   readonly expected_output_shapes?: readonly string[];
+  /** What is on screen, for the box's presentation reading; never sent to the walk. */
+  readonly onScreen?: OnScreenReport | null;
+}
+
+/** The output on screen as the surface's reader sees it. */
+export interface OnScreenReport {
+  readonly shape: string;
+  readonly form: string;
+  readonly markup: boolean;
+  readonly region: string | null;
 }
 
 /** A human verdict, as the oracle corpus stores it. */

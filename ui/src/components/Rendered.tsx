@@ -14,12 +14,13 @@
  */
 
 import { sendObservation } from "../api/exposure";
-import { Component, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { useRenderPolicy } from "../api/queries";
 import { contentText, type Content } from "../lib/content";
 import { CUT_KEY, findMarkup, planContent, type RenderPlan } from "../lib/ledger";
 import { formatChars } from "../lib/time";
 import { useLiveControls } from "../state/liveControls";
+import { useOnScreenRegistrar } from "../state/onScreen";
 import { ContentRender, CopyButton } from "./ContentRender";
 import { FormDecisionRecorder } from "./FormDecisionRecorder";
 
@@ -105,7 +106,7 @@ export function Rendered({
   region,
   header = true,
   extraHeader,
-  choosable = false,
+  lead = false,
 }: {
   content: Content;
   density?: Density;
@@ -116,13 +117,12 @@ export function Rendered({
   /** Caller-specific facts that belong in the header (e.g. a step's producer). */
   extraHeader?: ReactNode;
   /**
-   * Offer the reader a choice of form ("Prose · Fields · Table · Text"). A
-   * choice redraws this payload at once and is recorded as a `form_choice`
-   * observation the form learner reads (src/form-learn.ts). It previews through
-   * the same path a pin or a learned form takes, so what a person picks is
-   * what the learner would later apply for this kind of content.
+   * The run's lead answer: what "this" means in the one box ("show this as a
+   * table"). A choice made there redraws this payload at once and is recorded as
+   * a `form_choice` observation the form learner reads (src/form-learn.ts),
+   * previewed through the same path a pin or a learned form takes.
    */
-  choosable?: boolean;
+  lead?: boolean;
 }): ReactNode {
   const { paused, intervalMs } = useLiveControls();
   const policy = useRenderPolicy({ enabled: !paused, intervalMs }).data;
@@ -133,7 +133,7 @@ export function Rendered({
   const plan = chosen
     ? planFor(content, { ...(policy ?? {}), formByShape: { ...(policy?.formByShape ?? {}), [content.shape]: chosen } })
     : planned;
-  const choose = (form: string): void => {
+  const choose = (form: string, origin: "box"): void => {
     if (form === plan.form) return;
     sendObservation({
       obs_type: "form_choice",
@@ -142,9 +142,21 @@ export function Rendered({
       form_from: plan.form,
       form_to: form,
       ...(region ? { region } : {}),
+      origin,
     });
     setChosen(form);
   };
+  // The lead answer is what the box's "this" means. The latest `choose` is read
+  // through a ref, so the registration follows the drawn form, not every render.
+  const register = useOnScreenRegistrar();
+  const chooseRef = useRef(choose);
+  chooseRef.current = choose;
+  const markup = findMarkup(text) !== null;
+  useEffect(() => {
+    if (!lead || !register) return;
+    register({ shape: content.shape, form: plan.form, markup, region: region ?? null, choose: (f, o) => chooseRef.current(f, o) });
+    return () => register(null);
+  }, [lead, register, content.shape, plan.form, markup, region]);
 
   if (density === "row") {
     return (
@@ -169,17 +181,11 @@ export function Rendered({
           ) : null}
           {extraHeader}
           <span className="sf-rendered-head-right">
-            {choosable ? <FormChoice current={plan.form} onChoose={choose} markup={findMarkup(text) !== null} /> : null}
             {completeness(content)}
             {density === "full" && plan.text.trim().length > 0 && plan.form !== "scalar" ? (
               <CopyButton text={plan.text} what={content.shape} />
             ) : null}
           </span>
-        </div>
-      ) : null}
-      {!header && choosable ? (
-        <div className="sf-rendered-choice-bar">
-          <FormChoice current={plan.form} onChoose={choose} markup={findMarkup(text) !== null} />
         </div>
       ) : null}
       {plan.form === "empty" && content.state === "absent" ? null : (
@@ -202,24 +208,3 @@ export function Rendered({
   );
 }
 
-const CHOICES: readonly { form: string; label: string }[] = [
-  { form: "prose", label: "Prose" },
-  { form: "record", label: "Fields" },
-  { form: "rows", label: "Table" },
-  { form: "text", label: "Text" },
-  { form: "page", label: "Page" },
-];
-
-/** The reader's say in how one payload is drawn. */
-function FormChoice({ current, onChoose, markup }: { current: string; onChoose: (form: string) => void; markup: boolean }): ReactNode {
-  return (
-    <span className="sf-form-choice" role="group" aria-label="Show as">
-      {/* "Page" only where there is markup to draw as one. */}
-      {CHOICES.filter((c) => c.form !== "page" || markup).map((c) => (
-        <button key={c.form} type="button" aria-pressed={current === c.form} onClick={() => onChoose(c.form)}>
-          {c.label}
-        </button>
-      ))}
-    </span>
-  );
-}

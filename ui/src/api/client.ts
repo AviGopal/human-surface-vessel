@@ -13,6 +13,7 @@
 import type {
   ActiveDispatch,
   DispatchOutcome,
+  OnScreenReport,
   DispatchRequest,
   GoalWalkState,
   GradeSubmission,
@@ -100,14 +101,14 @@ function asClauses(raw: unknown): readonly UnparsedClause[] {
  * PARTLY is reported with the clause it dropped, because silently applying half
  * an instruction is worse than applying none.
  */
-export async function trySurfaceIntent(instruction: string): Promise<DispatchOutcome | null> {
+export async function trySurfaceIntent(instruction: string, onScreen: OnScreenReport | null = null): Promise<DispatchOutcome | null> {
   let res: Response;
   try {
     res = await fetch("/api/surface-intent", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ instruction }),
+      body: JSON.stringify({ instruction, onScreen }),
     });
   } catch {
     // The surface being unreachable must not swallow the instruction; let the
@@ -121,7 +122,12 @@ export async function trySurfaceIntent(instruction: string): Promise<DispatchOut
     changes?: Array<{ field?: string; from?: string; to?: string; because?: string }>;
     unparsed?: string[];
     policy?: { revision?: number };
+    view?: { form?: string };
+    refused?: { reason?: string };
   };
+  // About the output on screen: one view changes and nothing is written.
+  if (body?.view && typeof body.view.form === "string") return { kind: "view", form: body.view.form };
+  if (body?.refused) return { kind: "viewRefused", reason: String(body.refused.reason ?? "") };
   if (!body || body.applied !== true) return null;
   return {
     kind: "reshaped",
@@ -141,14 +147,15 @@ export async function trySurfaceIntent(instruction: string): Promise<DispatchOut
 }
 
 export async function dispatchGoal(req: DispatchRequest): Promise<DispatchOutcome> {
-  const reshaped = await trySurfaceIntent(req.goal);
+  const { onScreen, ...goal } = req;
+  const reshaped = await trySurfaceIntent(goal.goal, onScreen ?? null);
   if (reshaped) return reshaped;
 
   const res = await fetch("/api/run-goal", {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "same-origin",
-    body: JSON.stringify(req),
+    body: JSON.stringify(goal),
   });
   const body = await readJson(res);
 

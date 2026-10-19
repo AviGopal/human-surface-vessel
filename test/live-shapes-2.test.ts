@@ -21,6 +21,9 @@ const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { Chain } = await import("../ui/src/components/Chain");
 const { Prose } = await import("../ui/src/components/Prose");
+const { Rendered } = await import("../ui/src/components/Rendered");
+const { OnScreenProvider, useOnScreen } = await import("../ui/src/state/onScreen");
+const { fromText } = await import("../ui/src/lib/content");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -58,10 +61,19 @@ describe("a fetched page cut inside its wrapper (558fc260)", () => {
     expect(planContent("http_fetch", FETCH, true).form).not.toBe("prose");
   });
 
-  test("must-fail: Show as offers Page on it", async () => {
-    const el = await mount(React.createElement(Chain, { walk: walk([{ id: "f", shape: "http_fetch", producedBy: "satisfier:http_fetch", contentPreview: FETCH, chars: 122790, truncated: true, consumedIds: ["g"] }], true) }));
-    const labels = [...el.querySelectorAll("[aria-label='Show as'] button")].map((b) => b.textContent);
-    expect(labels).toContain("Page");
+  test("must-fail: as the answer on screen, it reports markup, so \"as a page\" is taken", async () => {
+    let markup: boolean | null = null;
+    function Probe(): null {
+      const e = useOnScreen();
+      if (e) markup = e.markup;
+      return null;
+    }
+    await mount(
+      React.createElement(OnScreenProvider, null,
+        React.createElement(Rendered, { content: fromText("http_fetch", FETCH, "truncated"), density: "full", header: false, region: "run_answer", lead: true }),
+        React.createElement(Probe, null)),
+    );
+    expect(markup).toBe(true);
   });
 });
 

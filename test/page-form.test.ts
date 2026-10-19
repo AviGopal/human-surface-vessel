@@ -1,13 +1,13 @@
 /**
  * "page": markup drawn as a page in a frame that is granted nothing. Never a
- * default; a person asks for it in words ("show svg as a page") or with Show as,
- * which offers it only where there is markup.
+ * default; a person asks for it in words ("show svg as a page", or "show this as
+ * a page" in the box, which takes it only where the answer on screen has markup).
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { readSurfaceIntent } from "../src/surface-intent.ts";
+import { readSurfaceIntent, readViewIntent } from "../src/surface-intent.ts";
 import type { RenderPolicy } from "../src/store.ts";
 import type { GoalWalkState } from "../ui/src/api/types";
 
@@ -21,7 +21,9 @@ const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { ContentRender, pageDocument } = await import("../ui/src/components/ContentRender");
-const { Chain } = await import("../ui/src/components/Chain");
+const { Rendered } = await import("../ui/src/components/Rendered");
+const { OnScreenProvider, useOnScreen } = await import("../ui/src/state/onScreen");
+const { fromText } = await import("../ui/src/lib/content");
 const { planContent } = await import("../ui/src/lib/ledger");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -69,21 +71,24 @@ describe("asking for it", () => {
     expect(r.patch.formByShape?.["svg"]).toBe("page");
   });
 
-  test("Show as offers Page on markup and not on prose", async () => {
-    const walk = (preview: string): GoalWalkState =>
-      ({
-        dispatchId: "d", status: "completed", reached: true, goalReachReason: null, poolShapes: [], pendingTargets: [], poolEvents: [], walkLog: [],
-        currentStep: null, steps: [], executionPath: null, walkTier: null, attemptCount: null, grounded: null, learning: null, answerBody: null,
-        operator: null, completionShapes: null, humanGraded: false, humanReachNotes: null, trigger: null, requeueOf: null,
-        poolProvenance: [
-          { id: "g", shape: "goal", producedBy: "seed", contentPreview: "q", chars: 1, consumedIds: [] },
-          { id: "o", shape: "svg", producedBy: "satisfier:llm", contentPreview: preview, chars: preview.length, consumedIds: ["g"] },
-        ],
-      }) as unknown as GoalWalkState;
-    const withMarkup = await mount(React.createElement(Chain, { walk: walk(SVG) }));
-    const labels = [...withMarkup.querySelectorAll("[aria-label='Show as'] button")].map((b) => b.textContent);
-    expect(labels).toContain("Page");
-    const withProse = await mount(React.createElement(Chain, { walk: walk("## Summary\n\nPlain words, no markup at all.") }));
-    expect([...withProse.querySelectorAll("[aria-label='Show as'] button")].map((b) => b.textContent)).not.toContain("Page");
+  test("\"as a page\" is taken where the answer on screen has markup, and refused on prose", async () => {
+    // What the lead answer reports to the box, then how the reader treats it.
+    const seen: { markup?: boolean }[] = [];
+    function Probe(): null {
+      const e = useOnScreen();
+      if (e) seen.push({ markup: e.markup });
+      return null;
+    }
+    const answer = (text: string) =>
+      React.createElement(OnScreenProvider, null,
+        React.createElement(Rendered, { content: fromText("svg", text), density: "full", header: false, region: "run_answer", lead: true }),
+        React.createElement(Probe, null));
+    await mount(answer(SVG));
+    expect(seen.at(-1)?.markup).toBe(true);
+    await mount(answer("## Summary\n\nPlain words, no markup at all."));
+    expect(seen.at(-1)?.markup).toBe(false);
+    const on = (markup: boolean) => ({ shape: "svg", form: "text", markup, region: "run_answer" });
+    expect(readViewIntent("show this as a page", on(true))).toMatchObject({ kind: "view", form: "page" });
+    expect(readViewIntent("show this as a page", on(false))).toMatchObject({ kind: "refused" });
   });
 });

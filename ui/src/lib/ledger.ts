@@ -374,7 +374,7 @@ function rescueBareScalar(
  * Whether text is markup: it opens with an element (`<html`, `<svg`, `<div`)
  * and that element's closing tag appears later. The closing tag is required so
  * prose such as "a < b" or "<3" is not mistaken for markup. Markup plans as
- * verbatim text; drawing it as a page is a form a person asks for (Show as).
+ * verbatim text; drawing it as a page is a form a person asks for ("show this as a page").
  */
 export function isMarkup(text: string): boolean {
   // A document start is markup even when a preview cut it before its closing tag.

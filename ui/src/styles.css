@@ -1979,12 +1979,6 @@ body { overflow: hidden; }
 .sf-attempt-reported { font-size: var(--sf-text-xs); border: 1px solid var(--sf-rule-strong); border-radius: 3px; padding: 0 var(--sf-space-1); }
 .sf-walk-needs > summary { cursor: pointer; }
 
-/* "Show as": a person's say in how one payload is drawn. */
-.sf-form-choice { display: inline-flex; gap: 2px; margin-right: var(--sf-space-2); }
-.sf-form-choice button { font-size: var(--sf-text-xs); padding: 0 var(--sf-space-1); border: 1px solid var(--sf-rule); border-radius: 3px; background: transparent; color: var(--sf-ink-3); cursor: pointer; }
-.sf-form-choice button[aria-pressed="true"] { color: var(--sf-ink); border-color: var(--sf-rule-strong); }
-.sf-rendered-choice-bar { display: flex; justify-content: flex-end; margin-bottom: var(--sf-space-1); }
-
 /* Markup drawn as a page: an isolated frame, resizable by the reader. */
 .sf-page-frame { width: 100%; height: 28rem; border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); background: #fff; resize: vertical; overflow: auto; }
 

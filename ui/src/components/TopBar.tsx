@@ -12,6 +12,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRef, useState, type ReactNode } from "react";
 import { injectContext, trySurfaceIntent } from "../api/client";
 import { useBoxTarget } from "../state/boxTarget";
+import { onScreenReport, useOnScreen } from "../state/onScreen";
 import { injectPayload } from "../lib/interaction";
 import { useDispatchGoal, useSubmitGrade } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
@@ -22,6 +23,9 @@ import { answerRunQuestion } from "./RunQuestion";
 import { StarterChips } from "./StarterChips";
 
 const MAX_BOX_LINES = 8;
+
+/** The word the echo uses for a form the box redrew the answer in. */
+const FORM_WORD: Readonly<Record<string, string>> = { rows: "table", record: "fields", text: "text", prose: "prose", page: "page", terminal: "terminal", diff: "diff", scalar: "value" };
 
 function OutcomeLine({
   outcome,
@@ -35,6 +39,12 @@ function OutcomeLine({
   let body: ReactNode = null;
   let tone = "error";
   switch (outcome.kind) {
+    case "view":
+      return null;
+    case "viewRefused":
+      tone = "warn";
+      body = <>{outcome.reason}</>;
+      break;
     case "accepted":
       if (!outcome.coalesced) return null;
       tone = "warn";
@@ -111,6 +121,7 @@ export function TopBar({
   const dispatch = useDispatchGoal();
   const { paused, setPaused } = useLiveControls();
   const { recordReceipt } = useQuestions();
+  const onScreen = useOnScreen();
   const [echo, setEcho] = useState<string | null>(null);
   const [reshaped, setReshaped] = useState<DispatchOutcome | null>(null);
   const answer = useMutation({
@@ -118,7 +129,7 @@ export function TopBar({
     // A presentation phrase is read as one in any context: checked before the text
     // is taken as the run's answer, so "show this as a table" never reaches the run.
     mutationFn: async (args: { ctx: Extract<BoxContext, { kind: "reply" }>; text: string }) => {
-      const change = await trySurfaceIntent(args.text);
+      const change = await trySurfaceIntent(args.text, onScreenReport(onScreen));
       if (change) return { kind: "reshaped" as const, change };
       const receipt = await answerRunQuestion(args.ctx.question, "answered", args.text);
       recordReceipt(receipt);
@@ -134,6 +145,15 @@ export function TopBar({
   const grade = useSubmitGrade();
   const words = boxWords(context);
   const pending = dispatch.isPending || answer.isPending || supply.isPending || grade.isPending;
+
+  // The box carries what "Show as" did: the answer on screen redraws, and the
+  // choice is recorded from the box, as a click on it was.
+  const redraw = (form: string): void => {
+    onScreen?.choose(form, "box");
+    setEcho(`Display: ${FORM_WORD[form] ?? form}`);
+    window.requestAnimationFrame(() => fit(boxRef.current));
+    setGoal("");
+  };
 
   const fit = (el: HTMLTextAreaElement | null): void => {
     if (!el) return;
@@ -188,7 +208,9 @@ export function TopBar({
         { ctx, text },
         {
           onSuccess: (r) => {
-            if (r.kind === "reshaped") {
+            if (r.kind === "reshaped" && r.change.kind === "view") {
+              redraw(r.change.form);
+            } else if (r.kind === "reshaped") {
               setEcho(null);
               setReshaped(r.change);
             } else {
@@ -220,9 +242,14 @@ export function TopBar({
       return;
     }
     dispatch.mutate(
-      { goal: text, operator: "human-surface", tags: ["surface:do-anything"] },
+      { goal: text, operator: "human-surface", tags: ["surface:do-anything"], onScreen: onScreenReport(onScreen) },
       {
         onSuccess: (outcome) => {
+          if (outcome.kind === "view") {
+            dispatch.reset();
+            redraw(outcome.form);
+            return;
+          }
           if ((outcome.kind === "accepted" || outcome.kind === "refused") && outcome.dispatchId) {
             onDispatched(outcome.dispatchId);
           }
