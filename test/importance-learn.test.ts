@@ -79,6 +79,13 @@ function corroborated(records: readonly any[]): readonly any[] {
 
 const routerModule = new URL("../src/routes/impulses.ts", import.meta.url).pathname;
 
+/**
+ * The stamp the browser's exposure reporter puts on every record it sends
+ * (ui/src/lib/exposure.ts MACHINE_ORIGIN, PRODUCER). The learner scores only
+ * stamped records, so these falsifiers send what the reporter sends.
+ */
+const REPORTER = { origin: "machine", producer: "human-surface-vessel/ui/exposure-reporter" } as const;
+
 async function resolve(pointer: Record<string, unknown>) {
   const res = await impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST",
@@ -116,6 +123,7 @@ async function postTick(panelIds: readonly string[]) {
   return resolve({
     type: "interactorObservation",
     obs_type: "exposure",
+    ...REPORTER,
     scan_status: "observed",
     // Sent at the POINTER's top level, not nested: the route collects every
     // non-column key into the record's `body`, so a literal `body` key would
@@ -140,6 +148,7 @@ async function postOutcome(
   return resolve({
     type: "interactorObservation",
     obs_type: "exposure_outcome",
+    ...REPORTER,
     panel_id: panelId,
     outcome,
     exposure_count: 2,
@@ -175,7 +184,9 @@ async function ranks(): Promise<Map<string, number>> {
 }
 
 let seq = 0;
-const uniqueKind = (label: string) => `learnerprobe_${label}_${++seq}`;
+// Not `learnerprobe_`: that prefix marks the kinds an earlier run of this file leaked
+// into a live corpus, and the learner now excludes it (TEST_RUN_KIND_PREFIX).
+const uniqueKind = (label: string) => `probekind_${label}_${++seq}`;
 
 // ─── (a) answered raises a kind, and the rise reaches the next read ──────────
 
@@ -493,10 +504,10 @@ describe("(f) what was learned survives a restart", () => {
         // the outcome names a panel no tick ever showed and the learner refuses
         // to move on it.
         await post({ type: "interactorObservation", obs_type: "exposure", scan_status: "observed",
-                     visible_in_viewport: [{ panel_id: "f1", rank: 1 }],
+                     ...${JSON.stringify(REPORTER)}, visible_in_viewport: [{ panel_id: "f1", rank: 1 }],
                      renderer_bundle: "restart-test" });
         const res = await post({ type: "interactorObservation", obs_type: "exposure_outcome",
-                                 panel_id: "f1", outcome: "answered", exposure_count: 3 });
+                                 ...${JSON.stringify(REPORTER)}, panel_id: "f1", outcome: "answered", exposure_count: 3 });
         const pol = await post({ type: "renderPolicy" });
         console.log(JSON.stringify({
           changed: res.learning.changed,
@@ -565,7 +576,7 @@ describe("(f) what was learned survives a restart", () => {
         await post({ type: "uiPanel_write", id: "g1", title: "t", kind: "corpuskind",
                      importance: "high", body: {}, asks: [{ id: "q", prompt: "?", type: "text" }] });
         await post({ type: "interactorObservation", obs_type: "exposure_outcome",
-                     panel_id: "g1", outcome: "answered", exposure_count: 2,
+                     ...${JSON.stringify(REPORTER)}, panel_id: "g1", outcome: "answered", exposure_count: 2,
                      renderer_bundle: "index-abc.js" });
         console.log("written");
       `,
