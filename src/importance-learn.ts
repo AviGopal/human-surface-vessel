@@ -225,6 +225,8 @@ export interface LearningPass {
    * reader of this reason needs.
    */
   readonly rendererBundles: readonly string[];
+  /** What the corpus boundary dropped before this pass scored anything. */
+  readonly excluded: CorpusExclusions;
   /** The evidence, in words, for the impulse's `reason` field. */
   readonly reason: string;
 }
@@ -266,15 +268,82 @@ function round4(v: number): number {
  * fresh process).
  */
 export function readExposureCorpus(): CorpusRecord[] {
+  return readExposureCorpusWithExclusions().records;
+}
+
+/**
+ * What the corpus boundary dropped before any learner scored it. Counted, never
+ * silent: each learner's reason states both numbers.
+ */
+export interface CorpusExclusions {
+  /** Exposure records without the reporter's `origin`/`producer` stamp. */
+  readonly unattributed: number;
+  /** Stamped outcomes on a kind a test run minted. */
+  readonly testKind: number;
+}
+
+export const NO_EXCLUSIONS: CorpusExclusions = { unattributed: 0, testKind: 0 };
+
+/**
+ * The kind prefix the learner's own falsifier minted until it moved to probekind_*
+ * (test/importance-learn.test.ts `uniqueKind`). From 09-22 to 09-27 those test panels leaked into the live store,
+ * the browser was shown them, and its STAMPED acts on them are still in the corpus.
+ * A panel carries no provenance of its own, so this name is the only marker those
+ * acts have. Panel-level provenance would replace it.
+ */
+export const TEST_RUN_KIND_PREFIX = "learnerprobe_";
+
+/**
+ * The provenance the exposure reporter stamps on every record it sends
+ * (ui/src/lib/exposure.ts `MACHINE_ORIGIN` and `PRODUCER`; the contract in
+ * ui/src/api/exposure.ts). The route keeps both verbatim under `body`. A record
+ * without them was not sent by the reporter: the leaked suite runs' ticks and
+ * outcomes carry none, and neither does a hand-appended line. Presence is
+ * checked rather than the exact producer string, which is the reporter's to name.
+ */
+function reporterStamped(rec: CorpusRecord): boolean {
+  const body = rec.body as Record<string, unknown> | undefined;
+  if (!body || typeof body !== "object") return false;
+  const origin = body["origin"];
+  const producer = body["producer"];
+  return typeof origin === "string" && origin.length > 0 && typeof producer === "string" && producer.length > 0;
+}
+
+/**
+ * The exposure corpus with test-origin lines excluded at read, and how many.
+ *
+ * Exclusion, not deletion: the journal is a shared corpus that keeps every line,
+ * and a reader rule is what keeps a reset from being undone. Before this, an
+ * operator reset of the policy was re-learned within hours from the same
+ * leaked lines (renderPolicy revisions 17044 -> 17045 and 17997 -> 18000).
+ */
+export function readExposureCorpusWithExclusions(): { records: CorpusRecord[]; excluded: CorpusExclusions } {
   const out: CorpusRecord[] = [];
+  let unattributed = 0;
+  let testKind = 0;
   for (const raw of readParticipation("interactorObservation_write")) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
     const rec = raw as CorpusRecord;
     if (typeof rec.type !== "string") continue;
     if (!isExposureObservation(rec.type as ObservationType)) continue;
+    if (!reporterStamped(rec)) {
+      unattributed += 1;
+      continue;
+    }
+    if (typeof rec.panelKind === "string" && rec.panelKind.startsWith(TEST_RUN_KIND_PREFIX)) {
+      testKind += 1;
+      continue;
+    }
     out.push(rec);
   }
-  return out;
+  return { records: out, excluded: { unattributed, testKind } };
+}
+
+/** The reason clause both learners append, so an exclusion is never silent. */
+export function exclusionClause(excluded: CorpusExclusions): string {
+  return `Excluded before scoring: ${excluded.unattributed} record(s) without the exposure reporter's origin/producer stamp ` +
+    `(test runs and hand-appended lines carry none), ` +
+    `${excluded.testKind} stamped outcome(s) on a test-run kind (${TEST_RUN_KIND_PREFIX}*).`;
 }
 
 /**
@@ -548,6 +617,7 @@ export function learnImportanceWeights(
   records: readonly CorpusRecord[],
   current: ImportanceWeights,
   base: { byKind: Record<string, number>; source: string },
+  excluded: CorpusExclusions = NO_EXCLUSIONS,
 ): LearningPass {
   const { evidence, skipped } = aggregateByKind(records);
   const { failedScans, rendererBundles } = corpusHealth(records);
@@ -602,7 +672,8 @@ export function learnImportanceWeights(
         `${skipped.notAnOutcome} corpus record(s) that were not outcomes, ` +
         `${skipped.shownOnceOrUnknown} ignored record(s) that could not demonstrate a second presentation, ` +
         `${skipped.uncorroborated} outcome(s) for a panel no exposure tick showed, ` +
-        `${failedScans} failed exposure scan(s).`
+        `${failedScans} failed exposure scan(s). ` +
+        exclusionClause(excluded)
       : `learned from what was shown. ${parts.join("; ")}. ` +
         `Bound: no weight moves more than ${MAX_STEP_FRACTION} of the way to its target in one pass, ` +
         `floor ${MIN_KIND_WEIGHT} (a zero-weight kind could never be shown again and so could never earn its way back). ` +
@@ -616,7 +687,8 @@ export function learnImportanceWeights(
         `(never shown moves nothing, checked against the tick and not against the reported count), ` +
         `${failedScans} failed exposure scan(s) (measurement broken, not an empty slice). ` +
         `Corpus spans renderer bundle(s): ${rendererBundles.length > 0 ? rendererBundles.join(", ") : "none recorded"}. ` +
-        `Kinds with no records were not touched: never shown is not a negative outcome.`;
+        `Kinds with no records were not touched: never shown is not a negative outcome. ` +
+        exclusionClause(excluded);
 
   return {
     weights: { ...current, byKind: nextByKind },
@@ -624,6 +696,7 @@ export function learnImportanceWeights(
     moves,
     skipped: { ...skipped, failedScans },
     rendererBundles,
+    excluded,
     reason,
   };
 }
@@ -673,6 +746,7 @@ export function runImportanceLearningPass(): PassResult {
         uncorroborated: 0,
       },
       rendererBundles: [],
+      excluded: NO_EXCLUSIONS,
       reason: "a learning pass was already running; this trigger was dropped rather than nested",
     };
     return {
@@ -687,8 +761,8 @@ export function runImportanceLearningPass(): PassResult {
   }
   passRunning = true;
   try {
-    const records = readExposureCorpus();
-    const pass = learnImportanceWeights(records, current, anchorWeights());
+    const { records, excluded } = readExposureCorpusWithExclusions();
+    const pass = learnImportanceWeights(records, current, anchorWeights(), excluded);
     if (pass.moves.length === 0) {
       // Nothing moved. NOT written: a write that moves no field would be refused
       // anyway, and attempting it would put a "learned" revision claim in the

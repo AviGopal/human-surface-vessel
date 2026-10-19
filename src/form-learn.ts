@@ -53,7 +53,8 @@
 import {
   PRIOR_ALPHA,
   PRIOR_BETA,
-  readExposureCorpus,
+  exclusionClause,
+  readExposureCorpusWithExclusions,
 } from "./importance-learn.ts";
 import { getRenderPolicy } from "./store.ts";
 import { readParticipation } from "./participation-journal.ts";
@@ -255,7 +256,9 @@ export function readFormChoices(): Rec[] {
  */
 export function runFormLearningPass(): FormLearningPass {
   const current = getRenderPolicy().learnedFormByShape ?? {};
-  const { pairs, skipped } = aggregateFormEvidence([...(readExposureCorpus() as readonly Rec[]), ...readFormChoices()]);
+  // The same corpus boundary as the importance pass: test-origin lines are excluded and counted.
+  const corpus = readExposureCorpusWithExclusions();
+  const { pairs, skipped } = aggregateFormEvidence([...(corpus.records as readonly Rec[]), ...readFormChoices()]);
   const { next, moves } = decideLearnedForms(pairs, current);
   const changed = moves.length > 0;
   const scoredPairs = pairs.filter((p) => p.successes + p.failures >= FORM_OBSERVATION_FLOOR).length;
@@ -266,5 +269,6 @@ export function runFormLearningPass(): FormLearningPass {
       : scoredPairs === 0
         ? `${pairs.length} pair(s) seen, none at the floor of ${FORM_OBSERVATION_FLOOR}; nothing moves`
         : `${scoredPairs} pair(s) at the floor, all consistent with the current table; converged`;
-  return { changed, learnedFormByShape: next, moves, evidence: pairs, skipped, reason, learnerId: FORM_LEARNER_ID };
+  const reasonWithExclusions = `${reason}. ${exclusionClause(corpus.excluded)}`;
+  return { changed, learnedFormByShape: next, moves, evidence: pairs, skipped, reason: reasonWithExclusions, learnerId: FORM_LEARNER_ID };
 }
