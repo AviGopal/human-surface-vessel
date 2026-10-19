@@ -270,12 +270,12 @@ describe("a test panel is excluded by its provenance stamp, not by its kind's na
   });
 
   /*
-   * The route never stores a stamp from the pointer's own claim: human-surface validates
-   * no inbound credential, so a claimed origin/producer is unauthenticated and anyone,
-   * a test included, could claim to be live. A stamp already on a panel (written before
-   * this rule, or by a future authenticated path) is the creator's and is kept.
+   * The route never stores a stamp from the pointer's own claim. A panel write is keyed
+   * (src/inbound-auth.ts), and the stamp is the admitted key's: this run's own test key is
+   * this vessel's own, so origin "automated", producer "node-self". A stamp already on a
+   * panel is the creator's and is kept.
    */
-  test("must-fail: a panel write whose pointer claims origin/producer stores neither, and a creator's stamp is kept", () => {
+  test("must-fail: a panel write whose pointer claims origin/producer stores the admitted key's stamp instead, and a creator's stamp is kept", () => {
     const workspace = mkdtempSync(join(tmpdir(), "human-surface-panel-stamp-"));
     try {
       mkdirSync(join(workspace, "interactor-log"));
@@ -284,13 +284,14 @@ describe("a test panel is excluded by its provenance stamp, not by its kind's na
       const routerModule = new URL("../src/routes/impulses.ts", import.meta.url).pathname;
       const child = Bun.spawnSync([process.execPath, "-e", `
         const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
+        const { getPanel } = await import(${JSON.stringify(storeModule)});
         const post = async (pointer) => (await impulsesRouter.request("/v2/impulses/resolve", {
           method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY }, body: JSON.stringify({ pointer }) })).json();
         const claim = { origin: "person", producer: "claimed-by-the-pointer" };
         const panelClaim = await post({ type: "uiPanel_write", id: "claim-p", title: "t", body: "b", kind: "info", ...claim });
         const questionClaim = await post({ type: "uiQuestion_write", id: "claim-q", title: "t", body: "b", kind: "question", ...claim });
         const inputClaim = await post({ type: "human_input", solicitation_id: "claim-s", brief: "a question", ...claim });
-        const inputPanel = (await post({ type: "uiQuestion", id: "solicitation-claim-s" })).body.questions[0];
+        const inputPanel = getPanel("solicitation-claim-s");
         // An update to a creator-stamped panel keeps the creator's stamp, claimed or not.
         const kept = await post({ type: "uiQuestion_write", id: "stamped-earlier", title: "t2" });
         const overclaimed = await post({ type: "uiQuestion_write", id: "stamped-earlier", title: "t3", ...claim });
@@ -300,8 +301,8 @@ describe("a test panel is excluded by its provenance stamp, not by its kind's na
       const out = JSON.parse(child.stdout.toString().trim().split("\n").pop()!);
       for (const stored of [out.panelClaim, out.questionClaim, out.inputPanel]) {
         expect(stored).toBeDefined();
-        expect(stored.origin).toBeUndefined();
-        expect(stored.producer).toBeUndefined();
+        expect(stored.origin).toBe("automated");
+        expect(stored.producer).toBe("node-self");
       }
       expect(out.kept).toMatchObject({ ...writer, title: "t2" });
       expect(out.overclaimed).toMatchObject({ ...writer, title: "t3" });

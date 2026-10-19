@@ -183,3 +183,53 @@ describe("every write route names its caller", () => {
     expect(await refusedCount("key_rejected", "keyed-unknown")).toBe(before + 1);
   });
 });
+
+/*
+ * A, THE STAMP. A stored record names the caller the route admitted, never the pointer's
+ * claim: a panel its creator's key class and validated label (the learner reads it,
+ * src/importance-learn.ts testOriginPanels), a feedback or observation record `caller`.
+ */
+describe("a stored record carries the admitted caller, not its own claim", () => {
+  const getPanel = async (id: string) => (await import("../src/store.ts")).getPanel(id) as Record<string, unknown> | undefined;
+
+  test("must-fail: a valid key's panel claiming origin person is stored with the key's identity", async () => {
+    const r = await post("/v2/impulses/resolve", { pointer: { type: "uiPanel_write", id: "a-claim", title: "t", body: "b", origin: "person", producer: "claimed" } }, { Authorization: "ApiKey valid-service-2" });
+    expect(r.status).toBe(200);
+    expect(await getPanel("a-claim")).toMatchObject({ origin: "automated", producer: "key:svc-key-1" });
+  });
+
+  test("must-fail: an operator-scoped key's panel is stamped operator; a test key is classified by its key", async () => {
+    await post("/v2/impulses/resolve", { pointer: { type: "uiQuestion_write", id: "a-op", title: "q", body: "b" } }, { Authorization: "ApiKey valid-operator-2" });
+    expect(await getPanel("a-op")).toMatchObject({ origin: "operator", producer: "key:op-key-1" });
+    await post("/v2/impulses/resolve", { pointer: { type: "uiQuestion_write", id: "a-test", title: "q", body: "b" } }, testAuth());
+    expect(await getPanel("a-test")).toMatchObject({ origin: "automated", producer: "node-self" });
+    await post("/v2/impulses/resolve", { pointer: { type: "human_input", solicitation_id: "a-s", brief: "a question" } }, { Authorization: "ApiKey valid-service-3" });
+    expect(await getPanel("solicitation-a-s")).toMatchObject({ origin: "automated", producer: "key:svc-key-1" });
+  });
+
+  test("must-fail: a keyless same-origin participation answer is stored browser-unverified", async () => {
+    const q = await post("/v2/impulses/resolve", { pointer: { type: "uiQuestion_write", id: "a-q", title: "q", body: "b" } }, testAuth());
+    const panel = ((await q.json()) as { body: { id: string; revision: number } }).body;
+    const r = await post("/api/participation", { panel_id: panel.id, panel_revision: panel.revision, response_id: "a-r", kind: "answer", value: "yes" }, { Origin: HERE });
+    expect(r.status).toBe(200);
+    const { recentFeedback } = await import("../src/store.ts");
+    expect(recentFeedback(500).find((f) => f.id === "a-r")).toMatchObject({ caller: { origin: "browser-unverified", label: "browser-unverified" } });
+    const o = await post("/api/observations", { obs_type: "click", panel_id: panel.id }, { Origin: HERE });
+    expect(o.status).toBe(200);
+    const { recentObservations } = await import("../src/store.ts");
+    expect(recentObservations(500).filter((x) => x.panelId === panel.id).at(-1)).toMatchObject({ caller: { origin: "browser-unverified" } });
+  });
+
+  test("control: an update keeps the creator's stamp, and a panel created unstamped stays unstamped", async () => {
+    await post("/v2/impulses/resolve", { pointer: { type: "uiPanel_write", id: "a-keep", title: "t", body: "b" } }, { Authorization: "ApiKey valid-operator-3" });
+    await post("/v2/impulses/resolve", { pointer: { type: "uiPanel_write", id: "a-keep", title: "t2" } }, testAuth());
+    expect(await getPanel("a-keep")).toMatchObject({ title: "t2", origin: "operator", producer: "key:op-key-1" });
+    const { upsertPanel } = await import("../src/store.ts");
+    upsertPanel({ id: "a-legacy", title: "t", body: "b", kind: "info", importance: "medium" });
+    await post("/v2/impulses/resolve", { pointer: { type: "uiPanel_write", id: "a-legacy", title: "t2" } }, { Authorization: "ApiKey valid-service-4" });
+    const legacy = await getPanel("a-legacy");
+    expect(legacy?.["title"]).toBe("t2");
+    expect(legacy?.["origin"]).toBeUndefined();
+    expect(legacy?.["producer"]).toBeUndefined();
+  });
+});
