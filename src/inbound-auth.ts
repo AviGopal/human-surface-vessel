@@ -84,6 +84,9 @@ export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string; re
   },
   // ui/src/api/client.ts:294 (fetchCapability: a capability read sent as a POST)
   { route: "/api/discovery/resolve" },
+  // ui/src/components/ContentRender.tsx:517 (a page drawn in its own frame). Its frame-session cookie is
+  // handed to whoever loads "/", so it scopes which frames a session may read back, and names no caller.
+  { route: "/api/page-frame" },
 ];
 
 /**

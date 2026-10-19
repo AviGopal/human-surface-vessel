@@ -39,6 +39,8 @@ interface Entry {
   readonly source: string;
   readonly doc: string;
   readonly at: number;
+  /** Who stored it, as the write route admitted them (inbound-auth.ts): "browser-unverified" for the page. Written, not yet read. */
+  readonly caller?: { readonly origin: string; readonly label: string };
 }
 const entries = new Map<string, Entry>();
 
@@ -52,7 +54,7 @@ function sweep(now: number): void {
 }
 
 /** Keep a page for this session; the same page in the same session keeps its id. */
-export function storeFrame(session: string, source: string, now = Date.now()): string {
+export function storeFrame(session: string, source: string, now = Date.now(), caller?: { origin: string; label: string }): string {
   sweep(now);
   for (const [id, e] of entries) {
     if (e.session === session && e.source === source) {
@@ -62,12 +64,17 @@ export function storeFrame(session: string, source: string, now = Date.now()): s
     }
   }
   const id = randomBytes(32).toString("hex");
-  entries.set(id, { session, source, doc: pageDocument(source), at: now });
+  entries.set(id, { session, source, doc: pageDocument(source), at: now, ...(caller ? { caller } : {}) });
   sweep(now);
   return id;
 }
 
 /** The page kept under this id for this session, or null (unknown, expired, or another session's). */
+/** Tests only: the caller stamp kept on a stored frame. */
+export function __frameCallerForTests(id: string): { origin: string; label: string } | undefined {
+  return entries.get(id)?.caller;
+}
+
 export function readFrame(session: string | null, id: string, now = Date.now()): string | null {
   sweep(now);
   const e = entries.get(id);

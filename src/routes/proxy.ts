@@ -1254,13 +1254,13 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
  * the session that posted a page can load it. Cross-site writes are refused by
  * the app's origin guard before this runs.
  */
-proxyRouter.post("/api/page-frame", async (c) => {
+proxyRouter.post("/api/page-frame", requireCaller("/api/page-frame"), async (c) => {
   const session = frameSessionOf(c.req.header("Cookie"));
   if (!session) return c.json({ error: "no frame session" }, 401);
   const body = (await c.req.json().catch(() => null)) as null | { source?: unknown };
   if (typeof body?.source !== "string") return c.json({ error: "source required" }, 400);
   if (Buffer.byteLength(body.source, "utf8") > FRAME_MAX_BYTES) return c.json({ error: "too large" }, 413);
-  return c.json({ id: storeFrame(session, body.source) }, 200);
+  return c.json({ id: storeFrame(session, body.source, Date.now(), callerOf(admittedCaller(c))) }, 200);
 });
 
 proxyRouter.get("/api/page-frame/:id", (c) => {

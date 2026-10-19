@@ -24,7 +24,8 @@ async function session(): Promise<string> {
   return set.split(";")[0]!;
 }
 
-async function post(source: unknown, cookie: string | null, origin?: string) {
+/** As the surface's page posts it: same-origin and keyless (src/inbound-auth.ts admits it as browser-unverified). */
+async function post(source: unknown, cookie: string | null, origin = "http://localhost") {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (cookie) headers["cookie"] = cookie;
   if (origin) headers["origin"] = origin;
