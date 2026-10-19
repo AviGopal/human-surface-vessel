@@ -5,6 +5,7 @@
  * cut "## Basis" under a verdict-only answer, folded shut.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+const nativeFetch = globalThis.fetch; // the runtime's, captured before happy-dom replaces it
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
@@ -32,13 +33,25 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
 
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
-const React = await import(from("react"));
-const { createRoot } = await import(from("react-dom/client"));
+// A throw below (the gate's tree has no ui/node_modules, so `react` does not resolve) ends this file before its
+// afterAll registers; undo happy-dom and the fetch stub first, or every later file in one process inherits them.
+const ui = await (async () => {
+  try {
+    const React = await import(from("react"));
+    const { createRoot } = await import(from("react-dom/client"));
+    const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
+    const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
+    const { QuestionsProvider } = await import("../ui/src/state/questions");
+    const { RunView } = await import("../ui/src/components/RunView");
+    return { React, createRoot, QueryClient, QueryClientProvider, LiveControlsProvider, QuestionsProvider, RunView };
+  } catch (err) {
+    await GlobalRegistrator.unregister();
+    globalThis.fetch = nativeFetch;
+    throw err;
+  }
+})();
+const { React, createRoot, QueryClient, QueryClientProvider, LiveControlsProvider, QuestionsProvider, RunView } = ui;
 const { act } = React;
-const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
-const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
-const { QuestionsProvider } = await import("../ui/src/state/questions");
-const { RunView } = await import("../ui/src/components/RunView");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -55,6 +68,7 @@ async function mount(): Promise<HTMLElement> {
 
 afterAll(async () => {
   await GlobalRegistrator.unregister();
+  globalThis.fetch = nativeFetch;
 });
 
 const base = {

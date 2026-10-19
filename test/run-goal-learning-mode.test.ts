@@ -4,11 +4,15 @@
  * the client set none (a person's ask learns). Before goal-host read it on the
  * async path, an "observe" probe sent here ran as a learning run.
  */
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { testAuth } from "./setup.ts";
 
 const dispatched: Record<string, unknown>[] = [];
+const nativeFetch = globalThis.fetch;
+afterAll(() => {
+  globalThis.fetch = nativeFetch;
+});
 globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
   const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown> & { pointer?: { type?: string } };
   const type = String(body["type"] ?? body.pointer?.type ?? "");
