@@ -62,12 +62,16 @@ const formModule = new URL("../src/form-learn.ts", import.meta.url).pathname;
 const storeModule = new URL("../src/store.ts", import.meta.url).pathname;
 
 /** One learner pass of each kind over exactly `records`, in a fresh process. */
-function passOver(records: readonly unknown[]): any {
+function passOver(records: readonly unknown[], panels: readonly unknown[] = []): any {
   const workspace = mkdtempSync(join(tmpdir(), "human-surface-provenance-"));
   try {
     mkdirSync(join(workspace, "interactor-log"));
     writeFileSync(join(workspace, "interactor-log", "interactorObservation_write.jsonl"),
       records.map(r => JSON.stringify(r)).join("\n") + "\n");
+    if (panels.length > 0) {
+      writeFileSync(join(workspace, "interactor-log", "uiPanel_write.jsonl"),
+        panels.map(r => JSON.stringify(r)).join("\n") + "\n");
+    }
     const child = Bun.spawnSync([process.execPath, "-e", `
       const { runImportanceLearningPass } = await import(${JSON.stringify(learnerModule)});
       const { runFormLearningPass } = await import(${JSON.stringify(formModule)});
@@ -213,5 +217,85 @@ describe("a learned kind whose evidence is entirely provenance-excluded retires"
     expect(liveOnly.byKind.learnerprobe_rising_1).toBe(7.5);
     expect(liveOnly.byKind.learnerprobe_refuse_25).toBe(9.5);
     expect(liveOnly.formTable.probe_shape).toBe("text");
+  });
+});
+
+/*
+ * PANEL PROVENANCE (gap panel-records-carry-no-provenance-stamp-so-test-panels-are-excluded-by-name).
+ * The browser's acts on a leaked test panel are stamped, so only the PANEL can say the
+ * act is about a test. A panel carries the same origin/producer stamp its writer sends,
+ * and the learner reads that stamp instead of the kind's name. Once any panel carries
+ * the stamp, an unstamped panel written after it is test-origin. A legacy panel (written
+ * before any panel carried the stamp) is test-origin when an unstamped exposure record
+ * names it: the leaked runs ticked every panel they seeded with their own unstamped ticks.
+ */
+const writer = { origin: "machine", producer: "development-vessel/ui-write-passthrough" };
+const panel = (id: string, kind: string, createdAt: number, stampOf: Record<string, string> | null) => ({
+  id, title: `panel ${id}`, body: { text: "x" }, kind, importance: "high",
+  asks: [{ id: "q", prompt: "?", type: "text" }], visibility: "public", revision: 1, createdAt, updatedAt: createdAt,
+  ...(stampOf ?? {}),
+});
+const stampedTick = (ids: string[]) => ({ type: "exposure", visibility: "operator_only", scanStatus: "observed", panelKind: null,
+  observedAt: at + 100, body: { ...stamp, renderer_bundle: "index-real.js", visible_in_viewport: ids.map((panel_id, i) => ({ panel_id, rank: i + 1 })) } });
+const stampedAnswer = (panelId: string, panelKind: string, i: number) => ({ type: "exposure_outcome", panelId, visibility: "operator_only",
+  outcome: "answered", outcomeScope: "panel", exposureCount: 2, inferred: false, panelKind, observedAt: at + 110 + i,
+  body: { ...stamp, renderer_bundle: "index-real.js" } });
+
+describe("a test panel is excluded by its provenance stamp, not by its kind's name", () => {
+  test("must-fail: an unstamped panel written after panels carry the stamp is test-origin, whatever its kind", () => {
+    const panels = [
+      panel("live-1", "gap_needs_human", at, writer),
+      panel("probe-1", "ordinary_kind", at + 2, null),
+    ];
+    const run = passOver([stampedTick(["live-1", "probe-1"]), stampedAnswer("live-1", "gap_needs_human", 0), stampedAnswer("probe-1", "ordinary_kind", 1)], panels);
+    expect(run.evidenceKinds).toEqual(["gap_needs_human"]);
+    expect(run.reason).toContain("1 stamped outcome(s) on a test-origin panel");
+  });
+
+  test("must-fail: a legacy panel an unstamped exposure record names is test-origin, whatever its kind", () => {
+    const panels = [panel("legacy-live", "live_legacy", at, null), panel("legacy-probe", "other_kind", at + 1, null)];
+    const leakedTick = { type: "exposure", visibility: "operator_only", scanStatus: "observed", panelKind: null, observedAt: at + 50,
+      body: { visible_in_viewport: [{ panel_id: "legacy-probe", rank: 1 }], renderer_bundle: "test-bundle", tick_seq: 1 } };
+    const run = passOver([leakedTick, stampedTick(["legacy-live", "legacy-probe"]),
+      stampedAnswer("legacy-live", "live_legacy", 0), stampedAnswer("legacy-probe", "other_kind", 1)], panels);
+    expect(run.evidenceKinds).toEqual(["live_legacy"]);
+    expect(run.reason).toContain("1 stamped outcome(s) on a test-origin panel");
+  });
+
+  test("must-fail: a stamped live panel whose kind starts with learnerprobe_ is kept", () => {
+    const panels = [panel("live-lp", "learnerprobe_live", at, writer)];
+    const run = passOver([stampedTick(["live-lp"]), stampedAnswer("live-lp", "learnerprobe_live", 0)], panels);
+    expect(run.evidenceKinds).toEqual(["learnerprobe_live"]);
+  });
+
+  test("must-fail: a panel write through the route keeps the writer's stamp", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "human-surface-panel-stamp-"));
+    try {
+      const routerModule = new URL("../src/routes/impulses.ts", import.meta.url).pathname;
+      const child = Bun.spawnSync([process.execPath, "-e", `
+        const { impulsesRouter } = await import(${JSON.stringify(routerModule)});
+        const post = async (pointer) => (await impulsesRouter.request("/v2/impulses/resolve", {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointer }) })).json();
+        const created = await post({ type: "uiQuestion_write", id: "stamped-q", title: "t", body: "b", kind: "question", ...${JSON.stringify(writer)} });
+        // An update that does not restate the stamp keeps the creator's.
+        const updated = await post({ type: "uiQuestion_write", id: "stamped-q", title: "t2" });
+        const plain = await post({ type: "uiQuestion_write", id: "plain-q", title: "t", body: "b", kind: "question" });
+        console.log(JSON.stringify({ created: created.body, updated: updated.body, plain: plain.body }));
+      `], { cwd: workspace, env: { ...process.env, WORKSPACE_ROOT: workspace } });
+      expect(child.exitCode).toBe(0);
+      const out = JSON.parse(child.stdout.toString().trim().split("\n").pop()!);
+      expect(out.created).toMatchObject(writer);
+      expect(out.updated).toMatchObject({ ...writer, title: "t2" });
+      expect(out.plain.origin).toBeUndefined();
+      expect(out.plain.producer).toBeUndefined();
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("control: a legacy panel no unstamped record names still counts", () => {
+    const run = passOver([stampedTick(["legacy-live"]), stampedAnswer("legacy-live", "live_legacy", 0)],
+      [panel("legacy-live", "live_legacy", at, null)]);
+    expect(run.evidenceKinds).toEqual(["live_legacy"]);
   });
 });
