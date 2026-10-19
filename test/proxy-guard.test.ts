@@ -7,7 +7,7 @@
  * with the fleet key — any page open on the host could dispatch goals.
  */
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { testAuth } from "./setup.ts";
+import { restoreNativeGlobals, testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import * as proxy from "../src/routes/proxy.ts";
 import { isOwnOrigin, proxyRouter, refuseForeignOriginWrites, resolveTypeOf } from "../src/routes/proxy.ts";
@@ -18,6 +18,8 @@ const servedHostnames = (...a: Parameters<typeof proxy.servedHostnames>) => prox
 import { PORT } from "../src/config.ts";
 
 const upstream: { url: string; body: string }[] = [];
+// First: in one process an earlier file may have left happy-dom or a fetch stub installed (test/setup.ts).
+await restoreNativeGlobals();
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   upstream.push({ url: String(input), body: String(init?.body ?? "") });

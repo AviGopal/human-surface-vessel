@@ -9,7 +9,10 @@
  * goal-host" is read off the record, not assumed.
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { testAuth } from "./setup.ts";
+import { restoreNativeGlobals, testAuth } from "./setup.ts";
+
+// First: in one process an earlier file may have left happy-dom or a fetch stub installed (test/setup.ts).
+await restoreNativeGlobals();
 
 const identity = Bun.serve({
   hostname: "127.0.0.1",

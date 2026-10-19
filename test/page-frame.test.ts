@@ -9,6 +9,10 @@ import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { app, CONTENT_SECURITY_POLICY, contentSecurityPolicy } from "../src/index.ts";
 import { FRAME_POLICY } from "../src/page-frame.ts";
+import { restoreNativeGlobals } from "./setup.ts";
+
+// First: in one process an earlier file may have left happy-dom or a fetch stub installed (test/setup.ts).
+await restoreNativeGlobals();
 
 const SVG = '<svg width="100" height="100"><circle cx="50" cy="50" r="40"/></svg>';
 const FRAME = ["default-src 'none'", "style-src 'unsafe-inline'", "img-src data:", "font-src data:", "media-src data:", "frame-ancestors 'self'", "sandbox"];
