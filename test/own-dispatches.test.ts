@@ -8,10 +8,11 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 // Bun's own Request, kept before happy-dom replaces it: happy-dom's drops the forbidden Origin
 // header, and the page's Origin is what the write gate admits a keyless browser ask by.
 const NativeRequest = globalThis.Request;
+const nativeFetch = globalThis.fetch;
 GlobalRegistrator.register({ url: "http://127.0.0.1:28310/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { testAuth } from "./setup.ts";
+import { forgetOwnDispatches, testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import {
   FINISHED_RECHECK_MS,
@@ -49,6 +50,12 @@ const fakeUpstream = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (type === "activeDispatches") return new Response(JSON.stringify({ resolved: true, body: { dispatches: [], nextOffset: null } }), { status: 200 });
   return new Response("{}", { status: 200 });
 }) as typeof fetch;
+// The asks this file records stay in the one process's record (test/setup.ts) unless removed here, and a later file
+// that needs it empty (own-dispatches-backfill) never sees its backfill run; so does the fetch stub.
+afterAll(async () => {
+  globalThis.fetch = nativeFetch;
+  await forgetOwnDispatches();
+});
 globalThis.fetch = fakeUpstream;
 
 const { proxyRouter } = await import("../src/routes/proxy.ts");

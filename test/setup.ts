@@ -35,3 +35,13 @@ export async function restoreNativeGlobals(): Promise<void> {
   if (GlobalRegistrator.isRegistered) await GlobalRegistrator.unregister();
   Object.assign(globalThis, NATIVE);
 }
+
+// THE SURFACE'S OWN-RUN RECORD (src/own-dispatches.ts) is a file under the one WORKSPACE_ROOT above plus a module
+// cache, so in ONE process the runs one file records are still there for the next. A file that records any (a keyless
+// same-origin /api/run-goal, or a backfill from its stubbed goal-host) calls this in an afterAll; otherwise a later
+// file that needs the record empty (own-dispatches-backfill) or exact (own-dispatches) reads the earlier file's rows.
+/** Remove the own-run record file and forget its cache. */
+export async function forgetOwnDispatches(): Promise<void> {
+  rmSync(join(process.env.WORKSPACE_ROOT ?? workspace, "state", "human-surface", "own-dispatches.jsonl"), { force: true });
+  (await import("../src/own-dispatches.ts")).resetOwnDispatchesForTest();
+}

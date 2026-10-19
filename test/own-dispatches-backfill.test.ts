@@ -4,11 +4,13 @@
  * caller's `operator` to `operator_label` and makes `operator` authority, null for this
  * vessel's key. A backfill that reads only `operator` then finds none of the surface's
  * runs. It must read the label, falling back to `operator` for rows written before.
- * Own process (bun runs each file in one), so the record starts empty under setup.ts's
- * throwaway workspace.
+ * The record starts empty under setup.ts's throwaway workspace only while every earlier file
+ * in the process that records runs removes them (setup.ts forgetOwnDispatches): pull-sync's
+ * gate runs the whole suite in one.
  */
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
+import { forgetOwnDispatches } from "./setup.ts";
 
 const rows = [
   // After gh 7b048e2: the label carries the surface, operator is authority (null here).
@@ -18,6 +20,13 @@ const rows = [
   // Not the surface's, by either field.
   { dispatchId: "sys-1", goal: "system", operator: null, operator_label: "rhythm-conductor-drain", status: "completed", reached: true, startedAt: Date.UTC(2026, 9, 19, 8) },
 ];
+// The two runs the backfill records stay in the one process's record (test/setup.ts) unless removed here, and a
+// later file that counts its own rows (own-dispatches) reads them; so does the fetch stub.
+const nativeFetch = globalThis.fetch;
+afterAll(async () => {
+  globalThis.fetch = nativeFetch;
+  await forgetOwnDispatches();
+});
 globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
   const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string; pointer?: { type?: string } };
   const type = body.type ?? body.pointer?.type ?? "";
