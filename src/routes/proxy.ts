@@ -697,6 +697,11 @@ async function resolveHere(pointer: Record<string, unknown>, caller: Caller, ori
   return new Response(res.body, { status: res.status, headers });
 }
 
+/** What a stored record keeps of the admitted caller (store.ts `CallerStamp`). */
+function callerOf(caller: Caller): { origin: string; label: string } {
+  return { origin: caller.origin, label: caller.label };
+}
+
 async function rawBodyOf(c: { req: { text: () => Promise<string> } }): Promise<string> {
   try {
     const t = await c.req.text();
@@ -1155,6 +1160,7 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
   // what the person said (user ruling 10-17).
   const kept = recordObservation({
     type: "verdict",
+    caller: callerOf(admittedCaller(c)),
     visibility: "operator_only",
     body: {
       dispatch_id: typeof body["dispatch_id"] === "string" ? body["dispatch_id"] : null,
@@ -1214,6 +1220,7 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
   const said = typeof answer?.["error"] === "string" ? answer["error"] : typeof answer?.["message"] === "string" ? answer["message"] : null;
   recordObservation({
     type: "verdict_delivery",
+    caller: callerOf(admittedCaller(c)),
     visibility: "operator_only",
     body: {
       dispatch_id: kept.body?.["dispatch_id"] ?? null,
@@ -1614,6 +1621,7 @@ proxyRouter.post("/api/surface-intent", requireCaller("/api/surface-intent"), as
   if (view?.kind === "refused") {
     recordObservation({
       type: "surface_intent_refused",
+      caller: callerOf(admittedCaller(c)),
       visibility: "operator_only",
       body: { text, reason: view.reason, shape: view.shape, region: view.region, origin: "box" },
     });

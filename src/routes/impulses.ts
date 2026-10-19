@@ -44,7 +44,7 @@ import { readWalkState } from "./proxy.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
-import { admitCaller } from "../inbound-auth.ts";
+import { admitCaller, type Caller } from "../inbound-auth.ts";
 
 type Pointer = Record<string, unknown>;
 
@@ -214,18 +214,23 @@ function feedbackKind(p: Pointer): "answer" | "reaction" | "dismiss" {
 }
 
 /**
- * The panel's provenance stamp (store.ts `Panel.origin`), never taken from the
- * pointer's own claim. This route validates no inbound credential, so a pointer's
- * `origin`/`producer` is unauthenticated: any caller, a test included, could claim
- * to be live and begin the stamped era (importance-learn.ts `testOriginPanels`).
- * Until a write path carries a validated identity, no write stamps, the era does
- * not begin, and the legacy rule judges every panel. A stamp already on the panel
- * is the creator's and is kept on update.
+ * The panel's provenance stamp (store.ts `Panel.origin`), from the caller this route
+ * ADMITTED (inbound-auth.ts), never from the pointer's own claim: a panel write is
+ * keyed-only, so `origin` is the key's class and `producer` its validated label.
+ * The creator's stamp is kept on update, and a panel created before stamps existed
+ * stays unstamped (its creator is unknown, and a later writer is not its creator),
+ * so the legacy rule in importance-learn.ts `testOriginPanels` still judges it.
  */
-function panelStamp(_p: Pointer, existing: Panel | undefined): { origin?: string; producer?: string } {
-  const origin = existing?.origin;
-  const producer = existing?.producer;
-  return { ...(origin ? { origin } : {}), ...(producer ? { producer } : {}) };
+function panelStamp(existing: Panel | undefined, caller: Caller | null): { origin?: string; producer?: string } {
+  if (existing) {
+    return { ...(existing.origin ? { origin: existing.origin } : {}), ...(existing.producer ? { producer: existing.producer } : {}) };
+  }
+  return caller ? { origin: caller.origin, producer: caller.label } : {};
+}
+
+/** What a stored feedback or observation record keeps of the caller that wrote it. */
+function callerStamp(caller: Caller | null): { caller?: { origin: string; label: string } } {
+  return caller ? { caller: { origin: caller.origin, label: caller.label } } : {};
 }
 
 function asks(p: Pointer): Ask[] | undefined {
@@ -464,9 +469,11 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
   // EVERY WRITE NAMES ITS CALLER (inbound-auth.ts). Only the reads below pass without one.
   // No keyless browser entry exists for this route: a browser write reaches it only from
   // the browser routes that admitted it (participation, feedback, observations).
+  let caller: Caller | null = null;
   if (!IMPULSE_READ_TYPES.has(type)) {
     const gate = await admitCaller(c, RESOLVE_PATH, type);
     if (gate.refused) return gate.refused;
+    caller = gate.caller;
   }
 
   switch (type) {
@@ -538,7 +545,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           : (existing?.visibility ?? "public"),
         // The writer's stamp, as the exposure reporter's is kept on observations:
         // what the learner reads to tell a live panel from a test's.
-        ...panelStamp(pointer, existing),
+        ...panelStamp(existing, caller),
       });
       return c.json({ resolved: true, success: true, shape: type, body: panel });
     }
@@ -576,7 +583,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         kind: "question",
         importance: "high",
         run: { dispatchId, solicitationId, deadlineAt, linked },
-        ...panelStamp(pointer, getPanel(`solicitation-${solicitationId}`)),
+        ...panelStamp(getPanel(`solicitation-${solicitationId}`), caller),
       });
       return c.json({ resolved: true, success: true, shape: type, body: { panelId: panel.id, linked } });
     }
@@ -707,6 +714,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         value: pointer["value"],
         kind: feedbackKind(pointer),
         visibility: asVisibility(pointer["visibility"], "public"),
+        ...callerStamp(caller),
         ...(() => {
           const kept = acceptedClassification(optStr(pointer, "classified_by"), optStr(pointer, "classified_phrase"));
           return kept ? { classifiedBy: kept } : {};
@@ -818,6 +826,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const scanStatusRaw = optStr(pointer, "scan_status") ?? optStr(pointer, "scanStatus");
       const entry = recordObservation({
         type: obsType,
+        ...callerStamp(caller),
         panelId,
         askId: optStr(pointer, "ask_id") ?? optStr(pointer, "askId"),
         durationMs: optNum(pointer, "duration_ms") ?? optNum(pointer, "durationMs"),

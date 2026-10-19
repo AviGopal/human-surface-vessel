@@ -45,10 +45,10 @@ export interface Panel {
   /** Set when a run asked this question (`human_input`); see routes/impulses.ts. */
   run?: RunLink;
   /**
-   * The writer's provenance stamp: the same `origin`/`producer` pair the exposure
-   * reporter puts on every observation, sent by the panel's writer and kept as
-   * written. Top level, not under `body`, because a panel's body is the content a
-   * person reads. An update that does not restate it keeps the creator's.
+   * The creator's provenance stamp, from the caller the write route admitted
+   * (inbound-auth.ts): `origin` is the key's class, `producer` its validated label.
+   * Never the pointer's claim. Top level, not under `body`, because a panel's body
+   * is the content a person reads. Kept on update.
    * READER: src/importance-learn.ts `testOriginPanels`.
    */
   origin?: string;
@@ -102,6 +102,18 @@ export interface Feedback {
    * Kept so a misread decline is attributable in the record.
    */
   classifiedBy?: { by: string; phrase: string };
+  /**
+   * Who wrote it, as the write route admitted them (inbound-auth.ts): a key's class
+   * and validated label, or "browser-unverified" for the page until sign-in.
+   * Written, not yet read.
+   */
+  caller?: CallerStamp;
+}
+
+/** The admitted caller a stored record keeps (inbound-auth.ts `Caller`, minus nothing secret). */
+export interface CallerStamp {
+  origin: string;
+  label: string;
 }
 
 /**
@@ -171,6 +183,12 @@ export type ExposureOutcome = "answered" | "declined" | "complained" | "shown_no
 
 export interface Observation {
   type: ObservationType;
+  /**
+   * Who wrote it, as the write route admitted them (inbound-auth.ts). Distinct from
+   * `body.origin`/`body.producer`, which are the exposure reporter's own claim and
+   * what the learner's corpus boundary reads. Written, not yet read.
+   */
+  caller?: CallerStamp;
   panelId?: string;
   askId?: string;
   durationMs?: number;
