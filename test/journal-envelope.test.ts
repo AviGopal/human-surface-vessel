@@ -18,6 +18,8 @@
  *  (d) kind:"dismiss" must NOT enter the answered set — the scan excludes dismissals, so a remap
  *      would turn a human's decline into an answer
  */
+// First, before any src module: a throwaway workspace from any cwd (see participation.test.ts).
+import "./setup.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";

@@ -3,6 +3,8 @@
  * it was read: classified_by and the phrase it matched, on the question's record,
  * so a misread is attributable in the record rather than inferred later.
  */
+// First, before any src module: a throwaway workspace from any cwd (see participation.test.ts).
+import "./setup.ts";
 import { describe, expect, test } from "bun:test";
 import { participationRouter } from "../src/routes/participation.ts";
 import { impulsesRouter } from "../src/routes/impulses.ts";

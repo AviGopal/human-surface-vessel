@@ -22,6 +22,9 @@
 // why each id is unique per file — and why these calls pass 1000, not the
 // default 50: over the WHOLE retained list a negative assertion means "was
 // never recorded" instead of the weaker "not among the last 50".
+
+// First, before any src module: a throwaway workspace from any cwd (see participation.test.ts).
+import "./setup.ts";
 import { describe, expect, test } from "bun:test";
 import { impulsesRouter } from "../src/routes/impulses.ts";
 import { participationRouter } from "../src/routes/participation.ts";
