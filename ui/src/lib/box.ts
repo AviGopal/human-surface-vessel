@@ -72,6 +72,25 @@ export function readReplyPhrase(text: string): { outcome: "declined" | "insuffic
   return outcome ? { outcome, phrase: t } : null;
 }
 
+/**
+ * A complaint about the interface, read from three exact prefixes at the START
+ * of a message (the complaint kinds the form offered), with something after the
+ * colon. A prefix anywhere else, or none, is not a complaint.
+ */
+export const COMPLAINT_PREFIXES = { "hard to see": "hard_to_see", "hard to understand": "hard_to_understand", wrong: "wrong" } as const;
+export type ComplaintPrefixKind = (typeof COMPLAINT_PREFIXES)[keyof typeof COMPLAINT_PREFIXES];
+
+export function readComplaint(text: string): { kind: ComplaintPrefixKind; text: string } | null {
+  const m = /^\s*(hard to see|hard to understand|wrong)\s*:\s*([\s\S]*\S)\s*$/i.exec(text);
+  if (!m || m[1] === undefined || m[2] === undefined) return null;
+  return { kind: COMPLAINT_PREFIXES[m[1].toLowerCase() as keyof typeof COMPLAINT_PREFIXES], text: m[2] };
+}
+
+/** Ask the one box to take this text (a chip elsewhere on the page); it fills, never sends. */
+export function fillBox(text: string): void {
+  window.dispatchEvent(new CustomEvent("sf:fill-box", { detail: text }));
+}
+
 export interface BoxWords {
   /** What the chip beside the box says the next message will be. */
   readonly chip: string;

@@ -9,7 +9,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useLiveControls } from "../state/liveControls";
 import { streamAwareInterval, useStreamConnected } from "../state/stream";
 import { fromText } from "../lib/content";
-import { ComplainButton } from "./ComplainButton";
+import { ComplaintChips } from "./ComplainButton";
 import { Rendered } from "./Rendered";
 
 export interface InterfaceGap {
@@ -142,7 +142,7 @@ export function IssuesDrawer({ onClose, highlightId }: { onClose: () => void; hi
         </button>
       </header>
       <div className="sf-issues-report">
-        <ComplainButton region="the surface" />
+        <ComplaintChips />
       </div>
       {q.isError ? <p className="sf-error">Issue list unavailable</p> : null}
       {highlightId && q.data && !highlightListed ? (

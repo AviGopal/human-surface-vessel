@@ -125,6 +125,7 @@ function Workbench(): ReactNode {
       <TopBar
         onDispatched={openRun}
         context={context}
+        complaintRegion={tab === "questions" && questionId ? questionId : null}
         onSetAside={() => setSetAside(waiting?.id ?? null)}
         openIssues={openGaps}
         issuesOpen={issuesOpen}

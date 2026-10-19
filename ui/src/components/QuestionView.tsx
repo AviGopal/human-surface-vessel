@@ -9,12 +9,11 @@
 import { useMutation } from "@tanstack/react-query";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { sendContribution, type Contribution, type Question } from "../api/participation";
-import { reportExposureAct } from "../lib/exposure-reporter";
 import { questionGapId, questionSubject, useQuestions } from "../state/questions";
 import { contributionContent, questionForAsk } from "../lib/interaction";
 import { ChoiceInput, InteractionFooter, TextInput, stateOf } from "./Interaction";
 import { fromPanel, fromResponse, fromText } from "../lib/content";
-import { ComplainButton } from "./ComplainButton";
+import { ComplaintChips } from "./ComplainButton";
 import { answerReaderFor, gapIdForPanel } from "../lib/disposition";
 import { EscalationForm, EscalationOutcome, LocalizationForm, UnreadNote, VerificationForm } from "./ResponseForms";
 import { Rendered } from "./Rendered";
@@ -289,7 +288,7 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
       </details>
 
       <div className="sf-question-complain">
-        <ComplainButton region={question.id} onFiled={() => reportExposureAct(question.id, "complained")} />
+        <ComplaintChips />
       </div>
     </article>
   );

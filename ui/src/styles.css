@@ -1381,28 +1381,7 @@ summary {
 
 /* ── the human half of the funnel ─────────────────────────────────────────── */
 .sf-gap-head-right { display: inline-flex; align-items: center; gap: var(--sf-space-4); }
-.sf-complain-open { background: none; border: 0; padding: 0; cursor: pointer;
-  font-family: var(--sf-font-sans); font-size: var(--sf-text-sm);
-  color: var(--sf-accent); text-decoration: underline; text-underline-offset: 3px; }
-.sf-complain-open:hover { color: var(--sf-ink); }
-.sf-complain { display: flex; flex-direction: column; gap: var(--sf-space-3);
-  padding: var(--sf-space-4); margin: var(--sf-space-3) var(--sf-space-6) 0;
-  border: 1px solid var(--sf-rule-strong); border-radius: var(--sf-radius-sm);
-  background: var(--sf-panel-alt); }
-.sf-complain-kinds { display: flex; gap: var(--sf-space-2); flex-wrap: wrap; }
-.sf-complain-kind { font-family: var(--sf-font-sans); font-size: var(--sf-text-sm);
-  padding: 4px 10px; border: 1px solid var(--sf-rule-strong);
-  border-radius: var(--sf-radius-sm); background: var(--sf-panel);
-  color: var(--sf-ink-2); cursor: pointer; }
-.sf-complain-kind[aria-pressed="true"] { background: var(--sf-accent-soft);
-  border-color: var(--sf-accent); color: var(--sf-ink); font-weight: 600; }
-.sf-complain-text { min-height: 60px; font-family: var(--sf-font-sans);
-  font-size: var(--sf-text-base); color: var(--sf-ink); background: var(--sf-paper);
-  border: 1px solid var(--sf-rule-strong); border-radius: var(--sf-radius-sm);
-  padding: var(--sf-space-3); resize: vertical; }
-.sf-complain-actions { display: flex; align-items: center; gap: var(--sf-space-3); flex-wrap: wrap; }
-.sf-complain-note { font-size: var(--sf-text-sm); color: var(--sf-ink-2); max-width: 60ch; }
-.sf-complain-failed { color: var(--sf-not-reached); }
+.sf-complaint-chips { display: flex; gap: var(--sf-space-2); flex-wrap: wrap; }
 
 /* Human participation: invitations stay visible while the current exchange holds still. */
 .sf-participation-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-3); }

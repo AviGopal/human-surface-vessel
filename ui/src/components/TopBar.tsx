@@ -8,15 +8,17 @@
  * here, in one line.
  */
 
-import { useMutation } from "@tanstack/react-query";
-import { useRef, useState, type ReactNode } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { injectContext, trySurfaceIntent } from "../api/client";
 import { useBoxTarget } from "../state/boxTarget";
 import { onScreenReport, useOnScreen } from "../state/onScreen";
 import { injectPayload } from "../lib/interaction";
 import { useDispatchGoal, useSubmitGrade } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
-import { boxWords, presentationScope, readAs, readReplyPhrase, readVerdictPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
+import { complaintPayload } from "../lib/interaction";
+import { reportExposureAct } from "../lib/exposure-reporter";
+import { boxWords, presentationScope, readAs, readComplaint, readReplyPhrase, readVerdictPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { answerRunQuestion } from "./RunQuestion";
@@ -104,6 +106,7 @@ export function TopBar({
   onToggleIssues,
   issuesOpen,
   calibration = null,
+  complaintRegion = null,
   context = NEW_ASK,
   onSetAside,
 }: {
@@ -117,6 +120,8 @@ export function TopBar({
   issuesOpen: boolean;
   /** An open, attested calibration window; absent otherwise. */
   calibration?: { count: number; open: () => void } | null;
+  /** What a complaint typed now is about: the question open on the questions page; otherwise the surface. */
+  complaintRegion?: string | null;
 }): ReactNode {
   const [goal, setGoal] = useState("");
   const [focused, setFocused] = useState(false);
@@ -149,8 +154,22 @@ export function TopBar({
       injectContext(injectPayload({ dispatchId: args.dispatchId, shape: args.shape, content: args.text })),
   });
   const grade = useSubmitGrade();
+  const queryClient = useQueryClient();
+  // A complaint (16f-3): the same human_reported gap the form filed, about what is on screen.
+  const complain = useMutation({
+    retry: false,
+    mutationFn: async (args: { kind: NonNullable<ReturnType<typeof readComplaint>>; region: string }) => {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(complaintPayload({ region: args.region, kind: args.kind.kind, text: args.kind.text })),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    },
+  });
   const words = boxWords(context);
-  const pending = dispatch.isPending || answer.isPending || supply.isPending || grade.isPending;
+  const pending = dispatch.isPending || answer.isPending || supply.isPending || grade.isPending || complain.isPending;
 
   // The box carries what "Show as" did: the answer on screen redraws, and the
   // choice is recorded from the box, as a click on it was.
@@ -160,6 +179,13 @@ export function TopBar({
     window.requestAnimationFrame(() => fit(boxRef.current));
     setGoal("");
   };
+
+  // A chip elsewhere on the page (the Issues drawer, the questions page) fills the box.
+  useEffect(() => {
+    const onFill = (e: Event): void => put(String((e as CustomEvent).detail ?? ""), false);
+    window.addEventListener("sf:fill-box", onFill);
+    return () => window.removeEventListener("sf:fill-box", onFill);
+  });
 
   const fit = (el: HTMLTextAreaElement | null): void => {
     if (!el) return;
@@ -189,6 +215,25 @@ export function TopBar({
   const submit = (): void => {
     const text = goal.trim();
     if (text.length === 0 || pending) return;
+    // An explicit complaint is a complaint in every context, never an answer or an ask.
+    const complaint = readComplaint(text);
+    if (complaint) {
+      const region = complaintRegion ?? "the surface";
+      dispatch.reset();
+      setReshaped(null);
+      complain.mutate(
+        { kind: complaint, region },
+        {
+          onSuccess: () => {
+            if (complaintRegion) reportExposureAct(complaintRegion, "complained");
+            void queryClient.invalidateQueries({ queryKey: ["interfaceGaps"] });
+            setEcho("Interface issue");
+            cleared();
+          },
+        },
+      );
+      return;
+    }
     if (context.kind === "supply") {
       const ctx = context;
       dispatch.reset();
@@ -361,6 +406,14 @@ export function TopBar({
         <div className="sf-outcome-line" data-tone="error" role="status">
           <span>Not sent: {(dispatch.error as Error).message}</span>
           <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => dispatch.reset()}>
+            ×
+          </button>
+        </div>
+      ) : null}
+      {complain.isError ? (
+        <div className="sf-outcome-line" data-tone="error" role="status">
+          <span>Not filed: {(complain.error as Error).message}</span>
+          <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => complain.reset()}>
             ×
           </button>
         </div>
