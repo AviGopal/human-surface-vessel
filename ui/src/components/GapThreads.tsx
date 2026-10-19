@@ -45,7 +45,6 @@ export function GapThreads({ threads, onSelect, selectedDispatchId }: { threads:
                 </li>
               ))}
               {t.attemptCount > t.attempts.length ? <li className="sf-muted">{t.attemptCount - t.attempts.length} earlier</li> : null}
-              <li className="sf-muted">Deploy and configuration steps: not readable yet</li>
             </ol>
           </details>
         );

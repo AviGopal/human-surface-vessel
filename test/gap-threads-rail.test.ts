@@ -62,7 +62,8 @@ describe("gap threads in the rail", () => {
     const rows = [...el.querySelectorAll(".sf-run-row")].map((r) => r.getAttribute("data-dispatch-id"));
     expect(rows).toEqual(["d-other"]);
     expect(thread?.textContent).toContain("no run recorded");
-    expect(thread?.textContent).toContain("Deploy and configuration steps: not readable yet");
+    // The rail doesn't explain what it can't read (16g; the interface does not explain itself).
+    expect(thread?.textContent).not.toContain("not readable");
     await act(async () => {
       (thread?.querySelector("button") as HTMLButtonElement).click();
     });
