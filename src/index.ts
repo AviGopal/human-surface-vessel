@@ -45,6 +45,9 @@ import {
   subscribe,
 } from "./store.ts";
 
+import type { MiddlewareHandler } from "hono";
+import { FRAME_PATH, FRAME_POLICY, frameSessionOf, newFrameSessionCookie } from "./page-frame.ts";
+
 const app = new Hono();
 
 /**
@@ -52,33 +55,39 @@ const app = new Hono();
  * sign-in token kept in the browser is only as safe as the scripts that can run
  * beside it (user ruling 10-19). The shell is one module script from this origin,
  * and the page talks only to its own origin (discovery and every upstream go
- * through this vessel's proxy). Markup drawn as a page sits in a sandboxed frame
- * with its own, stricter policy; this one does not loosen it.
+ * through this vessel's proxy). Markup drawn as a page is served from its own URL
+ * with its own policy (src/page-frame.ts), so this one allows nothing a page
+ * needs: no inline style, no data: fonts or media, no forms.
  */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   "connect-src 'self'",
-  // The page frame is a srcdoc document, and a srcdoc document inherits this policy
-  // on top of its own: a page's inline styles and data: fonts and media are blocked
-  // unless this policy allows them too. Style and data: media never run script.
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self'",
   "img-src 'self' data:",
-  "font-src 'self' data:",
-  "media-src 'self' data:",
+  "frame-src 'self'",
   "object-src 'none'",
   "base-uri 'none'",
+  "form-action 'none'",
   "frame-ancestors 'none'",
 ].join("; ");
 
-app.use("*", async (c, next) => {
+/** Sets the surface's policy on every response; the frame route alone gets the frame's. */
+export const contentSecurityPolicy: MiddlewareHandler = async (c, next) => {
   await next();
+  // Always the surface's policy, whatever a route set, except the one route that
+  // serves a drawn page, which always gets the frame's own.
+  const isFrame = c.req.method === "GET" && FRAME_PATH.test(new URL(c.req.url).pathname);
   // A response passed through from upstream may have immutable headers: copy, then set.
   const res = c.res;
   const headers = new Headers(res.headers);
-  headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  headers.set("Content-Security-Policy", isFrame ? FRAME_POLICY : CONTENT_SECURITY_POLICY);
+  // Cleared first: Hono's setter otherwise copies the old response's headers back
+  // over the new one, and a route's own policy would win.
+  c.res = undefined as unknown as Response;
   c.res = new Response(res.body, { status: res.status, statusText: res.statusText, headers });
-});
+};
+app.use("*", contentSecurityPolicy);
 
 // ─── Liveness ───────────────────────────────────────────────────────────────
 
@@ -242,7 +251,16 @@ async function serveUiFile(pathname: string): Promise<Response> {
   });
 }
 
-app.get("/", () => serveUiFile("/"));
+/** The shell starts a frame session if the browser has none (src/page-frame.ts). */
+async function shell(c: { req: { header: (n: string) => string | undefined } }, pathname: string): Promise<Response> {
+  const res = await serveUiFile(pathname);
+  if (frameSessionOf(c.req.header("Cookie")) || !(res.headers.get("Content-Type") ?? "").startsWith("text/html")) return res;
+  const headers = new Headers(res.headers);
+  headers.append("Set-Cookie", newFrameSessionCookie());
+  return new Response(res.body, { status: res.status, headers });
+}
+
+app.get("/", (c) => shell(c, "/"));
 
 // Static assets and SPA routes. Registered last so it never shadows /health,
 // /shapes, /api/*, or the resolver path.
@@ -251,7 +269,7 @@ app.get("*", async (c) => {
   if (pathname.startsWith("/api/") || pathname.startsWith("/v2/")) {
     return c.json({ error: "not found", path: pathname }, 404);
   }
-  return serveUiFile(pathname);
+  return shell(c, pathname);
 });
 
 // ─── Start ──────────────────────────────────────────────────────────────────

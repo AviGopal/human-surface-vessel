@@ -29,6 +29,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { joinGapThreads, type GapThread } from "../gap-threads.ts";
 import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, verdictDelivery, writeRenderPolicy } from "../store.ts";
+import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
@@ -1195,6 +1196,39 @@ proxyRouter.post("/api/grade", async (c) => {
     },
   });
   return upstream;
+});
+
+// ─── a page drawn in a frame (src/page-frame.ts) ─────────────────────────────
+
+/**
+ * The browser posts the markup it is about to draw as a page; the frame then
+ * loads it by URL, so it carries the frame's policy and not the surface's. Only
+ * the session that posted a page can load it. Cross-site writes are refused by
+ * the app's origin guard before this runs.
+ */
+proxyRouter.post("/api/page-frame", async (c) => {
+  const session = frameSessionOf(c.req.header("Cookie"));
+  if (!session) return c.json({ error: "no frame session" }, 401);
+  const body = (await c.req.json().catch(() => null)) as null | { source?: unknown };
+  if (typeof body?.source !== "string") return c.json({ error: "source required" }, 400);
+  if (Buffer.byteLength(body.source, "utf8") > FRAME_MAX_BYTES) return c.json({ error: "too large" }, 413);
+  return c.json({ id: storeFrame(session, body.source) }, 200);
+});
+
+proxyRouter.get("/api/page-frame/:id", (c) => {
+  const id = c.req.param("id");
+  const doc = /^[0-9a-f]{64}$/.test(id) ? readFrame(frameSessionOf(c.req.header("Cookie")), id) : null;
+  if (!doc) return c.json({ error: "not found" }, 404);
+  return new Response(doc, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "Cross-Origin-Resource-Policy": "same-origin",
+      "Cache-Control": "no-store",
+    },
+  });
 });
 
 // ─── gap threads (browser read) ─────────────────────────────────────────────

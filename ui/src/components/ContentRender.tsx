@@ -499,33 +499,41 @@ function Stub({ text }: { text: string }): ReactNode {
 }
 
 /**
- * Markup drawn as a page, isolated. The frame's `sandbox` grants nothing (no
- * scripts, no same origin, no forms, popups or navigation), so it is a separate
- * opaque origin that cannot touch this surface. A content policy at the head of
- * the document refuses every network fetch, so a page cannot call out (no
- * tracking pixels, no remote styles); only inline styles and data: images draw.
- * SVG's declarative <animate> needs no script and plays. This is still the
- * "no injected markup" rule: nothing here enters the surface's own DOM.
+ * Markup drawn as a page, isolated. The page is posted to this vessel once and
+ * loaded by URL (/api/page-frame/<id>), so it carries the frame's own policy and
+ * not the surface's: it refuses every fetch, runs no script, and is sandboxed even
+ * if opened alone. The frame's `sandbox` grants nothing either (no scripts, no
+ * same origin, no forms, popups or navigation): a separate opaque origin that
+ * cannot touch this surface. SVG's declarative <animate> needs no script and
+ * plays. Nothing here enters the surface's own DOM.
  */
-const PAGE_POLICY =
-  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:";
-
-export function pageDocument(source: string): string {
-  return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${PAGE_POLICY}"><meta name="referrer" content="no-referrer">${source}`;
-}
-
 function SandboxedPage({ source }: { source: string }): ReactNode {
-  return (
-    <iframe
-      className="sf-page-frame"
-      title="Page"
-      sandbox=""
-      referrerPolicy="no-referrer"
-      srcDoc={pageDocument(source)}
-      // Chromium honours the attribute too; the meta above covers the rest.
-      {...({ csp: PAGE_POLICY } as Record<string, string>)}
-    />
-  );
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setSrc(null);
+    setFailed(false);
+    void fetch("/api/page-frame", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source }),
+    })
+      .then(async (r) => {
+        const j = (await r.json().catch(() => null)) as { id?: unknown } | null;
+        if (!alive) return;
+        if (r.ok && typeof j?.id === "string") setSrc(`/api/page-frame/${j.id}`);
+        else setFailed(true);
+      })
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [source]);
+  if (failed) return <p className="sf-note sf-muted">Page not drawn</p>;
+  if (!src) return null;
+  return <iframe className="sf-page-frame" title="Page" sandbox="" referrerPolicy="no-referrer" src={src} />;
 }
 
 function FormBody({ plan }: { plan: RenderPlan }): ReactNode {

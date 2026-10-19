@@ -8,16 +8,18 @@
 import { describe, expect, test } from "bun:test";
 import { app } from "../src/index.ts";
 
+// The page frame has its own URL and policy (test/page-frame.test.ts), so this one
+// allows nothing a page needs: no inline style, no data: fonts or media.
 const POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   "connect-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self'",
   "img-src 'self' data:",
-  "font-src 'self' data:",
-  "media-src 'self' data:",
+  "frame-src 'self'",
   "object-src 'none'",
   "base-uri 'none'",
+  "form-action 'none'",
   "frame-ancestors 'none'",
 ];
 
@@ -39,5 +41,6 @@ describe("Content-Security-Policy", () => {
     const script = directives(h).find((d) => d.startsWith("script-src")) ?? "";
     expect(script).toBe("script-src 'self'");
     expect(h).not.toContain("unsafe-eval");
+    expect(h).not.toContain("unsafe-inline");
   });
 });

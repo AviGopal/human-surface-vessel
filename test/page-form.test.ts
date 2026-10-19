@@ -11,7 +11,14 @@ import { readSurfaceIntent, readViewIntent } from "../src/surface-intent.ts";
 import type { RenderPolicy } from "../src/store.ts";
 import type { GoalWalkState } from "../ui/src/api/types";
 
-globalThis.fetch = (async () => new Response("{}", { status: 200 })) as typeof fetch;
+const framePosts: string[] = [];
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  if (String(input).endsWith("/api/page-frame") && init?.method === "POST") {
+    framePosts.push(String((JSON.parse(String(init.body)) as { source: string }).source));
+    return new Response(JSON.stringify({ id: "a".repeat(64) }), { status: 200 });
+  }
+  return new Response("{}", { status: 200 });
+}) as typeof fetch;
 
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
@@ -20,7 +27,7 @@ const { createRoot } = await import(from("react-dom/client"));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
-const { ContentRender, pageDocument } = await import("../ui/src/components/ContentRender");
+const { ContentRender } = await import("../ui/src/components/ContentRender");
 const { Rendered } = await import("../ui/src/components/Rendered");
 const { OnScreenProvider, useOnScreen } = await import("../ui/src/state/onScreen");
 const { fromText } = await import("../ui/src/lib/content");
@@ -46,16 +53,16 @@ afterAll(async () => {
 const SVG = '<svg width="100" height="100"><circle cx="50" cy="50" r="40"><animate attributeName="r" values="10;40;10" dur="2s" repeatCount="indefinite"/></circle></svg>';
 
 describe("the page frame", () => {
-  test("must-fail: the frame grants nothing and its document refuses every fetch", async () => {
+  test("must-fail: the frame grants nothing and loads the page from its own URL, not srcdoc", async () => {
     const el = await mount(React.createElement(ContentRender, { plan: { form: "page", text: SVG, decidedBy: "pin" } }));
+    for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     const frame = el.querySelector("iframe");
     expect(frame).not.toBeNull();
     expect(frame?.getAttribute("sandbox")).toBe("");
     expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer");
-    const doc = pageDocument(SVG);
-    expect(doc).toContain("default-src 'none'");
-    expect(doc.indexOf("Content-Security-Policy")).toBeLessThan(doc.indexOf("<svg"));
-    expect(doc).toContain(SVG);
+    expect(frame?.hasAttribute("srcdoc")).toBe(false);
+    expect(frame?.getAttribute("src")).toBe(`/api/page-frame/${"a".repeat(64)}`);
+    expect(framePosts).toEqual([SVG]);
   });
 
   test("must-fail: the planner never picks page on its own", () => {
