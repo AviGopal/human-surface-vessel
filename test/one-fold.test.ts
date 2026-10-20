@@ -7,6 +7,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 
 let walk: Record<string, unknown> = {};
 globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -18,7 +19,8 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
 const React = await import(from("react"));
-const { createRoot } = await import(from("react-dom/client"));
+const { createRoot: rawCreateRoot } = await import(from("react-dom/client"));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
@@ -39,12 +41,7 @@ async function mount(): Promise<HTMLElement> {
 }
 const roots: { unmount: () => void }[] = [];
 afterAll(async () => {
-  // Unmount before the DOM goes: the grade box's verdict read can settle after a test ends,
-  // and React would then render with no window.
-  await act(async () => {
-    for (const r of roots) r.unmount();
-  });
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 const search = JSON.stringify({ shape: "webSearchResult", query: "gas prices", results: [{ title: "State Gas Price Averages", url: "https://gasprices.aaa.com/state-gas-price-averages/", snippet: "National Average $4.3413" }] });
 const base = {

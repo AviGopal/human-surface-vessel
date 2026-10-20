@@ -9,6 +9,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 import type { GoalWalkState } from "../ui/src/api/types";
 
 const posted: Record<string, unknown>[] = [];
@@ -41,7 +42,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
 const React = await import(from("react"));
-const { createRoot } = await import(from("react-dom/client"));
+const { createRoot: rawCreateRoot } = await import(from("react-dom/client"));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
@@ -55,10 +57,7 @@ const { fromText } = await import("../ui/src/lib/content");
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: { unmount: () => void }[] = [];
 afterAll(async () => {
-  await act(async () => {
-    for (const r of roots) r.unmount();
-  });
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 beforeEach(() => {
   posted.length = 0;

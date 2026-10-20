@@ -8,6 +8,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 
 const calls: { url: string; body: Record<string, unknown> }[] = [];
 let intentApplies = false;
@@ -36,7 +37,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const React = await import(Bun.resolveSync("react", uiSrc));
-const { createRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
+const { createRoot: rawCreateRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
@@ -47,11 +49,7 @@ const { boxContext, boxWords, NEW_ASK, readVerdictPhrase } = await import("../ui
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: { unmount: () => void }[] = [];
 afterAll(async () => {
-  // Unmount before the DOM goes, so no pending render or mutation callback runs without a window.
-  await act(async () => {
-    for (const r of roots) r.unmount();
-  });
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 beforeEach(() => {
   calls.length = 0;

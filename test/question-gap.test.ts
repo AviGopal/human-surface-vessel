@@ -7,6 +7,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 
 const CUT = "In repos/development-vessel/src/resolvers/feature-compose.ts, add a FABRICATE";
 const FULL = `${CUT}-TO-SATISFY lens to the adversarial refuters. Apply exactly these 2 edits.`;
@@ -41,7 +42,8 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
 const React = await import(from("react"));
-const { createRoot } = await import(from("react-dom/client"));
+const { createRoot: rawCreateRoot } = await import(from("react-dom/client"));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
@@ -76,7 +78,7 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 
 describe("a gap question's card", () => {

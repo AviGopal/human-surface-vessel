@@ -3,6 +3,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 
 const REFUSAL = 'labeler "human" requires a credential issued with the "verdict:human" scope';
 const VERDICTS: Record<string, unknown[]> = {
@@ -20,14 +21,15 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
 
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const React = await import(Bun.resolveSync("react", uiSrc));
-const { createRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
+const { createRoot: rawCreateRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { GradeGesture } = await import("../ui/src/components/GradeGesture");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 
 async function shown(dispatchId: string, judgeReached: boolean): Promise<HTMLElement> {

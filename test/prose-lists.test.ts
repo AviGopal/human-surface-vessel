@@ -7,11 +7,13 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
 const React = await import(from("react"));
-const { createRoot } = await import(from("react-dom/client"));
+const { createRoot: rawCreateRoot } = await import(from("react-dom/client"));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { Prose } = await import("../ui/src/components/Prose");
 
@@ -27,7 +29,7 @@ async function mount(source: string): Promise<HTMLElement> {
 }
 
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 
 const MODEL = [

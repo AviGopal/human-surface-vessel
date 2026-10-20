@@ -9,6 +9,7 @@ const nativeFetch = globalThis.fetch; // the runtime's, captured before happy-do
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 
 const GOAL = "What is happening today?";
 const REASON = "The output provides relevant news articles related to events occurring today, fulfilling the intent of the goal.";
@@ -50,7 +51,8 @@ const ui = await (async () => {
     throw err;
   }
 })();
-const { React, createRoot, QueryClient, QueryClientProvider, LiveControlsProvider, QuestionsProvider, RunView } = ui;
+const { React, createRoot: rawCreateRoot, QueryClient, QueryClientProvider, LiveControlsProvider, QuestionsProvider, RunView } = ui;
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -67,7 +69,7 @@ async function mount(): Promise<HTMLElement> {
 }
 
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  await teardownDom();
   globalThis.fetch = nativeFetch;
 });
 

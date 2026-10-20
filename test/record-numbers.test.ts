@@ -7,17 +7,19 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const React = await import(Bun.resolveSync("react", uiSrc));
-const { createRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
+const { createRoot: rawCreateRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { ContentRender } = await import("../ui/src/components/ContentRender");
 const { readableNumber, parseRows } = await import("../ui/src/lib/ledger");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 
 describe("readable numbers", () => {

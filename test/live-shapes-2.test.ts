@@ -7,6 +7,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 import type { GoalWalkState } from "../ui/src/api/types";
 import { findMarkup, planContent } from "../ui/src/lib/ledger";
 
@@ -15,7 +16,8 @@ globalThis.fetch = (async () => new Response("{}", { status: 200 })) as typeof f
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
 const React = await import(from("react"));
-const { createRoot } = await import(from("react-dom/client"));
+const { createRoot: rawCreateRoot } = await import(from("react-dom/client"));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
@@ -39,7 +41,7 @@ async function mount(node: unknown): Promise<HTMLElement> {
 }
 
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 
 // 558fc260's http_fetch preview: the page inside {success, body:{bodyText}}, cut before </html>.

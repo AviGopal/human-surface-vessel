@@ -9,6 +9,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 import type { GoalWalkState } from "../ui/src/api/types";
 import { splitVerdict } from "../ui/src/lib/verdict";
 
@@ -23,7 +24,8 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
 const React = await import(from("react"));
-const { createRoot } = await import(from("react-dom/client"));
+const { createRoot: rawCreateRoot } = await import(from("react-dom/client"));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
@@ -60,11 +62,7 @@ async function mount(w: Record<string, unknown>): Promise<HTMLElement> {
 
 const roots: { unmount: () => void }[] = [];
 afterAll(async () => {
-  // Unmount before the DOM goes, so no pending render or query callback runs without a window.
-  await act(async () => {
-    for (const r of roots) r.unmount();
-  });
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 
 const stub = (by: string, e: string): string => JSON.stringify({ producedBy: by, executionId: e });

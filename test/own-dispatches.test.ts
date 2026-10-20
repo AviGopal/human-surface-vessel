@@ -12,7 +12,7 @@ const nativeFetch = globalThis.fetch;
 GlobalRegistrator.register({ url: "http://127.0.0.1:28310/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { forgetOwnDispatches, testAuth } from "./setup.ts";
+import { forgetOwnDispatches, testAuth, teardownDom, trackRoot } from "./setup.ts";
 import { Hono } from "hono";
 import {
   FINISHED_RECHECK_MS,
@@ -74,7 +74,7 @@ beforeEach(() => {
   resetOwnDispatchesForTest();
 });
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 
 describe("the surface's own record", () => {
@@ -149,7 +149,8 @@ describe("Mine on a busy node", () => {
     const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
     const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
     const React = await import(from("react"));
-    const { createRoot } = await import(from("react-dom/client"));
+    const { createRoot: rawCreateRoot } = await import(from("react-dom/client"));
+    const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
     const { act } = React;
     const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
     const { LiveControlsProvider } = await import("../ui/src/state/liveControls");

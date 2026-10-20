@@ -45,3 +45,33 @@ export async function forgetOwnDispatches(): Promise<void> {
   rmSync(join(process.env.WORKSPACE_ROOT ?? workspace, "state", "human-surface", "own-dispatches.jsonl"), { force: true });
   (await import("../src/own-dispatches.ts")).resetOwnDispatchesForTest();
 }
+
+// REACT IS DRAINED BEFORE THE DOM GOES. A UI test renders React roots into happy-dom and unregisters happy-dom in its
+// afterAll. React's scheduler runs its work loop as a macrotask (performWorkUntilDeadline), so a render that a late
+// query or timer scheduled can run AFTER the unregister and read `window.event` with no window: an "Unhandled error
+// between tests" that fails the file although its tests passed. teardownDom() unmounts every root the file created
+// (trackRoot), lets React flush inside act(), waits for the scheduler's queue to empty (an idle-priority callback runs
+// only after every queued task), and only then unregisters. Never catch, filter or delay the error instead.
+const UI_SRC = new URL("../ui/src/", import.meta.url).pathname;
+const liveRoots = new Set<{ unmount(): void }>();
+
+/** Record a React root so teardownDom() unmounts it. Returns the root. */
+export function trackRoot<R extends { unmount(): void }>(root: R): R {
+  liveRoots.add(root);
+  return root;
+}
+
+/** Unmount every tracked root, drain React's scheduler, then unregister happy-dom (when `unregister` is not false). */
+export async function teardownDom(opts: { unregister?: boolean } = {}): Promise<void> {
+  const React = (await import(Bun.resolveSync("react", UI_SRC))) as { act: (cb: () => Promise<void>) => Promise<void> };
+  const Scheduler = (await import(Bun.resolveSync("scheduler", Bun.resolveSync("react-dom/client", UI_SRC)))) as {
+    unstable_scheduleCallback: (priority: number, cb: () => void) => unknown;
+    unstable_IdlePriority: number;
+  };
+  await React.act(async () => {
+    for (const root of liveRoots) root.unmount();
+  });
+  liveRoots.clear();
+  await new Promise<void>((resolve) => Scheduler.unstable_scheduleCallback(Scheduler.unstable_IdlePriority, () => resolve()));
+  if (opts.unregister !== false && GlobalRegistrator.isRegistered) await GlobalRegistrator.unregister();
+}

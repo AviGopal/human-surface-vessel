@@ -8,6 +8,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 import { knownness } from "../ui/src/lib/knownness";
 
 const EMPTY = '[goal-host-vessel] /run-goal: goal-target inference {"goal_hash":"86a4dcc0","inferred_target_shapes":[],"confidence":0,"alternatives":[]}';
@@ -41,7 +42,8 @@ let walk: Record<string, unknown> = {};
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const from = (spec: string): string => Bun.resolveSync(spec, uiSrc);
 const React = await import(from("react"));
-const { createRoot } = await import(from("react-dom/client"));
+const { createRoot: rawCreateRoot } = await import(from("react-dom/client"));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
@@ -59,7 +61,7 @@ async function mount(): Promise<HTMLElement> {
   return el;
 }
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 const base = { dispatchId: "d-k", goal: "g", status: "completed", poolShapes: [], pendingTargets: [], poolEvents: [], steps: [], poolProvenance: [], walkTier: null, attemptCount: 1, operator: "human-surface", trigger: null, humanGraded: false, humanReachNotes: null, requeueOf: null, learning: null, grounded: null, currentStep: null, completionShapes: null };
 

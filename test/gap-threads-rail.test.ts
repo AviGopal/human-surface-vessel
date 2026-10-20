@@ -3,6 +3,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { teardownDom, trackRoot } from "./setup.ts";
 
 const at = (m: number): string => new Date(Date.UTC(2026, 9, 18, 6, m)).toISOString();
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -28,7 +29,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 const uiSrc = new URL("../ui/src/", import.meta.url).pathname;
 const React = await import(Bun.resolveSync("react", uiSrc));
-const { createRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
+const { createRoot: rawCreateRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
+const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
@@ -38,10 +40,7 @@ const { RunsList } = await import("../ui/src/components/RunsList");
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: { unmount: () => void }[] = [];
 afterAll(async () => {
-  await act(async () => {
-    for (const r of roots) r.unmount();
-  });
-  await GlobalRegistrator.unregister();
+  await teardownDom();
 });
 
 describe("gap threads in the rail", () => {
