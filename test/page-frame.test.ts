@@ -92,4 +92,15 @@ describe("the page frame on its own URL", () => {
     expect(await policy(`/api/page-frame/${"b".repeat(64)}`, "POST")).toBe(CONTENT_SECURITY_POLICY);
     expect(await policy("/api/page-frame/not-an-id")).toBe(CONTENT_SECURITY_POLICY);
   });
+
+  test("must-fail: HEAD and GET on a frame carry the same policy", async () => {
+    const mini = new Hono();
+    mini.use("*", contentSecurityPolicy);
+    mini.get("/api/page-frame/:id", (c) => c.text("x"));
+    const path = `/api/page-frame/${"c".repeat(64)}`;
+    const get = (await mini.request(path)).headers.get("content-security-policy");
+    const head = (await mini.request(path, { method: "HEAD" })).headers.get("content-security-policy");
+    expect(get).toBe(FRAME_POLICY);
+    expect(head).toBe(get);
+  });
 });

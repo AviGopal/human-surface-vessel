@@ -78,7 +78,7 @@ export const contentSecurityPolicy: MiddlewareHandler = async (c, next) => {
   await next();
   // Always the surface's policy, whatever a route set, except the one route that
   // serves a drawn page, which always gets the frame's own.
-  const isFrame = c.req.method === "GET" && FRAME_PATH.test(new URL(c.req.url).pathname);
+  const isFrame = (c.req.method === "GET" || c.req.method === "HEAD") && FRAME_PATH.test(new URL(c.req.url).pathname);
   // A response passed through from upstream may have immutable headers: copy, then set.
   const res = c.res;
   const headers = new Headers(res.headers);
