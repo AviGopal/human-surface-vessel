@@ -18,6 +18,10 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     framePosts.push(String((JSON.parse(String(init.body)) as { source: string }).source));
     return new Response(JSON.stringify({ id: "a".repeat(64) }), { status: 200 });
   }
+  // The person drew these shapes as pages before: the learned form the policy serves.
+  if (String(input).endsWith("/api/render-policy")) {
+    return new Response(JSON.stringify({ tokenOverrides: {}, formByShape: {}, learnedFormByShape: { http_fetch: "page", svg: "page" }, maxPreviewChars: null, ledgerDefaultExpanded: true, revision: 1, updatedAt: 0, note: null }), { status: 200 });
+  }
   return new Response("{}", { status: 200 });
 }) as typeof fetch;
 
@@ -99,5 +103,25 @@ describe("asking for it", () => {
     const on = (markup: boolean) => ({ shape: "svg", form: "text", markup, region: "run_answer" });
     expect(readViewIntent("show this as a page", on(true))).toMatchObject({ kind: "view", form: "page" });
     expect(readViewIntent("show this as a page", on(false))).toMatchObject({ kind: "refused" });
+  });
+});
+
+describe("how much of a page is drawn", () => {
+  const html = (n: number) => `<html><body><p>${"x".repeat(n)}</p></body></html>`;
+  async function drawn(content: unknown): Promise<HTMLElement> {
+    return mount(React.createElement(Rendered, { content, density: "full", header: false, region: "run_answer", lead: true }));
+  }
+  test("must-fail: a page cut by the run's preview says so, with the run's own sizes", async () => {
+    const el = await drawn({ shape: "http_fetch", origin: "impulse", body: html(1950), state: "truncated", size: { shown: 2000, total: 48907 } });
+    expect(el.querySelector(".sf-page-cut")?.textContent).toBe("Cut off: the first 2,000 of 48,907 characters");
+  });
+  test("must-fail: a whole page shows no mark", async () => {
+    const page = html(40);
+    const el = await drawn({ shape: "http_fetch", origin: "impulse", body: page, state: "full", size: { shown: page.length, total: page.length } });
+    expect(el.querySelector(".sf-page-cut")).toBeNull();
+  });
+  test("must-fail: without the run's report, completeness is unknown, never whole", async () => {
+    const el = await drawn(fromText("svg", SVG));
+    expect(el.querySelector(".sf-page-cut")?.textContent).toBe("Completeness unknown");
   });
 });

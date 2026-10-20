@@ -40,6 +40,25 @@ export class RenderBoundary extends Component<{ text: string; children: ReactNod
   }
 }
 
+/**
+ * How much of a page is drawn. The page frame draws what the run kept, and goal-host
+ * keeps a preview of each output, so a real site is usually cut near its top; a cut
+ * page must never read as whole. Decided only by the run's own report (truncated,
+ * and the kept and total sizes); without that report it says so, never "whole".
+ */
+function PageCompleteness({ content }: { content: Content }): ReactNode {
+  const size = content.size;
+  if (content.state === "truncated") {
+    return (
+      <p className="sf-page-cut">
+        {size ? `Cut off: the first ${formatChars(size.shown)} of ${formatChars(size.total)} characters` : "Cut off"}
+      </p>
+    );
+  }
+  if (content.state === "full" && size && size.shown >= size.total) return null;
+  return <p className="sf-page-cut sf-muted">Completeness unknown</p>;
+}
+
 function completeness(c: Content): ReactNode {
   switch (c.state) {
     case "truncated":
@@ -193,6 +212,7 @@ export function Rendered({
           <RenderBoundary text={text}>
             <ContentRender plan={plan} />
           </RenderBoundary>
+          {plan.form === "page" ? <PageCompleteness content={content} /> : null}
         </div>
       )}
       {region ? (
