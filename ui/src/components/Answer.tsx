@@ -269,7 +269,11 @@ export function basisContent(body: string, goal: string | undefined, dispatchId:
     const m = /"shape"\s*:\s*"([^"]+)"/.exec(text);
     if (m?.[1]) shape = m[1];
   }
-  return { shape, origin: "impulse", body: text, state: whole ? "full" : "truncated", size: { shown: text.length, total: whole ? text.length : text.length + 1 } };
+  // A cut record's whole size isn't reported anywhere the basis can see, so it carries
+  // no size rather than a made-up total: the page mark then says "Cut off" alone.
+  return whole
+    ? { shape, origin: "impulse", body: text, state: "full", size: { shown: text.length, total: text.length } }
+    : { shape, origin: "impulse", body: text, state: "truncated" };
 }
 
 function dropLine(text: string, line: string): string | null {
