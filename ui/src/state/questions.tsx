@@ -260,6 +260,19 @@ export function questionSubject(question: Question): string {
   return summary.length > 0 ? summary : question.title;
 }
 
+/**
+ * The subject as a list row draws it: an edit instruction ("In repos/<vessel>/
+ * src/…/gap-to-feature.ts, add …") as its file and its change ("gap-to-feature.ts:
+ * add …"). A route-edit gap's only description is its edit goal; led by the whole
+ * path, the row's two lines held the path and cut the change off. The question
+ * itself keeps the whole sentence.
+ */
+export function questionRowSubject(question: Question): string {
+  const subject = questionSubject(question);
+  const m = /^In\s+(?:\S*\/)?([^\s/,]+\.[A-Za-z0-9]+),\s+(\S[\s\S]*)$/.exec(subject);
+  return m ? `${m[1]}: ${m[2]}` : subject;
+}
+
 /** The gap id a gap question names, if it names one. */
 export function questionGapId(question: Question): string | null {
   const body = typeof question.body === "string" ? question.body : "";

@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Question } from "../ui/src/api/participation";
 import { bodyLead, classifyQuestion } from "../ui/src/lib/questionClass";
-import { gapTitle, groupQuestions, questionSubject, waitingCount } from "../ui/src/state/questions";
+import { gapTitle, groupQuestions, questionRowSubject, questionSubject, waitingCount } from "../ui/src/state/questions";
 
 function q(id: string, kind: string, body: unknown, extra: Partial<Question> = {}): Question {
   return { id, revision: 1, title: "t", body, createdAt: 0, updatedAt: 0, responses: [], answered: false, declined: false, kind, ...extra };
@@ -85,6 +85,23 @@ describe("question titles", () => {
     // Dated parts drop; the phrase left still titles it.
     expect(gapTitle("db_performance_slow_queries_2026-10-01T06")).toBe("DB performance slow queries");
     expect(questionSubject(reland)).toBe("In repos/x");
+  });
+
+  test("must-fail: an edit instruction's row leads with its file and its change, not the path", () => {
+    // A route-edit gap's only description is its edit goal. Led by the whole
+    // repo path, the row's two lines held the path and the change was cut off.
+    const sentence = "In repos/development-vessel/src/resolvers/gap-to-feature.ts, add an LLM-availability probe to the pre-selection capacity block";
+    const edit = q("reland-needs-human-route-edit-03902f38", "gap_reland_needs_human",
+      `Gap route-edit-03902f38 (edit_intent_route) has had multiple landings. Summary: ${sentence}`);
+    expect(questionRowSubject(edit)).toBe("gap-to-feature.ts: add an LLM-availability probe to the pre-selection capacity block");
+    expect(questionRowSubject(verify)).toBe("feature-compose.ts: add a FABRICATE");
+    // The question itself keeps the whole sentence, path and all.
+    expect(questionSubject(edit)).toBe(sentence);
+    // Only a sentence that names a file this way: anything else is kept as written.
+    const prose = q("needs-human-x", "gap_needs_human", "Gap x failed. Summary: In practice, the lane keeps landing the same fix");
+    expect(questionRowSubject(prose)).toBe("In practice, the lane keeps landing the same fix");
+    const phrase = q("needs-human-cold-boot-silently-skips-twenty-two-unparseable-migration-files", "gap_needs_human", "Gap cold-boot-silently-skips-twenty-two-unparseable-migration-files (x) failed. Summary: In repos/x/src/a.ts, do b");
+    expect(questionRowSubject(phrase)).toBe("Cold boot silently skips twenty two unparseable migration files");
   });
 
   test("acronyms read as acronyms", () => {
