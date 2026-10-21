@@ -847,15 +847,16 @@ function planValue(shape: string, v: unknown, text: string, depth: number, parti
     const bodyText = typeof body === "string" ? body : JSON.stringify(body, null, 2);
     const inner =
       typeof body === "string"
-        ? planText(shape, body, depth + 1)
+        ? planEncoded(shape, body, depth + 1, cutInside(o, keys, "body"))
         : planValue(declaredShape ?? shape, body, bodyText, depth + 1, partial && o[CUT_KEY] === undefined);
     return withMeta(inner, failureMeta, partial ? "partial_json" : "resolver_envelope", declaredShape !== shape ? declaredShape : undefined);
   }
 
   // `{success, content: "<encoded>"}` — the content travelled as a string.
   if (depth < 3 && typeof o["content"] === "string" && keys.every((k) => CONTENT_ENVELOPE_KEYS.has(k)) && (o["content"] as string).trim().length > 0) {
-    const inner = planText(shape, o["content"] as string, depth + 1);
-    return withMeta(inner, failureMeta, "content_envelope", declaredShape !== shape ? declaredShape : undefined);
+    const cut = cutInside(o, keys, "content");
+    const inner = planEncoded(shape, o["content"] as string, depth + 1, cut);
+    return withMeta(inner, failureMeta, cut && inner.decidedBy === "partial_json" ? "partial_json" : "content_envelope", declaredShape !== shape ? declaredShape : undefined);
   }
 
   // A failure reported instead of content.
@@ -913,6 +914,29 @@ function planValue(shape: string, v: unknown, text: string, depth: number, parti
   }
 
   return { form: "record", text, decidedBy: partial ? "partial_json" : "record", ...(failureMeta.length ? { meta: failureMeta } : {}) };
+}
+
+/** Whether a cut preview's cut fell inside `key`: the object is marked cut and `key` is its last member. */
+function cutInside(o: Readonly<Record<string, unknown>>, keys: readonly string[], key: string): boolean {
+  return o[CUT_KEY] !== undefined && keys.at(-1) === key;
+}
+
+/**
+ * An answer that travelled as an encoded string (`{success, content: "<JSON>"}`).
+ * When the preview's cut fell inside that string, what arrived of the answer is
+ * cut JSON: its whole members are read as any cut preview's are. Planned as
+ * finished text, it drew as escaped JSON (a topologyCoverage output previewed at
+ * 2,000 of 3,283 chars). Cut text that is not JSON, or is malformed before the
+ * cut, is planned as text, as before.
+ */
+function planEncoded(shape: string, text: string, depth: number, cut: boolean): RenderPlan {
+  if (!cut) return planText(shape, text, depth);
+  const partial = parsePartialJson(text);
+  if (!partial || !partial.cut) return planText(shape, text, depth);
+  const drawn = JSON.stringify(partial.value, null, 2);
+  const plan = planValue(shape, partial.value, drawn, depth, true);
+  // A cut answer is never drawn as one complete value.
+  return plan.form === "scalar" || plan.form === "stub" ? { form: "record", text: drawn, decidedBy: "partial_json" } : plan;
 }
 
 function isEmptyContainer(v: unknown): boolean {
