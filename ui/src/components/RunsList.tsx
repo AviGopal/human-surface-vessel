@@ -154,8 +154,12 @@ export function RunsList({
 
   const inFilter = committed.filter((p) => (filter === "all" ? true : filter === "mine" ? isMine(p.row) : !isMine(p.row) && !inGapThread.has(p.dispatchId)));
   // One line per ask: the newest run leads its thread, earlier runs fold under it.
+  // The system's own runs fold by the template it routed them to: its failing-test
+  // goals are each worded differently, and one line per goal hid that kind of
+  // work's rate (43 lines, 2 reached).
   const threads = groupThreads(
     inFilter.filter((p) => !isGoalless(p.row)).map((p) => ({ ...p, goal: p.row.goal ?? null, reached: p.row.reached, status: p.row.status })),
+    filter === "system" ? (p) => p.row.selectedTemplateId : undefined,
   );
   const shown = threads.map((t) => t.runs[0]!);
   const goalless = inFilter.filter((p) => isGoalless(p.row));
@@ -232,17 +236,29 @@ export function RunsList({
               {...(() => {
                 // A mark for a repeated ask, or for a run a person has judged.
                 const mark = learningMark(t.runs, personReached);
-                return earlier.length > 0 || mark.said.some((x) => x !== null) ? { thread: mark } : {};
+                // Different asks share a template: a change of outcome there is not this ask learning.
+                const shown = t.template !== undefined ? { ...mark, trend: null } : mark;
+                return earlier.length > 0 || mark.said.some((x) => x !== null) ? { thread: shown } : {};
               })()}
             />
           );
           // Earlier runs are listed only while the thread is open: one line per ask otherwise.
           const open = t.runs.some((r) => r.dispatchId === selectedDispatchId);
-          if (earlier.length === 0 || !open) return head;
+          const by = t.template !== undefined ? <p className="sf-thread-by sf-mono">{t.template}</p> : null;
+          if (earlier.length === 0 || !open) {
+            if (!by) return head;
+            return (
+              <div key={p.dispatchId} className="sf-thread" data-thread-size={t.runs.length} data-template={t.template}>
+                {by}
+                {head}
+              </div>
+            );
+          }
           return (
-            <div key={p.dispatchId} className="sf-thread" data-thread-size={t.runs.length}>
+            <div key={p.dispatchId} className="sf-thread" data-thread-size={t.runs.length} {...(t.template !== undefined ? { "data-template": t.template } : {})}>
+              {by}
               {head}
-              <div className="sf-thread-earlier" role="group" aria-label="Earlier runs of this ask">
+              <div className="sf-thread-earlier" role="group" aria-label={t.template !== undefined ? "Earlier runs of this template" : "Earlier runs of this ask"}>
                 {earlier.map((e) => (
                   <RunRow
                     key={e.dispatchId}

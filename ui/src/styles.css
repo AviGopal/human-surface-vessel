@@ -1996,6 +1996,8 @@ body { overflow: hidden; }
 .sf-thread-dot[data-mark="missed"] { background: transparent; border-color: var(--sf-not-reached); }
 .sf-thread-count { margin-left: var(--sf-space-1); font-size: var(--sf-text-xs); color: var(--sf-ink-3); font-variant-numeric: tabular-nums; }
 .sf-thread-earlier .sf-run-row { padding-left: var(--sf-space-6); }
+/* The template the system routed a group of its own runs to. */
+.sf-thread-by { margin: 0; padding: var(--sf-space-2) var(--sf-space-3) 0; font-size: var(--sf-text-xs); color: var(--sf-ink-3); overflow-wrap: anywhere; }
 
 /* The one box's context: what the next message will be read as. */
 .sf-box-chip { display: inline-flex; align-items: center; gap: var(--sf-space-1); align-self: center; max-width: 22rem; padding: var(--sf-space-1) var(--sf-space-2); border-radius: 999px; font-size: var(--sf-text-xs); color: var(--sf-ink-3); border: 1px solid var(--sf-rule); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }

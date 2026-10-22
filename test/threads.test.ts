@@ -124,6 +124,42 @@ describe("threads", () => {
     expect(m.disputed).toBe(1);
   });
 
+  // Shapes: two nodes 10-22. Of the last 50 system runs, 43 were feature_compose
+  // "Write ONE failing test in …" goals, each worded differently, and 2 reached
+  // (1 of 42 on the other node). They drew 43 separate lines, so the rate of
+  // that one kind of work could not be seen.
+  const system = () => [
+    ...Array.from({ length: 43 }, (_, i) => ({
+      dispatchId: `f${i}`, goal: `Write ONE failing test in repos/x/test/checks/case-${i}.check.ts that reproduces: finding ${i}`,
+      status: "completed", reached: i === 7 || i === 30, startedAt: at(i), selectedTemplateId: "feature_compose",
+    })),
+    { dispatchId: "s1", goal: "investigate and decompose gap g", status: "failed", reached: false, startedAt: at(44), selectedTemplateId: "satisfier:gapDecomposition" },
+    { dispatchId: "n1", goal: "Write ONE failing test in repos/x/test/checks/new.check.ts", status: "running", reached: null, startedAt: at(45) },
+    { dispatchId: "h1", goal: "Fix the typo in repos/x/src/a.ts", operator: "human-surface", status: "completed", reached: true, startedAt: at(46), selectedTemplateId: "feature_compose" },
+  ];
+
+  test("must-fail: system runs the system routed to one template draw as one line with that template's rate", async () => {
+    dispatches = system();
+    const el = await mount(React.createElement(RunsList, { selectedDispatchId: null, onSelect: () => {}, filter: "system" }));
+    // The newest feature_compose run leads its group; a run not yet routed stands alone; a person's run is not here.
+    expect(ids(el)).toEqual(["n1", "s1", "f42"]);
+    const group = el.querySelector("[data-template='feature_compose']");
+    expect(group?.querySelector(".sf-thread-by")?.textContent).toBe("feature_compose");
+    // Different asks share the template, so a change of outcome is not "now reaches".
+    expect(group?.querySelector(".sf-thread-mark")?.getAttribute("aria-label")).toBe("2 of 43 reached");
+    expect(el.querySelector("[data-template='satisfier:gapDecomposition'] .sf-thread-by")?.textContent).toBe("satisfier:gapDecomposition");
+    expect(el.querySelector("[data-dispatch-id='n1']")?.closest("[data-template]")).toBeNull();
+  });
+
+  test("an open template group lists its earlier runs; Mine and All still group by ask", async () => {
+    dispatches = system();
+    const open = await mount(React.createElement(RunsList, { selectedDispatchId: "f3", onSelect: () => {}, filter: "system" }));
+    expect(open.querySelectorAll("[data-template='feature_compose'] .sf-thread-earlier .sf-run-row").length).toBe(42);
+    const all = await mount(React.createElement(RunsList, { selectedDispatchId: null, onSelect: () => {}, filter: "all" }));
+    expect(all.querySelector("[data-template]")).toBeNull();
+    expect(ids(all).length).toBe(46);
+  });
+
   test("must-fail: a run asked once that a person disputed carries a mark saying so", async () => {
     dispatches = [{ dispatchId: "r1", goal: "Where is it raining?", operator: "human-surface", status: "completed", reached: true, startedAt: at(20) }];
     verdicts = [{ dispatch_id: "r1", verdict: "not_achieved", note: "Wrong answer", source: "person", judge_reached: true, observedAt: 5 }];

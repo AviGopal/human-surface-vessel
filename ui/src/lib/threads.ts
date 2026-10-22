@@ -4,6 +4,8 @@
  *
  * Display only. The grouping key is the goal text with case, spacing and
  * closing punctuation ignored; it does not claim two asks mean the same thing.
+ * The system's own runs can instead be grouped by the template the system
+ * routed them to: a fact the run reports, never read from its wording.
  */
 
 export interface ThreadRun {
@@ -18,24 +20,32 @@ export interface Thread<T extends ThreadRun> {
   readonly key: string;
   /** Newest first. */
   readonly runs: readonly T[];
+  /** When grouped by the template the system routed these runs to: that template. */
+  readonly template?: string;
 }
 
 export function threadKey(goal: string | null | undefined): string {
   return (goal ?? "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[\s.?!…]+$/u, "");
 }
 
-/** Groups runs by ask; a thread sits where its newest run sits. Input order is kept within a thread. */
-export function groupThreads<T extends ThreadRun>(runs: readonly T[]): readonly Thread<T>[] {
-  const byKey = new Map<string, T[]>();
+/**
+ * Groups runs by ask, or by the template a run was routed to when `templateOf`
+ * names one; a run not routed yet stays with its ask. A thread sits where its
+ * newest run sits. Input order is kept within a thread.
+ */
+export function groupThreads<T extends ThreadRun>(runs: readonly T[], templateOf?: (run: T) => string | null | undefined): readonly Thread<T>[] {
+  const byKey = new Map<string, { template?: string; list: T[] }>();
   for (const run of runs) {
-    const key = threadKey(run.goal);
-    const list = byKey.get(key);
-    if (list) list.push(run);
-    else byKey.set(key, [run]);
+    const template = templateOf?.(run) || undefined;
+    const key = template !== undefined ? `template\u0000${template}` : threadKey(run.goal);
+    const entry = byKey.get(key);
+    if (entry) entry.list.push(run);
+    else byKey.set(key, { ...(template !== undefined ? { template } : {}), list: [run] });
   }
-  const threads = [...byKey].map(([key, list]) => ({
+  const threads = [...byKey].map(([key, { template, list }]) => ({
     key,
     runs: [...list].sort((a, b) => b.startedAtMs - a.startedAtMs || (a.dispatchId < b.dispatchId ? -1 : 1)),
+    ...(template !== undefined ? { template } : {}),
   }));
   return threads.sort((a, b) => {
     const x = a.runs[0]!;
