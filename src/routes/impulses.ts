@@ -40,7 +40,8 @@ import {
 } from "../store.ts";
 import { explainRanking, rankPanels, type ImportanceWeights } from "../importance.ts";
 import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.ts";
-import { readWalkState } from "./proxy.ts";
+import { knownGapStatus, readWalkState, refreshGapStatuses } from "./proxy.ts";
+import { classifyQuestion, gapIdForPanel } from "../question-class.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
@@ -601,7 +602,16 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         // escalation and then tells them "the question changed" when they
         // answer it.
         .filter(pn => isSolicitation(pn) && (!wanted || pn.id === wanted))
-        .map(questionView);
+        .map(questionView)
+        // The status of the gap each one asks about, as last read. Unknown stays
+        // unknown: only a status the gap store gave can fold a question as settled.
+        .map((view) => {
+          const gapId = gapIdForPanel(view.id);
+          const status = gapId ? knownGapStatus(gapId) : null;
+          return status ? { ...view, gapStatus: status } : view;
+        });
+      // Refreshed off the request path: this read never waits on the gap store.
+      void refreshGapStatuses(questions.flatMap((q) => gapIdForPanel(q.id) ?? [])).catch(() => {});
 
       // ORDERED BY IMPORTANCE, from the impulse, at request time.
       //
@@ -626,7 +636,13 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const sliceSource = requestedSlice === undefined ? "policy" : "request";
       const sliceSize = requestedSlice === undefined ? policy.visibleSliceSize : requestedSlice;
 
-      const ranked = rankPanels(questions, policy.importanceWeights, Date.now());
+      // ASKS FIRST, then the rest in their own importance order. The slice was cut
+      // before the rail folded the rows nobody can act on, so on one node 30 of 50
+      // slots went to rows the browser then hid (no reader, notices, malformed,
+      // since: gap closed) while 93 rows were not served at all.
+      const scored = rankPanels(questions, policy.importanceWeights, Date.now());
+      const asks = new Set(questions.filter((q) => classifyQuestion(q) === "ask").map((q) => q.id));
+      const ranked = [...scored.filter((x) => asks.has(x.panel.id)), ...scored.filter((x) => !asks.has(x.panel.id))];
       const shown = sliceSize === null ? ranked : ranked.slice(0, sliceSize);
       const byId = new Map(questions.map((q) => [q.id, q]));
       const sliced = shown.flatMap((scored, index) => {

@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Question } from "../ui/src/api/participation";
 import { bodyLead, classifyQuestion } from "../ui/src/lib/questionClass";
-import { gapTitle, groupQuestions, questionRowSubject, questionSubject, waitingCount } from "../ui/src/state/questions";
+import { contentOf, gapTitle, groupQuestions, questionRowSubject, questionSubject, waitingCount } from "../ui/src/state/questions";
 
 function q(id: string, kind: string, body: unknown, extra: Partial<Question> = {}): Question {
   return { id, revision: 1, title: "t", body, createdAt: 0, updatedAt: 0, responses: [], answered: false, declined: false, kind, ...extra };
@@ -62,6 +62,19 @@ describe("the rail", () => {
   test("must-fail: only open asks count as waiting", () => {
     expect(waitingCount(all)).toBe(3);
     expect(waitingCount([...all, { ...escalation, id: "needs-human-x", answered: true }])).toBe(3);
+  });
+
+  test("must-fail: a question whose gap has closed is folded under Gap closed and not counted as waiting", () => {
+    const settled = { ...escalation, id: "needs-human-closed-gap", gapStatus: "closed" };
+    expect(waitingCount([...all, settled])).toBe(3);
+    const groups = groupQuestions([...all, settled]);
+    expect(groups.find((g) => g.label === "Gap closed")?.questions.map((x) => x.id)).toEqual(["needs-human-closed-gap"]);
+    expect(groups.find((g) => g.label === "Gap closed")?.folded).toBe(true);
+  });
+
+  test("a gap first read as open is not a change to offer; a gap that closed is", () => {
+    expect(contentOf([{ ...escalation, gapStatus: "open" }])).toBe(contentOf([escalation]));
+    expect(contentOf([{ ...escalation, gapStatus: "closed" }])).not.toBe(contentOf([escalation]));
   });
 });
 

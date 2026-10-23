@@ -1458,16 +1458,10 @@ proxyRouter.get("/api/gaps", async (c) => {
  * one code path, one place for the gap-filing side effect to live.
  */
 /**
- * One gap by id, from whichever vessel serves `substrateGap`.
- *
- * The question view reads the escalated gap back after a person answers, so the
- * card can say whether the answer was applied (`human_disposition_record_id`
- * equals the answer's response id), replaced by a later one, or not yet applied.
+ * One gap by id, from whichever vessel serves `substrateGap`: `{found, gap}`,
+ * or null when no vessel serving it answered.
  */
-proxyRouter.get("/api/gaps/:id", async (c) => {
-  const id = c.req.param("id");
-  const origin = c.req.header("Origin");
-  if (!id || id.length > 300) return c.json({ error: "gap id required" }, 400, corsHeaders(origin));
+export async function readGapById(id: string): Promise<{ found: boolean; gap: unknown } | null> {
   const body = JSON.stringify({ impulse: { pointer: { type: "substrateGap", id, limit: 1 } } });
   const ask = async (base: string): Promise<{ found: boolean; gap: unknown } | null> => {
     try {
@@ -1496,11 +1490,74 @@ proxyRouter.get("/api/gaps/:id", async (c) => {
   ];
   for (const base of bases) {
     const answer = await ask(base);
-    if (answer) {
-      return answer.found
-        ? c.json({ gap: answer.gap }, 200, corsHeaders(origin))
-        : c.json({ gap: null, error: "no gap with that id" }, 404, corsHeaders(origin));
+    if (answer) return answer;
+  }
+  return null;
+}
+
+/**
+ * The status of the gaps questions ask about, read in the background.
+ *
+ * The questions read marks a question whose gap has closed so the rail does not
+ * present it as waiting (14 of 20 escalations on one node were about closed
+ * gaps). The gap store answers one id per read, so statuses are cached here and
+ * refreshed off the request path: the questions read never waits on it, and a
+ * status not yet read is unknown, never "closed".
+ */
+const GAP_STATUS_TTL_MS = 10 * 60_000;
+const GAP_STATUS_CONCURRENCY = 4;
+const GAP_STATUS_MAX_PER_READ = 60;
+const gapStatuses = new Map<string, { status: string | null; at: number }>();
+const gapStatusInFlight = new Set<string>();
+
+/** The cached status of a gap, or null when it has not been read (or was not found). */
+export function knownGapStatus(id: string): string | null {
+  return gapStatuses.get(id)?.status ?? null;
+}
+
+/** Read the statuses of these gaps that are not cached or are stale. Never throws; resolves when done. */
+export async function refreshGapStatuses(ids: readonly string[]): Promise<void> {
+  const now = Date.now();
+  const due = [...new Set(ids)]
+    .filter((id) => !gapStatusInFlight.has(id) && now - (gapStatuses.get(id)?.at ?? 0) > GAP_STATUS_TTL_MS)
+    .slice(0, GAP_STATUS_MAX_PER_READ);
+  for (const id of due) gapStatusInFlight.add(id);
+  const queue = [...due];
+  const worker = async (): Promise<void> => {
+    for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+      try {
+        const answer = await readGapById(id);
+        // No vessel answered: leave it unknown and try again on a later read.
+        if (answer) {
+          const status = answer.found ? (answer.gap as { status?: unknown } | null)?.status : null;
+          gapStatuses.set(id, { status: typeof status === "string" ? status : null, at: Date.now() });
+        }
+      } finally {
+        gapStatusInFlight.delete(id);
+      }
     }
+  };
+  await Promise.all(Array.from({ length: Math.min(GAP_STATUS_CONCURRENCY, due.length) }, worker));
+}
+
+/**
+ * One gap by id, from whichever vessel serves `substrateGap`.
+ *
+ * The question view reads the escalated gap back after a person answers, so the
+ * card can say whether the answer was applied (`human_disposition_record_id`
+ * equals the answer's response id), replaced by a later one, or not yet applied.
+ */
+proxyRouter.get("/api/gaps/:id", async (c) => {
+  const id = c.req.param("id");
+  const origin = c.req.header("Origin");
+  if (!id || id.length > 300) return c.json({ error: "gap id required" }, 400, corsHeaders(origin));
+  const answer = await readGapById(id);
+  if (answer) {
+    const status = answer.found ? (answer.gap as { status?: unknown } | null)?.status : null;
+    gapStatuses.set(id, { status: typeof status === "string" ? status : null, at: Date.now() });
+    return answer.found
+      ? c.json({ gap: answer.gap }, 200, corsHeaders(origin))
+      : c.json({ gap: null, error: "no gap with that id" }, 404, corsHeaders(origin));
   }
   return c.json({ gap: null, error: "no vessel serving substrateGap answered" }, 502, corsHeaders(origin));
 });

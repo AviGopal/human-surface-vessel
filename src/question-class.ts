@@ -21,6 +21,8 @@ export interface ClassifiableQuestion {
   readonly body: unknown;
   readonly asks?: readonly unknown[];
   readonly run?: { readonly linked?: boolean };
+  /** The status of the gap the question is about, when the gap store has said; absent or null when not known. */
+  readonly gapStatus?: string | null;
 }
 
 /** Which reader, if any, consumes answers to this panel. Keyed on the panel id prefix the writers use. */
@@ -34,12 +36,23 @@ export function answerReaderFor(panelId: string): AnswerReader {
   return "unknown";
 }
 
+/** The prefixes gap askers write panel ids with; the rest of the id is the gap's. Longest first. */
+const GAP_PANEL_PREFIXES = ["reland-needs-human-", "needs-human-", "pending-verify-", "needs-localization-"] as const;
+
+/** The gap a panel asks about, read off its writer's id prefix; null for a panel that names none. */
+export function gapIdForPanel(panelId: string): string | null {
+  for (const prefix of GAP_PANEL_PREFIXES) {
+    if (panelId.startsWith(prefix)) return panelId.length > prefix.length ? panelId.slice(prefix.length) : null;
+  }
+  return null;
+}
+
 /** Kinds whose answers are stored but read by nothing on this surface's path. */
 export function answersAreUnread(reader: AnswerReader): boolean {
   return reader === "pending_verification" || reader === "localization" || reader === "docs_decision";
 }
 
-export type QuestionClass = "ask" | "notice" | "unread" | "malformed";
+export type QuestionClass = "ask" | "notice" | "settled" | "unread" | "malformed";
 
 const UNRENDERED = /\{\{[^}]*\}\}/;
 
@@ -61,6 +74,8 @@ export function malformedReason(question: ClassifiableQuestion): "unrendered_tem
 export function classifyQuestion(question: ClassifiableQuestion): QuestionClass {
   if (malformedReason(question) !== null) return "malformed";
   if (question.kind === "notice") return "notice";
+  // The gap it asks about has closed: an answer would decide nothing. Unknown is not closed.
+  if (typeof question.gapStatus === "string" && question.gapStatus !== "open") return "settled";
   if (answersAreUnread(answerReaderFor(question.id))) return "unread";
   return "ask";
 }
@@ -68,6 +83,7 @@ export function classifyQuestion(question: ClassifiableQuestion): QuestionClass 
 /** The folded groups, in the order they follow the asks. */
 export const FOLDED: readonly { cls: Exclude<QuestionClass, "ask">; label: string }[] = [
   { cls: "notice", label: "Notices" },
+  { cls: "settled", label: "Gap closed" },
   { cls: "unread", label: "No reader" },
   { cls: "malformed", label: "Malformed" },
 ];

@@ -94,7 +94,7 @@ export function EscalationOutcome({ gapId, response }: { gapId: string; response
   }
   return (
     <p className="sf-outcome-strip" data-outcome="waiting">
-      … Sent — not applied yet. The applier runs periodically (it has taken up to half an hour); this updates when it does.
+      … Sent — not applied yet. No scheduled reader is known for this answer; this updates if one applies it.
     </p>
   );
 }

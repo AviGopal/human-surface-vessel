@@ -62,9 +62,10 @@ export function kindLabel(kind: string | undefined): string {
 /**
  * Rank and `because` are recomputed on every read and move as a consequence of
  * the reader's own answer, and order is not content — so neither may trigger
- * "updates available".
+ * "updates available". A gap status first read as "open" says nothing new
+ * either; a gap that closes does.
  */
-function contentOf(questions: readonly Question[]): string {
+export function contentOf(questions: readonly Question[]): string {
   return JSON.stringify(
     [...questions]
       .sort((a, b) => a.id.localeCompare(b.id))
@@ -72,6 +73,7 @@ function contentOf(questions: readonly Question[]): string {
         const copy: Record<string, unknown> = { ...question };
         delete copy["rank"];
         delete copy["because"];
+        if (copy["gapStatus"] === "open") delete copy["gapStatus"];
         return copy;
       }),
   );

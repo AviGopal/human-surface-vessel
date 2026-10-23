@@ -38,6 +38,8 @@ export interface Question {
   because?: string[];
   /** What kind of solicitation this is (e.g. `gap_needs_human`); the ranker weights by it. */
   kind?: string;
+  /** The status of the gap it asks about, as the server last read it; absent when not known. */
+  gapStatus?: string;
   /** Set when a run asked this question; `linked` only after the server read the run back. */
   run?: {
     dispatchId: string | null;
