@@ -73,6 +73,9 @@ export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string; re
   { route: "/api/surface-intent" },
   // ui/src/api/client.ts:154 (ask a goal)
   { route: "/api/run-goal" },
+  // ui/src/api/session.ts (a person signing in and out; the credential goes to identity, never to a store)
+  { route: "/api/session/login" },
+  { route: "/api/session/logout" },
   // ui/src/api/client.ts:188 resolveShape, these WRITES only. They forward to goal-host and
   // answer, extend or inject into a RUNNING walk, any walk, autonomous ones included:
   // solicitationResponse_write (:243), solicitationHeartbeat_write (:252), poolImpulse_write

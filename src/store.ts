@@ -170,7 +170,9 @@ export type ObservationType =
    * words, or "unreachable"), `body.upstream`. The verdict is kept either way;
    * this says whether the corpus took it, so "not recorded" outlives a reload.
    */
-  | "verdict_delivery";
+  | "verdict_delivery"
+  /** A person signed in or out on this surface: the user id only, never a credential. */
+  | "person_session";
 
 /**
  * The four states a SHOWN solicitation can end in, kept distinct here because

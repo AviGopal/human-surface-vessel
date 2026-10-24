@@ -231,6 +231,8 @@ export interface KeptVerdict {
   readonly source: string;
   readonly judge_reached: boolean | null;
   readonly about?: Readonly<Record<string, string>> | null;
+  /** The signed-in person who gave it, when one was; absent or null for a verdict given signed out. */
+  readonly by?: { readonly user_id: string; readonly name: string | null } | null;
   readonly observedAt: number;
   /** What upstream answered when this verdict was forwarded, kept beside it; absent when no answer was kept. */
   readonly delivery?: { readonly recorded: boolean; readonly status: number | null; readonly reason: string | null };

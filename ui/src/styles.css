@@ -2025,3 +2025,10 @@ body { overflow: hidden; }
 .sf-gap-attempts { margin: 0; padding: var(--sf-space-1) var(--sf-space-4) var(--sf-space-2) var(--sf-space-6); font-size: var(--sf-text-xs); display: grid; gap: 2px; }
 .sf-gap-attempts li[data-landed="true"] { color: var(--sf-reached); }
 .sf-gap-when { font-family: var(--sf-font-mono); color: var(--sf-ink-3); margin-right: var(--sf-space-2); }
+
+/* A person signed in on this surface: who, until when, and the two-field form when signed out. */
+.sf-signin { position: relative; display: inline-flex; align-items: center; gap: var(--sf-space-2); }
+.sf-signin-who { font-size: var(--sf-text-sm); color: var(--sf-ink-2); white-space: nowrap; }
+.sf-signin-form { position: absolute; top: calc(100% + var(--sf-space-1)); right: 0; z-index: 20; display: grid; gap: var(--sf-space-2); min-width: 16rem; padding: var(--sf-space-3); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-md); box-shadow: 0 4px 16px rgb(0 0 0 / 0.08); }
+.sf-signin-form input { font: inherit; padding: var(--sf-space-1) var(--sf-space-2); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); }
+.sf-signin-error { margin: 0; font-size: var(--sf-text-sm); color: var(--sf-not-reached); }

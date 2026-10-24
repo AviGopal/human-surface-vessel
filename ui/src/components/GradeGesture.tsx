@@ -124,7 +124,7 @@ function KeptVerdicts({ kept, judgeReached }: { kept: readonly KeptVerdict[]; ju
         const agree = judgeReached === null ? null : (v.verdict === "achieved") === judgeReached;
         return (
           <li key={`${v.observedAt}:${v.verdict}`} data-agree={agree === null ? "unknown" : String(agree)}>
-            <span className="sf-kept-who">{v.source === "person" ? "You" : v.source}</span>: {said}
+            <span className="sf-kept-who">{v.source === "person" ? (v.by?.name ?? "You") : v.source}</span>: {said}
             {v.note ? <span className="sf-muted"> · {v.note}</span> : null}
             {agree === false ? <span className="sf-kept-disagree"> · the judge said {judgeReached ? "reached" : "not reached"}</span> : null}
             {v.delivery && !v.delivery.recorded ? (

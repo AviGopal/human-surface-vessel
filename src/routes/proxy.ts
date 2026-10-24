@@ -32,6 +32,7 @@ import { admitCaller, admittedCaller, carry, requireCaller, type Caller } from "
 import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, verdictDelivery, writeRenderPolicy } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
+import { closeSession, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, viewOf } from "../person-session.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
@@ -639,6 +640,8 @@ interface PassthroughOpts {
   origin: string | undefined;
   /** Called when the upstream could not be reached at all (not on an upstream error status). */
   onUnreachable?: () => void;
+  /** Sent instead of this vessel's own key: a person's on-behalf-of token for one write. */
+  authorization?: string;
 }
 
 /**
@@ -651,7 +654,7 @@ async function passthrough(opts: PassthroughOpts): Promise<Response> {
   try {
     upstream = await fetch(url, {
       method,
-      headers: upstreamHeaders(method === "POST"),
+      headers: opts.authorization ? { ...upstreamHeaders(method === "POST"), Authorization: opts.authorization } : upstreamHeaders(method === "POST"),
       ...(method === "POST" ? { body: rawBody ?? "{}" } : {}),
     });
   } catch (err) {
@@ -1159,6 +1162,7 @@ proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve
  */
 proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
+  const person = sessionOf(c.req.header("Cookie"));
   if (!body || typeof body["execution_id"] !== "string" || typeof body["verdict"] !== "string") {
     return c.json(
       { error: "execution_id and verdict are required" },
@@ -1182,16 +1186,27 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
       judge_reached: typeof body["judge_reached"] === "boolean" ? body["judge_reached"] : null,
       source: "person",
       via: "human-surface",
+      // Who, when a person was signed in: the id identity gave them, never the token.
+      by: person ? { user_id: person.userId, name: person.name } : null,
       // Which result was judged and where it came from, so a grade confirms or puts
       // in question that result and its provenance (user ruling 10-17).
       about: aboutOf(body["about"]),
     },
   });
   let unreachable = false;
-  const upstream = await passthrough({
-    url: `${ACTIVITY_API_ENDPOINT}/v2/impulses/resolve`,
-    method: "POST",
-    rawBody: JSON.stringify({
+  // Signed in: the write goes to the producer the registry names, as the person, with a
+  // token minted for that producer's node and this one shape. Signed out: as before,
+  // under this vessel's own key, which the label writer refuses for a human verdict.
+  const asPerson = person
+    ? await (async (): Promise<{ url: string; authorization: string } | Response> => {
+        const { available, producer } = await signInAvailable();
+        if (!available || !producer) return c.json({ success: false, error: "sign-in isn't available on this node" }, 503);
+        const minted = await mintLabelToken(person, producer.node);
+        if (!minted.ok) return c.json({ success: false, error: minted.error }, minted.status >= 400 ? (minted.status as 400) : 502);
+        return { url: producer.url, authorization: `Bearer ${minted.token}` };
+      })()
+    : null;
+  const labelBody = JSON.stringify({
       impulse: {
         pointer: {
           type: "goal_verification_label_write",
@@ -1213,10 +1228,18 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
           labeler: "human",
         },
       },
-    }),
-    origin: c.req.header("Origin"),
-    onUnreachable: () => (unreachable = true),
-  });
+    });
+  const upstream =
+    asPerson instanceof Response
+      ? asPerson
+      : await passthrough({
+          url: asPerson ? asPerson.url : `${ACTIVITY_API_ENDPOINT}/v2/impulses/resolve`,
+          method: "POST",
+          rawBody: labelBody,
+          origin: c.req.header("Origin"),
+          onUnreachable: () => (unreachable = true),
+          ...(asPerson ? { authorization: asPerson.authorization } : {}),
+        });
   // What upstream answered, kept beside the verdict in its own words, so a
   // refusal reads as "not recorded" after a reload. Observation only: nothing
   // retries the write.
@@ -1241,9 +1264,50 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
       recorded,
       reason: unreachable ? "unreachable" : recorded ? null : (said ?? `HTTP ${upstream.status}`).slice(0, 300),
       upstream: "activity-api",
+      // Whose credential the write carried: a signed-in person's, or this vessel's own.
+      as: person ? "person" : "surface",
     },
   });
   return upstream;
+});
+
+// ─── a person signed in on this surface (src/person-session.ts) ──────────────
+
+/** Whether sign-in is offered here, and who is signed in. Never the token. */
+proxyRouter.get("/api/session", async (c) => {
+  const person = sessionOf(c.req.header("Cookie"));
+  const { available } = await signInAvailable();
+  return c.json({ available, signedIn: person !== null, ...(person ? { person: viewOf(person) } : {}) }, 200);
+});
+
+/**
+ * Sign in: the email and password go to identity once and are not kept. The
+ * session token stays in this process; the browser gets a random id in an
+ * HttpOnly, SameSite=Strict cookie and what it may show (name, until when).
+ */
+proxyRouter.post("/api/session/login", requireCaller("/api/session/login"), async (c) => {
+  const { available } = await signInAvailable();
+  if (!available) return c.json({ error: "sign-in isn't available on this node" }, 503);
+  if (!loginAllowed()) return c.json({ error: "too many attempts; try again in a minute" }, 429);
+  const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
+  const email = typeof body?.["email"] === "string" ? body["email"].trim() : "";
+  const password = typeof body?.["password"] === "string" ? body["password"] : "";
+  if (!email || !password || email.length > 320 || password.length > 1024) return c.json({ error: "email and password are required" }, 400);
+  const result = await loginAtIdentity(email, password);
+  if (!result.ok) {
+    if (result.status === 401) noteLoginFailure();
+    return c.json({ error: result.error }, result.status as 401);
+  }
+  const { cookie } = openSession(result.session);
+  recordObservation({ type: "person_session", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { event: "signed_in", user_id: result.session.userId } });
+  return c.json({ signedIn: true, person: viewOf(result.session) }, 200, { "Set-Cookie": cookie });
+});
+
+proxyRouter.post("/api/session/logout", requireCaller("/api/session/logout"), (c) => {
+  const person = sessionOf(c.req.header("Cookie"));
+  const cleared = closeSession(c.req.header("Cookie"));
+  if (person) recordObservation({ type: "person_session", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { event: "signed_out", user_id: person.userId } });
+  return c.json({ signedIn: false }, 200, { "Set-Cookie": cleared });
 });
 
 // ─── a page drawn in a frame (src/page-frame.ts) ─────────────────────────────

@@ -23,6 +23,8 @@ import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { answerRunQuestion } from "./RunQuestion";
 import { StarterChips } from "./StarterChips";
+import { SignIn } from "./SignIn";
+import { useSession } from "../api/session";
 
 const MAX_BOX_LINES = 8;
 
@@ -154,6 +156,9 @@ export function TopBar({
       injectContext(injectPayload({ dispatchId: args.dispatchId, shape: args.shape, content: args.text })),
   });
   const grade = useSubmitGrade();
+  const session = useSession().data;
+  // A verdict given while signed out, where sign-in is offered: recorded as the person's once they sign in.
+  const [pendingVerdict, setPendingVerdict] = useState<Parameters<typeof grade.mutate>[0] | null>(null);
   const queryClient = useQueryClient();
   // A complaint (16f-3): the same human_reported gap the form filed, about what is on screen.
   const complain = useMutation({
@@ -282,14 +287,17 @@ export function TopBar({
     if (context.outcome && verdict) {
       const o = context.outcome;
       const said = verdict === "achieved" ? "reached" : "not reached";
+      const submission = { executionId: o.executionId, goal: o.goal, verdict, notes: text, dispatchId: o.dispatchId, judgeReached: o.judgeReached };
+      const signedOut = session?.available === true && !session.signedIn;
       const settle = (corpus: boolean): void => {
-        setEcho(`Read as your verdict on this run: ${said} · kept on the run${corpus ? "" : "; the learning corpus didn't take it yet"}`);
+        if (!corpus && signedOut) setPendingVerdict(submission);
+        setEcho(
+          `Read as your verdict on this run: ${said} · ` +
+            (corpus ? (session?.signedIn ? "recorded as yours" : "kept on the run") : signedOut ? "kept on the run; sign in to record it as yours" : "kept on the run; the learning corpus didn't take it yet"),
+        );
         cleared();
       };
-      grade.mutate(
-        { executionId: o.executionId, goal: o.goal, verdict, notes: text, dispatchId: o.dispatchId, judgeReached: o.judgeReached },
-        { onSuccess: () => settle(true), onError: () => settle(false) },
-      );
+      grade.mutate(submission, { onSuccess: () => settle(true), onError: () => settle(false) });
       return;
     }
     dispatch.mutate(
@@ -386,6 +394,17 @@ export function TopBar({
           <span className="sf-live-dot" data-paused={paused} aria-hidden="true" />
           {paused ? "Paused" : "Live"}
         </button>
+        <SignIn
+          onSignedIn={() => {
+            if (!pendingVerdict) return;
+            const said = pendingVerdict.verdict === "achieved" ? "reached" : "not reached";
+            grade.mutate(pendingVerdict, {
+              onSuccess: () => setEcho(`Your verdict on that run: ${said} · recorded as yours`),
+              onError: (e) => setEcho(`Your verdict on that run: ${said} · kept on the run; not recorded: ${(e as Error).message}`),
+            });
+            setPendingVerdict(null);
+          }}
+        />
         <button
           type="button"
           className="sf-button sf-button-quiet"
