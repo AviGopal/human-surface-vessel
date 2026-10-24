@@ -50,10 +50,12 @@ function CreditBadge({ row }: { row: CreditRow | null }): ReactNode {
 
 /** The step a person's answer drove on this run, for the provenance mark. */
 const PersonStep = createContext<string | null>(null);
+/** The run these nodes belong to: where a cut output's whole is read from. */
+const RunId = createContext<string | null>(null);
 
 function NodeContent({ n, density, credit }: { n: ChainNode; density: "full" | "inline"; credit: RunCredit | null }): ReactNode {
   const personStep = useContext(PersonStep);
-  const content = fromProvenance(n.raw);
+  const content = fromProvenance(n.raw, null, null, useContext(RunId));
   if (!content) return null;
   return (
     <Rendered
@@ -141,7 +143,7 @@ function hostOf(url: string): string {
 
 /** A collapsed input: one line until opened. */
 function InputRow({ n, chains, depth, seen, credit, failure = null }: { n: ChainNode; chains: RunChains; depth: number; seen: ReadonlySet<string>; credit: RunCredit | null; failure?: { cause: "failed" | "rejected"; text: string | null } | null }): ReactNode {
-  const content = fromProvenance(n.raw);
+  const content = fromProvenance(n.raw, null, null, useContext(RunId));
   const producer = producerLabel(n);
   return (
     <li className="sf-chain-input">
@@ -294,6 +296,7 @@ export function Chain({
   // content to read still leads open, by its planned form. Never in the blind
   // view, where the layout must not carry the verdict.
   return (
+    <RunId.Provider value={walk.dispatchId}>
     <PersonStep.Provider value={personStep}>
     <section className="sf-view-section sf-chain" aria-label="Outputs">
       <h3 className="sf-view-label">Outputs</h3>
@@ -377,5 +380,6 @@ export function Chain({
       <RouteArounds items={routes} />
     </section>
     </PersonStep.Provider>
+    </RunId.Provider>
   );
 }

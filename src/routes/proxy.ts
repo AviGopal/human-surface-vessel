@@ -926,6 +926,23 @@ async function backfillOwnDispatches(): Promise<void> {
   }
 }
 
+/**
+ * One output of a run, whole (goal-host's goalWalkOutput, capped there), for a
+ * signed-in person only. The surface forwards under its own key, so an open read
+ * would hand anyone who can reach this page every run's full output and undo
+ * goal-host's key gate (qa ruling, 10-24). The 2,000-character preview in the
+ * run's state stays readable as before.
+ */
+proxyRouter.get("/api/walk-output", async (c) => {
+  if (!sessionOf(c.req.header("Cookie"))) return c.json({ error: "sign in to read full outputs" }, 401);
+  const dispatchId = c.req.query("dispatch_id") ?? "";
+  const impulseId = c.req.query("impulse_id") ?? "";
+  const ok = (v: string) => v.length > 0 && v.length <= 200 && /^[\w.:@-]+$/.test(v);
+  if (!ok(dispatchId) || !ok(impulseId)) return c.json({ error: "dispatch_id and impulse_id are required" }, 400);
+  const cand = await resolveGoalHostEndpoint();
+  return resolveThrough(cand, JSON.stringify({ type: "goalWalkOutput", dispatchId, impulseId }), c.req.header("Origin"), unwrapFederated);
+});
+
 proxyRouter.post("/api/resolve", async (c) => {
   const raw = await rawBodyOf(c);
   const type = resolveTypeOf(raw);

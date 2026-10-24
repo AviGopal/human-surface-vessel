@@ -16,6 +16,9 @@
 import { sendObservation } from "../api/exposure";
 import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { useRenderPolicy } from "../api/queries";
+import { useQuery } from "@tanstack/react-query";
+import { fetchWalkOutput } from "../api/client";
+import { useSession } from "../api/session";
 import { contentText, type Content } from "../lib/content";
 import { CUT_KEY, findMarkup, planContent, type RenderPlan } from "../lib/ledger";
 import { formatChars } from "../lib/time";
@@ -145,6 +148,30 @@ export function Rendered({
 }): ReactNode {
   const { paused, intervalMs } = useLiveControls();
   const policy = useRenderPolicy({ enabled: !paused, intervalMs }).data;
+  // A cut output whose whole can be read: at once for a page (the person asked to see
+  // the page), on "Show all" for anything else. Until it arrives, or if it can't be read,
+  // the preview is drawn and marked as cut.
+  const [askedAll, setAskedAll] = useState(false);
+  // Read only for a signed-in person (qa ruling 10-24); anyone else keeps the marked preview.
+  const signedIn = useSession().data?.signedIn === true;
+  const whole = content.state === "truncated" && signedIn ? content.whole : undefined;
+  const wantWhole = whole !== undefined && (askedAll || planFor(content, policy).form === "page");
+  const read = useQuery({
+    queryKey: ["walkOutput", whole?.dispatchId, whole?.impulseId],
+    queryFn: () => fetchWalkOutput(whole!.dispatchId, whole!.impulseId),
+    enabled: wantWhole,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const full = read.data;
+  if (full && typeof full.content === "string" && full.content.length > 0) {
+    content = {
+      ...content,
+      body: full.content,
+      state: full.truncated ? "truncated" : "full",
+      size: { shown: full.content.length, total: typeof full.chars === "number" ? full.chars : full.content.length },
+    };
+  }
   const text = contentText(content);
   const truncated = content.state === "truncated";
   const [chosen, setChosen] = useState<string | null>(null);
@@ -201,6 +228,11 @@ export function Rendered({
           {extraHeader}
           <span className="sf-rendered-head-right">
             {completeness(content)}
+            {content.state === "truncated" && whole !== undefined && !read.isError ? (
+              <button type="button" className="sf-link-button" disabled={read.isFetching} onClick={() => setAskedAll(true)}>
+                Show all
+              </button>
+            ) : null}
             {density === "full" && plan.text.trim().length > 0 && plan.form !== "scalar" ? (
               <CopyButton text={plan.text} what={content.shape} />
             ) : null}

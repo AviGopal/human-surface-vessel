@@ -51,6 +51,12 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.endsWith("/v1/auth/on-behalf-of")) {
     return Response.json({ success: true, data: { token: OBO_TOKEN, expires_at: new Date(Date.now() + 60_000).toISOString() } });
   }
+  if (url.endsWith("/resolve") && body["type"] === "goalWalkOutput") {
+    return Response.json({ resolved: true, shape: "goalWalkOutput", body: { dispatchId: body["dispatchId"], impulseId: body["impulseId"], contentType: "text", content: "the whole output", chars: 16, truncated: false } });
+  }
+  if (url.endsWith("/resolve") && body["type"] === "goalWalkState") {
+    return Response.json({ resolved: true, shape: "goalWalkState", body: { dispatchId: body["dispatchId"], poolProvenance: [] } });
+  }
   if (url.endsWith("/resolve") && (body["pointer"] as Row | undefined)?.["type"] === "vesselRegistry") {
     return Response.json({ content: { vessels: registry, totalCount: registry.length } });
   }
@@ -191,6 +197,25 @@ describe("a person signed in on the surface", () => {
     const keyedLogout = await app.request(at("/api/session/logout"), { method: "POST", headers: { ...testAuth(), Cookie: cookie } });
     expect(keyedLogout.status).toBe(403);
     expect(await (await get("/api/session", cookie)).json()).toMatchObject({ signedIn: true });
+  });
+
+  test("must-fail: a run's whole output is read only for a signed-in person; the preview read is unchanged", async () => {
+    const path = "/api/walk-output?dispatch_id=d-1&impulse_id=imp-1";
+    const none = await get(path);
+    expect(none.status).toBe(401);
+    expect(((await none.json()) as Row)["error"]).toBe("sign in to read full outputs");
+    expect(calls.some((c) => c.body["type"] === "goalWalkOutput")).toBe(false);
+    const { cookie } = await signIn();
+    const read = await get(path, cookie);
+    expect(read.status).toBe(200);
+    expect(((await read.json()) as { body: Row }).body["content"]).toBe("the whole output");
+    expect(calls.find((c) => c.body["type"] === "goalWalkOutput")?.body).toEqual({ type: "goalWalkOutput", dispatchId: "d-1", impulseId: "imp-1" });
+    const { cookie: stale } = openSession({ token: "t", userId: "user:old", orgId: null, email: null, name: null, expiresAt: Date.now() - 1 });
+    expect((await get(path, stale.split(";")[0])).status).toBe(401);
+    // Control: the run's state (with its previews) still reads keyless from the page, signed in or not,
+    // and the whole output is not reachable through the general resolve route.
+    expect((await post("/api/resolve", { type: "goalWalkState", dispatchId: "d-1" })).status).toBe(200);
+    expect((await post("/api/resolve", { type: "goalWalkOutput", dispatchId: "d-1", impulseId: "imp-1" }, cookie)).status).toBe(403);
   });
 
   test("a wrong password sets no cookie, and repeated failures are refused for a while", async () => {

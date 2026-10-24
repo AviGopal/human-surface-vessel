@@ -27,6 +27,8 @@ export interface Content {
     readonly source?: string | null;
     readonly at?: number | null;
   };
+  /** Where the whole of a cut output can be read (goal-host's goalWalkOutput): its run and pool id. */
+  readonly whole?: { readonly dispatchId: string; readonly impulseId: string };
 }
 
 /** The text the planner reads. A parsed value is serialized once, compactly. */
@@ -40,12 +42,16 @@ export function contentText(c: Content): string {
   }
 }
 
-/** A pool impulse's provenance entry (a trace row). */
-export function fromProvenance(raw: RawProvenance, source?: string | null, at?: number | null): Content | null {
+/**
+ * A pool impulse's provenance entry (a trace row). With the run's id, a cut one
+ * carries where its whole can be read.
+ */
+export function fromProvenance(raw: RawProvenance, source?: string | null, at?: number | null, dispatchId?: string | null): Content | null {
   const e = normalizeProvenance(raw);
   if (!e) return null;
   const provenance = { producedBy: e.producedBy, source: source ?? null, at: at ?? null };
   if (e.kind === "empty") return { shape: e.shape, origin: "impulse", body: "", state: "absent", provenance };
+  const impulseId = typeof raw.id === "string" && raw.id ? raw.id : null;
   return {
     shape: e.shape,
     origin: "impulse",
@@ -53,6 +59,7 @@ export function fromProvenance(raw: RawProvenance, source?: string | null, at?: 
     state: e.truncated ? "truncated" : "full",
     size: { shown: e.preview.length, total: e.chars },
     provenance,
+    ...(e.truncated && dispatchId && impulseId ? { whole: { dispatchId, impulseId } } : {}),
   };
 }
 

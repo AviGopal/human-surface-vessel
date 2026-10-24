@@ -202,6 +202,22 @@ export function fetchWalkState(dispatchId: string): Promise<GoalWalkState> {
   return resolveShape<GoalWalkState>({ type: "goalWalkState", dispatchId });
 }
 
+/** One output of a run, whole (up to goal-host's cap): goalWalkOutput by run and pool id. */
+export interface WalkOutput {
+  readonly content: string;
+  readonly chars: number;
+  readonly truncated: boolean;
+  readonly contentType?: "text" | "json" | null;
+}
+
+/** Read only for a signed-in person (server: /api/walk-output); anyone else keeps the preview. */
+export async function fetchWalkOutput(dispatchId: string, impulseId: string): Promise<WalkOutput> {
+  const res = await fetch(`/api/walk-output?dispatch_id=${encodeURIComponent(dispatchId)}&impulse_id=${encodeURIComponent(impulseId)}`, { credentials: "same-origin" });
+  const j = (await res.json().catch(() => null)) as null | { resolved?: boolean; body?: WalkOutput; error?: string };
+  if (!res.ok || j?.resolved !== true || !j.body) throw new Error(j?.error ?? `HTTP ${res.status}`);
+  return j.body;
+}
+
 export async function fetchActiveDispatches(): Promise<readonly ActiveDispatch[]> {
   const [body, mine] = await Promise.all([
     resolveShape<{ dispatches?: readonly ActiveDispatch[] }>({ type: "activeDispatches" }),
