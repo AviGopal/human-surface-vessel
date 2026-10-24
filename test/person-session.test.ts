@@ -9,7 +9,7 @@
  * activity-api goal-verification-label-write.ts isPersonSessionPrincipal).
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { restoreNativeGlobals } from "./setup.ts";
+import { restoreNativeGlobals, testAuth } from "./setup.ts";
 await restoreNativeGlobals();
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
@@ -161,6 +161,36 @@ describe("a person signed in on the surface", () => {
     expect(calls.some((c) => c.url.endsWith("/v1/auth/on-behalf-of") || c.url.endsWith("/v2/impulses/resolve"))).toBe(false);
     const [v] = await kept("d-relay");
     expect(v?.["delivery"]).toMatchObject({ recorded: false, reason: "sign-in isn't available on this node" });
+  });
+
+  test("must-fail: over TLS the session cookie is Secure, directly or behind a TLS proxy; over plain http it is not", async () => {
+    const tls = await app.request("https://127.0.0.1:8310/api/session/login", { method: "POST", headers: { "content-type": "application/json", Origin: "https://127.0.0.1:8310" }, body: JSON.stringify({ email: "alex@example.test", password: "correct horse" }) });
+    expect(tls.headers.get("Set-Cookie")).toMatch(/; Secure$/);
+    // X-Forwarded-Proto is believed from the local proxy (a loopback peer) and from nobody else.
+    const fromPeer = (address: string) => ({ requestIP: () => ({ address }) });
+    const login = { method: "POST", headers: { "content-type": "application/json", Origin: ORIGIN, "X-Forwarded-Proto": "https" }, body: JSON.stringify({ email: "alex@example.test", password: "correct horse" }) };
+    expect((await app.request(at("/api/session/login"), login, fromPeer("127.0.0.1"))).headers.get("Set-Cookie")).toMatch(/; Secure$/);
+    expect((await app.request(at("/api/session/login"), login, fromPeer("::1"))).headers.get("Set-Cookie")).toMatch(/; Secure$/);
+    expect((await app.request(at("/api/session/login"), login, fromPeer("203.0.113.9"))).headers.get("Set-Cookie")).not.toContain("Secure");
+    expect((await app.request(at("/api/session/login"), login)).headers.get("Set-Cookie")).not.toContain("Secure");
+    const plain = await signIn();
+    expect(plain.res.headers.get("Set-Cookie")).not.toContain("Secure");
+    const out = await app.request(at("/api/session/logout"), { method: "POST", headers: { Origin: ORIGIN, "X-Forwarded-Proto": "https", Cookie: plain.cookie } }, fromPeer("127.0.0.1"));
+    expect(out.headers.get("Set-Cookie")).toBe("sf_person=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Secure");
+  });
+
+  test("must-fail: sign-in is refused unless it comes from this surface's page, keyed or not", async () => {
+    const cross = await app.request(at("/api/session/login"), { method: "POST", headers: { "content-type": "application/json", Origin: "http://evil.example" }, body: JSON.stringify({ email: "alex@example.test", password: "correct horse" }) });
+    expect(cross.status).not.toBe(200);
+    expect(cross.headers.get("Set-Cookie")).toBeNull();
+    const keyedNoOrigin = await app.request(at("/api/session/login"), { method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify({ email: "alex@example.test", password: "correct horse" }) });
+    expect(keyedNoOrigin.status).toBe(403);
+    expect(keyedNoOrigin.headers.get("Set-Cookie")).toBeNull();
+    expect(calls.some((c) => c.url.endsWith("/v1/auth/login"))).toBe(false);
+    const { cookie } = await signIn();
+    const keyedLogout = await app.request(at("/api/session/logout"), { method: "POST", headers: { ...testAuth(), Cookie: cookie } });
+    expect(keyedLogout.status).toBe(403);
+    expect(await (await get("/api/session", cookie)).json()).toMatchObject({ signedIn: true });
   });
 
   test("a wrong password sets no cookie, and repeated failures are refused for a while", async () => {

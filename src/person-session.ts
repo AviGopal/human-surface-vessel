@@ -80,8 +80,28 @@ export function personCookieId(cookieHeader: string | undefined): string | null 
   return m?.[1] ?? null;
 }
 
+/**
+ * Whether the request reached this surface over TLS: directly (https), or through
+ * the local TLS proxy, which says so in X-Forwarded-Proto. That header is believed
+ * only from a loopback peer: any client can send it. The session cookie is then
+ * marked Secure, so its id never travels in clear.
+ */
+export function arrivedOverTls(requestUrl: string, forwardedProto: string | undefined, peer: string): boolean {
+  try {
+    if (new URL(requestUrl).protocol === "https:") return true;
+  } catch {
+    /* not a URL: not TLS */
+  }
+  return isLoopback(peer) && (forwardedProto ?? "").split(",")[0]?.trim().toLowerCase() === "https";
+}
+
+function isLoopback(address: string): boolean {
+  const a = address.trim().toLowerCase();
+  return a === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a) || /^::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a);
+}
+
 /** Hold a session; the cookie value and its Set-Cookie header. */
-export function openSession(s: PersonSession, now = Date.now()): { id: string; cookie: string } {
+export function openSession(s: PersonSession, now = Date.now(), secure = false): { id: string; cookie: string } {
   for (const [id, held] of sessions) if (held.expiresAt <= now) sessions.delete(id);
   while (sessions.size >= MAX_SESSIONS) {
     const oldest = sessions.keys().next().value;
@@ -91,14 +111,14 @@ export function openSession(s: PersonSession, now = Date.now()): { id: string; c
   const id = randomBytes(32).toString("hex");
   sessions.set(id, s);
   const maxAge = Math.max(0, Math.floor((s.expiresAt - now) / 1000));
-  return { id, cookie: `${PERSON_COOKIE}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}` };
+  return { id, cookie: `${PERSON_COOKIE}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure ? "; Secure" : ""}` };
 }
 
 /** End the session named by the cookie, if any; the Set-Cookie header that clears it. */
-export function closeSession(cookieHeader: string | undefined): string {
+export function closeSession(cookieHeader: string | undefined, secure = false): string {
   const id = personCookieId(cookieHeader);
   if (id) sessions.delete(id);
-  return `${PERSON_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
+  return `${PERSON_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? "; Secure" : ""}`;
 }
 
 /* ─── sign-in attempts ─────────────────────────────────────────────────────── */

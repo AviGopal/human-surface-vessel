@@ -160,7 +160,8 @@ function callerHint(c: Context, keyed: boolean, shape: string | undefined): stri
   return "keyed-unknown";
 }
 
-function remoteOf(c: Context): string {
+/** The connecting peer's address, as the server saw it; "unknown" when it can't say. */
+export function remoteOf(c: Context): string {
   const env = c.env as { requestIP?: (r: Request) => { address?: string } | null } | undefined;
   try {
     return env?.requestIP?.(c.req.raw)?.address || "unknown";

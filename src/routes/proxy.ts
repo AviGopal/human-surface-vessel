@@ -25,14 +25,14 @@
  *     never the sole path to a peer.
  */
 
-import { Hono, type MiddlewareHandler } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { joinGapThreads, type GapThread } from "../gap-threads.ts";
 import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
-import { admitCaller, admittedCaller, carry, requireCaller, type Caller } from "../inbound-auth.ts";
+import { admitCaller, admittedCaller, carry, remoteOf, requireCaller, type Caller } from "../inbound-auth.ts";
 import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, verdictDelivery, writeRenderPolicy } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
-import { closeSession, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, viewOf } from "../person-session.ts";
+import { arrivedOverTls, closeSession, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, viewOf } from "../person-session.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
@@ -1285,7 +1285,18 @@ proxyRouter.get("/api/session", async (c) => {
  * session token stays in this process; the browser gets a random id in an
  * HttpOnly, SameSite=Strict cookie and what it may show (name, until when).
  */
+/**
+ * Signing in and out are the page's own acts: a request that does not come from
+ * this surface's page (a cross-site form, or a caller with no Origin at all, keyed
+ * or not) is refused, so no other site can sign a browser in as someone else.
+ */
+function fromOwnPage(c: Context): boolean {
+  const origin = c.req.header("Origin");
+  return origin !== undefined && isOwnOrigin(origin, c.req.url);
+}
+
 proxyRouter.post("/api/session/login", requireCaller("/api/session/login"), async (c) => {
+  if (!fromOwnPage(c)) return c.json({ error: "sign-in is accepted only from this surface's page" }, 403);
   const { available } = await signInAvailable();
   if (!available) return c.json({ error: "sign-in isn't available on this node" }, 503);
   if (!loginAllowed()) return c.json({ error: "too many attempts; try again in a minute" }, 429);
@@ -1298,14 +1309,15 @@ proxyRouter.post("/api/session/login", requireCaller("/api/session/login"), asyn
     if (result.status === 401) noteLoginFailure();
     return c.json({ error: result.error }, result.status as 401);
   }
-  const { cookie } = openSession(result.session);
+  const { cookie } = openSession(result.session, Date.now(), arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c)));
   recordObservation({ type: "person_session", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { event: "signed_in", user_id: result.session.userId } });
   return c.json({ signedIn: true, person: viewOf(result.session) }, 200, { "Set-Cookie": cookie });
 });
 
 proxyRouter.post("/api/session/logout", requireCaller("/api/session/logout"), (c) => {
+  if (!fromOwnPage(c)) return c.json({ error: "sign-out is accepted only from this surface's page" }, 403);
   const person = sessionOf(c.req.header("Cookie"));
-  const cleared = closeSession(c.req.header("Cookie"));
+  const cleared = closeSession(c.req.header("Cookie"), arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c)));
   if (person) recordObservation({ type: "person_session", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { event: "signed_out", user_id: person.userId } });
   return c.json({ signedIn: false }, 200, { "Set-Cookie": cleared });
 });
