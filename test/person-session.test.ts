@@ -218,6 +218,24 @@ describe("a person signed in on the surface", () => {
     expect((await post("/api/resolve", { type: "goalWalkOutput", dispatchId: "d-1", impulseId: "imp-1" }, cookie)).status).toBe(403);
   });
 
+  test("must-fail: a page drawn while signed in loads only under that person's session", async () => {
+    const frame = `sf_frame=${"ab".repeat(16)}`;
+    const { cookie: alex } = await signIn();
+    const posted = await app.request(at("/api/page-frame"), { method: "POST", headers: { "content-type": "application/json", Origin: ORIGIN, Cookie: `${frame}; ${alex}` }, body: JSON.stringify({ source: "<p>hello</p>" }) });
+    expect(posted.status).toBe(200);
+    const { id } = (await posted.json()) as { id: string };
+    const load = (cookie: string) => app.request(at(`/api/page-frame/${id}`), { headers: { Cookie: cookie } });
+    expect((await load(`${frame}; ${alex}`)).status).toBe(200);
+    // Signed out, or someone else signed in, in the same browser: not theirs to load.
+    expect((await load(frame)).status).toBe(404);
+    const { cookie: other } = openSession({ token: "t2", userId: "user:sam", orgId: null, email: null, name: "Sam", expiresAt: Date.now() + 60_000 });
+    expect((await load(`${frame}; ${other.split(";")[0]}`)).status).toBe(404);
+    // A page drawn signed out stays the browser's, as before.
+    const anon = await app.request(at("/api/page-frame"), { method: "POST", headers: { "content-type": "application/json", Origin: ORIGIN, Cookie: frame }, body: JSON.stringify({ source: "<p>hi</p>" }) });
+    const anonId = ((await anon.json()) as { id: string }).id;
+    expect((await app.request(at(`/api/page-frame/${anonId}`), { headers: { Cookie: frame } })).status).toBe(200);
+  });
+
   test("a wrong password sets no cookie, and repeated failures are refused for a while", async () => {
     loginStatus = 401;
     for (let i = 0; i < 5; i++) {

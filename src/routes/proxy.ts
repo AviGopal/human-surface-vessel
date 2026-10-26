@@ -1350,8 +1350,20 @@ proxyRouter.post("/api/session/logout", requireCaller("/api/session/logout"), (c
  * the session that posted a page can load it. Cross-site writes are refused by
  * the app's origin guard before this runs.
  */
+/**
+ * Who owns a drawn page: the browser's frame session, and the signed-in person when
+ * there is one. A page drawn while signed in loads only under that person's session,
+ * so it does not outlive their sign-out or open in someone else's.
+ */
+function frameOwner(cookieHeader: string | undefined): string | null {
+  const frame = frameSessionOf(cookieHeader);
+  if (!frame) return null;
+  const person = sessionOf(cookieHeader);
+  return person ? `${frame}|${person.userId}` : frame;
+}
+
 proxyRouter.post("/api/page-frame", requireCaller("/api/page-frame"), async (c) => {
-  const session = frameSessionOf(c.req.header("Cookie"));
+  const session = frameOwner(c.req.header("Cookie"));
   if (!session) return c.json({ error: "no frame session" }, 401);
   const body = (await c.req.json().catch(() => null)) as null | { source?: unknown };
   if (typeof body?.source !== "string") return c.json({ error: "source required" }, 400);
@@ -1361,7 +1373,7 @@ proxyRouter.post("/api/page-frame", requireCaller("/api/page-frame"), async (c) 
 
 proxyRouter.get("/api/page-frame/:id", (c) => {
   const id = c.req.param("id");
-  const doc = /^[0-9a-f]{64}$/.test(id) ? readFrame(frameSessionOf(c.req.header("Cookie")), id) : null;
+  const doc = /^[0-9a-f]{64}$/.test(id) ? readFrame(frameOwner(c.req.header("Cookie")), id) : null;
   if (!doc) return c.json({ error: "not found" }, 404);
   return new Response(doc, {
     status: 200,
