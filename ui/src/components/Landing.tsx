@@ -59,6 +59,13 @@ export function stuckOn(threads: readonly GapThreadView[] | undefined): GapThrea
   return best;
 }
 
+/** A gap's summary up to its first parenthetical or sentence end: the gap, not its evidence. */
+export function stuckTitle(t: GapThreadView): string {
+  const s = (t.summary ?? t.gapId).trim();
+  const cut = s.search(/\s\(|\.\s/);
+  return cut > 0 ? s.slice(0, cut) : s;
+}
+
 export function Landing({
   view,
   ordered,
@@ -91,7 +98,7 @@ export function Landing({
             {items.map((q) => (
               <li key={q.id}>
                 <button type="button" className="sf-landing-row" onClick={() => onOpenQuestion(q.id)}>
-                  {questionRowSubject(q) || <span className="sf-muted">question text not recorded</span>}
+                  <span className="sf-landing-text">{questionRowSubject(q) || <span className="sf-muted">question text not recorded</span>}</span>
                 </button>
               </li>
             ))}
@@ -109,7 +116,7 @@ export function Landing({
               <li key={r.dispatchId}>
                 <button type="button" className="sf-landing-row" onClick={() => onOpenRun(r.dispatchId)}>
                   <StateBadge state={deriveRunState({ status: r.status, reached: r.reached, awaitingAnswer: false, hasProgress: true, quietForMs: null, acceptedForMs: null })} />
-                  <span>{r.goal ?? r.dispatchId}</span>
+                  <span className="sf-landing-text">{r.goal ?? r.dispatchId}</span>
                 </button>
               </li>
             ))}
@@ -127,7 +134,7 @@ export function Landing({
           <button type="button" className="sf-landing-health" onClick={onOpenSystem}>
             <span className="sf-landing-num">{reached} / {runs.length}</span>
             <span>reached</span>
-            {stuck ? <span className="sf-landing-stuck">stuck: {stuck.summary ?? stuck.gapId} · {stuck.attemptCount} attempts</span> : null}
+            {stuck ? <span className="sf-landing-stuck">stuck: {stuckTitle(stuck)} · {stuck.attemptCount} attempts</span> : null}
           </button>
         </section>,
       );

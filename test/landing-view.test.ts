@@ -36,7 +36,7 @@ const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
-const { Landing, landingBlocks } = await import("../ui/src/components/Landing");
+const { Landing, landingBlocks, stuckTitle } = await import("../ui/src/components/Landing");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
@@ -128,5 +128,12 @@ describe("the landing drawn from its view", () => {
     await act(async () => (el.querySelector("[data-block=health] button") as HTMLButtonElement).click());
     expect(calls).toEqual(["question:q1", "system"]);
     expect(posts.filter((u) => !u.includes("/api/resolve") && !u.includes("/api/observations"))).toEqual([]);
+  });
+
+  test("must-fail: what the system is stuck on reads as the gap, not its evidence", () => {
+    const t = { ...stuck[0]!, summary: "Trace store row_count=312744 exceeds cap=150000 (last_reconciled_at=2026-10-26T07:02:01Z). Reconcile runs every 10 min." };
+    expect(stuckTitle(t as never)).toBe("Trace store row_count=312744 exceeds cap=150000");
+    expect(stuckTitle({ ...t, summary: "Reach gap docs align tick" } as never)).toBe("Reach gap docs align tick");
+    expect(stuckTitle({ ...t, summary: null } as never)).toBe("trace-store-over-cap");
   });
 });
