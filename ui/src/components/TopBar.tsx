@@ -18,7 +18,7 @@ import { useDispatchGoal, useSubmitGrade } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
 import { complaintPayload } from "../lib/interaction";
 import { reportExposureAct } from "../lib/exposure-reporter";
-import { boxWords, presentationScope, readAs, readComplaint, readReplyPhrase, readVerdictPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
+import { barePrefix, boxWords, presentationScope, readAs, readComplaint, readReplyPhrase, readVerdictPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { answerRunQuestion } from "./RunQuestion";
@@ -220,6 +220,12 @@ export function TopBar({
   const submit = (): void => {
     const text = goal.trim();
     if (text.length === 0 || pending) return;
+    // A complaint's prefix alone says nothing yet: it stays in the box, and nothing is sent.
+    const bare = barePrefix(text);
+    if (bare) {
+      setEcho(bare === "wrong" ? "Say what's wrong" : `Say what's ${bare}`);
+      return;
+    }
     // An explicit complaint is a complaint in every context, never an answer or an ask.
     const complaint = readComplaint(text);
     if (complaint) {

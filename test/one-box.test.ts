@@ -218,6 +218,17 @@ describe("one box", () => {
     expect(el.textContent).toContain("Read as your verdict on this run: not reached · kept on the run; the learning corpus didn't take it yet");
   });
 
+  test("must-fail: a complaint prefix with nothing after it is not sent; it stays in the box", async () => {
+    for (const text of ["hard to understand:", "Hard to see:  ", "wrong:"]) {
+      calls.length = 0;
+      const el = await mount({ context: boxContext(null, null, null, null, outcome) });
+      await type(el, text);
+      expect(calls.some((c) => c.url.includes("/api/run-goal") || c.url.includes("/api/feedback") || c.url.includes("/api/grade"))).toBe(false);
+      expect(el.querySelector("textarea")!.value).toBe(text);
+      expect(el.querySelector(".sf-outcome-line")?.textContent).toMatch(/^Say what's (hard to understand|hard to see|wrong)×$/);
+    }
+  });
+
   test("with a finished run on screen, anything else is still a new ask", async () => {
     const el = await mount({ context: boxContext(null, null, null, null, outcome) });
     await type(el, "What time is it in Bergen?");

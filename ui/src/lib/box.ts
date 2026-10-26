@@ -86,6 +86,16 @@ export function readComplaint(text: string): { kind: ComplaintPrefixKind; text: 
   return { kind: COMPLAINT_PREFIXES[m[1].toLowerCase() as keyof typeof COMPLAINT_PREFIXES], text: m[2] };
 }
 
+/**
+ * A complaint's prefix with nothing after it ("hard to understand:", as a chip leaves
+ * it). It is not a complaint and not an ask: it stays in the box until it says
+ * something. The prefix, lower-cased, or null.
+ */
+export function barePrefix(text: string): string | null {
+  const m = /^\s*(hard to see|hard to understand|wrong)\s*:\s*$/i.exec(text);
+  return m?.[1] ? m[1].toLowerCase() : null;
+}
+
 /** Ask the one box to take this text (a chip elsewhere on the page); it fills, never sends. */
 export function fillBox(text: string): void {
   window.dispatchEvent(new CustomEvent("sf:fill-box", { detail: text }));
