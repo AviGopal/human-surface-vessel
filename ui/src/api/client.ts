@@ -443,6 +443,22 @@ export async function fetchRenderPolicy(): Promise<RenderPolicy> {
   return (await res.json()) as RenderPolicy;
 }
 
+/** The view a region draws (src/ui-views.ts): its blocks in order, and their limits. */
+export interface UiViewState {
+  readonly region: string;
+  readonly revision: number;
+  readonly id: string;
+  readonly blocks: readonly string[];
+  readonly limits: Readonly<Record<string, number>>;
+}
+
+/** A region's view, read on the live cadence like the render policy: a view the system writes shows without a reload. */
+export async function fetchUiView(region: string): Promise<UiViewState> {
+  const res = await fetch(`/api/ui-view?region=${encodeURIComponent(region)}`, { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`view unavailable (${res.status})`);
+  return (await res.json()) as UiViewState;
+}
+
 /** A gap as the gap store returns it; only the fields the surface reads are typed. */
 export interface GapRecord {
   readonly id: string;

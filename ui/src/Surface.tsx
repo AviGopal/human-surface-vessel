@@ -12,13 +12,14 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useCalibrationWindows } from "./api/calibration";
-import { useBoard, useRenderPolicy } from "./api/queries";
+import { useBoard, useGapThreads, useRenderPolicy, useUiView } from "./api/queries";
 import { CalibrationPage } from "./components/Calibration";
 import { IssuesDrawer, useInterfaceGaps } from "./components/IssuesDrawer";
 import { QuestionsList } from "./components/QuestionsList";
 import { QuestionView } from "./components/QuestionView";
 import { RunsList, initialFilter, latestMine, rememberFilter, type RunFilter } from "./components/RunsList";
 import { RunView } from "./components/RunView";
+import { Landing, landingBlocks } from "./components/Landing";
 import { TopBar } from "./components/TopBar";
 import { boxContext } from "./lib/box";
 import { waitingQuestion } from "./lib/walk";
@@ -92,12 +93,18 @@ function Workbench(): ReactNode {
   const openGaps = gaps.data ? gaps.data.filter((g) => g.status !== "closed").length : null;
   const calibration = useCalibrationWindows().data?.windows[0] ?? null;
 
-  // Nothing selected: the newest run asked from here, so the first screen shows an answer, not an empty pane.
+  // Nothing selected: the landing, drawn from its view. Its default is the newest run asked from here.
   const latest = latestMine(board.data);
+  const landingView = useUiView("landing", { enabled: !paused, intervalMs });
+  const landing = landingBlocks(landingView.data);
+  const landingReadsSystem = !runId && !questionId && landing.blocks.includes("health");
+  const gapThreads = useGapThreads({ enabled: !paused && landingReadsSystem });
+  // The box is about the newest run only when the landing draws it.
+  const landingRun = landing.blocks.includes("latest_run") ? latest : null;
 
   // The box answers the run on screen when that run is waiting on the person.
   const [setAside, setSetAside] = useState<string | null>(null);
-  const shownRun = runId ?? (questionId ? null : latest);
+  const shownRun = runId ?? (questionId ? null : landingRun);
   // The question the box answers: the run on screen's, or the one open on the questions page.
   const waiting = waitingQuestion(questions.query.data?.questions, shownRun, questionId, Date.now());
   const shownRow = shownRun ? (board.data?.find((r) => r.dispatchId === shownRun) ?? null) : null;
@@ -183,10 +190,20 @@ function Workbench(): ReactNode {
           <RunView key={runId} dispatchId={runId} />
         ) : questionId ? (
           <QuestionView questionId={questionId} />
-        ) : latest ? (
-          <RunView key={latest} dispatchId={latest} />
         ) : (
-          <p className="sf-main-empty">Select a run or a question</p>
+          <Landing
+            view={landingView.data}
+            ordered={questions.ordered}
+            board={board.data}
+            gapThreads={gapThreads.data}
+            latest={latest}
+            onOpenRun={openRun}
+            onOpenQuestion={openQuestion}
+            onOpenSystem={() => {
+              setTab("runs");
+              setFilter("system");
+            }}
+          />
         )}
       </main>
       {issuesOpen ? <IssuesDrawer onClose={closeIssues} highlightId={highlightIssue} /> : null}

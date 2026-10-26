@@ -8,12 +8,13 @@ import {
   fetchGap,
   fetchGapThreads,
   fetchRenderPolicy,
+  fetchUiView,
   fetchVerdicts,
   fetchWalkState,
   injectContext,
   submitGrade,
 } from "./client";
-import type { GapRecord, RenderPolicy } from "./client";
+import type { GapRecord, RenderPolicy, UiViewState } from "./client";
 import type { ActiveDispatch, GoalWalkState } from "./types";
 
 export const queryKeys = {
@@ -126,6 +127,19 @@ export function useDispatchGoal() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.board });
     },
+  });
+}
+
+/** A region's view, on the live cadence; a failed read keeps the last view drawn. */
+export function useUiView(region: string, opts: { enabled: boolean; intervalMs: number }): UseQueryResult<UiViewState> {
+  return useQuery({
+    queryKey: ["uiView", region],
+    queryFn: () => fetchUiView(region),
+    enabled: opts.enabled,
+    refetchInterval: opts.enabled ? Math.max(opts.intervalMs, 5000) : false,
+    refetchOnWindowFocus: false,
+    placeholderData: (previous) => previous,
+    retry: false,
   });
 }
 

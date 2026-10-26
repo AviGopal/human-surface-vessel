@@ -2038,3 +2038,17 @@ body { overflow: hidden; }
 
 /* The grade form's reasons, as chips that put a verdict in the box. */
 .sf-verdict-chips { display: flex; flex-wrap: wrap; gap: var(--sf-space-2); align-items: center; }
+
+/* The landing: the blocks its view names, in order (components/Landing.tsx). */
+.sf-landing { display: flex; flex-direction: column; gap: var(--sf-space-6); padding: var(--sf-space-6); max-width: 920px; }
+.sf-landing-run { margin: calc(-1 * var(--sf-space-6)); }
+.sf-landing-block { display: flex; flex-direction: column; gap: var(--sf-space-2); }
+.sf-landing-head { margin: 0; font-size: var(--sf-text-xs); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; color: var(--sf-ink-3); font-weight: 600; }
+.sf-landing-list { list-style: none; margin: 0; padding: 0; background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); }
+.sf-landing-list li + li { border-top: 1px solid var(--sf-rule); }
+.sf-landing-row { display: flex; gap: var(--sf-space-3); align-items: baseline; width: 100%; text-align: left; font: inherit; color: var(--sf-ink); background: none; border: 0; padding: var(--sf-space-3) var(--sf-space-4); cursor: pointer; min-height: 44px; }
+.sf-landing-row:hover { background: var(--sf-panel-alt); }
+.sf-landing-row:focus-visible, .sf-landing-health:focus-visible { outline: 2px solid var(--sf-accent); outline-offset: -2px; }
+.sf-landing-health { display: flex; flex-wrap: wrap; gap: var(--sf-space-2) var(--sf-space-4); align-items: baseline; width: 100%; text-align: left; font: inherit; color: var(--sf-ink); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); cursor: pointer; min-height: 44px; }
+.sf-landing-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.sf-landing-stuck { color: var(--sf-not-reached); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60ch; }
