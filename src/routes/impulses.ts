@@ -45,6 +45,7 @@ import { classifyQuestion, gapIdForPanel } from "../question-class.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
+import { undoView, writeView } from "../ui-views.ts";
 import { admitCaller, type Caller } from "../inbound-auth.ts";
 
 type Pointer = Record<string, unknown>;
@@ -1003,6 +1004,20 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         visibility: asVisibility(pointer["visibility"], "operator_only"),
       });
       return c.json({ resolved: true, success: true, shape: type, body: entry });
+    }
+
+    case "uiView_write": {
+      // A WRITE, by anything that can author an impulse: which blocks a region draws, in
+      // what order. Checked against the closed vocabulary; a refusal names its reason and
+      // stores nothing. `undo: true` restores the view in force before the current one.
+      const region = pointer["region"];
+      const write = pointer["undo"] === true
+        ? undoView(region, caller?.label ?? null)
+        : writeView({ region, blocks: pointer["blocks"], limits: pointer["limits"], note: pointer["note"] }, caller?.label ?? null);
+      if (!write.ok) {
+        return c.json({ resolved: false, success: false, shape: type, refusal: write.refusal, error: `${write.refusal}: ${write.detail}` }, 422);
+      }
+      return c.json({ resolved: true, success: true, shape: type, body: { region: write.view.region, revision: write.view.revision, view: write.view } });
     }
 
     case "human_surface:ui_view": {

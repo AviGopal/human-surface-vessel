@@ -101,6 +101,9 @@ export const DISCOVERY_SHAPES = [
   // questions rail per kind (presentation, answer reader, outcomes). Read it
   // before writing a question here.
   "human_surface:ui_view",
+  // Views for the surface's regions (src/ui-views.ts). The surface KEEPS and DRAWS views;
+  // it never advertises `uiView`, so whatever writes a view is that shape's only producer.
+  "uiView_write",
 ] as const;
 
 export type DiscoveryShape = (typeof DISCOVERY_SHAPES)[number];

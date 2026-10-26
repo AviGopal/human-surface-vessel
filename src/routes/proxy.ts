@@ -33,6 +33,7 @@ import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, verdictDelivery, writeRenderPolicy } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
 import { arrivedOverTls, closeSession, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, viewOf } from "../person-session.ts";
+import { VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
@@ -1749,6 +1750,13 @@ proxyRouter.post("/api/observations", requireCaller("/api/observations"), async 
 proxyRouter.get("/api/render-policy", (c) =>
   c.json(getRenderPolicy(), 200, corsHeaders(c.req.header("Origin"))),
 );
+
+/** The view a region draws now (src/ui-views.ts): read by the page at use time, as the policy is. */
+proxyRouter.get("/api/ui-view", (c) => {
+  const region = c.req.query("region") ?? "";
+  if (!Object.hasOwn(VIEW_REGIONS, region)) return c.json({ error: "unknown_region" }, 404);
+  return c.json(currentView(region as ViewRegion), 200, corsHeaders(c.req.header("Origin")));
+});
 
 // ─── typed instruction → interface change (browser write) ───────────────────
 

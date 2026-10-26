@@ -47,6 +47,14 @@ export async function forgetOwnDispatches(): Promise<void> {
   (await import("../src/own-dispatches.ts")).resetOwnDispatchesForTest();
 }
 
+// THE SURFACE'S VIEWS (src/ui-views.ts) are a file under the same WORKSPACE_ROOT plus a module cache, so a file that
+// writes a view calls this before and after, and the next file draws each region's default.
+/** Remove the views file and forget its cache. */
+export async function forgetViews(): Promise<void> {
+  rmSync(join(process.env.WORKSPACE_ROOT ?? workspace, "state", "human-surface", "ui-views.jsonl"), { force: true });
+  (await import("../src/ui-views.ts")).resetViewsForTest();
+}
+
 // REACT IS DRAINED BEFORE THE DOM GOES. A UI test renders React roots into happy-dom and unregisters happy-dom in its
 // afterAll. React's scheduler runs its work loop as a macrotask (performWorkUntilDeadline), so a render that a late
 // query or timer scheduled can run AFTER the unregister and read `window.event` with no window: an "Unhandled error
