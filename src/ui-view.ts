@@ -19,6 +19,7 @@
 
 import { buildFormCensus, type FormCensus } from "./form-census.ts";
 import { VIEW_REGIONS, currentView, type ViewRegion } from "./ui-views.ts";
+import { emptyRefusals } from "./write-refusals.ts";
 import { aggregateByKind, readExposureCorpus } from "./importance-learn.ts";
 import { isSolicitation } from "./solicitation.ts";
 import { listPanels, questionView } from "./store.ts";
@@ -140,6 +141,8 @@ export interface UiViewReport {
    * the page draws; a block with nothing to show is left out when it is drawn.
    */
   views: Record<string, RegionView>;
+  /** New panels and questions refused for carrying nothing, per shape, since `since` (src/write-refusals.ts). */
+  refused_empty_writes: { uiPanel_write: number; uiQuestion_write: number; since: number };
 }
 
 export interface RegionView {
@@ -204,5 +207,6 @@ export function buildUiView(overrides: Record<string, string> = {}): UiViewRepor
     content_forms: buildFormCensus(),
     asks: buildAsksView(),
     views: buildViews(),
+    refused_empty_writes: emptyRefusals(),
   };
 }

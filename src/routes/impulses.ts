@@ -46,6 +46,7 @@ import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
 import { runOf, undoView, writeView } from "../ui-views.ts";
+import { countEmptyRefusal } from "../write-refusals.ts";
 import { admitCaller, type Caller } from "../inbound-auth.ts";
 
 type Pointer = Record<string, unknown>;
@@ -510,15 +511,19 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         }, 409);
       }
 
-      // (3) A new question must ask something. A blank panel is a placeholder;
-      // a blank question is a demand on a person's attention with nothing in it,
-      // and goal-host reads a 200 as "asked". Refusing makes the writer fail.
-      if (!existing && type === "uiQuestion_write" && !hasQuestionContent(pointer)) {
+      // (3) A new panel or question must carry something. A blank question is a
+      // demand on a person's attention with nothing in it, and goal-host reads a 200
+      // as "asked". A blank panel is the same hollow write: no flow creates a panel
+      // empty and fills it later (every writer sends its content in the first write),
+      // so an empty one is only ever a defaulted step's side effect, and it was kept
+      // as an "Untitled" panel nobody reads. Refusing makes the writer fail.
+      if (!existing && !hasQuestionContent(pointer)) {
+        countEmptyRefusal(type);
         return c.json({
           resolved: false,
           success: false,
           shape: type,
-          error: "empty question refused: a new uiQuestion_write needs a non-empty title, body or asks. Nothing was created.",
+          error: `empty ${type === "uiQuestion_write" ? "question" : "panel"} refused: a new ${type} needs a non-empty title, body or asks. Nothing was created.`,
         }, 422);
       }
 

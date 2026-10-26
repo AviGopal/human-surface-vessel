@@ -122,7 +122,7 @@ describe("BLOCKER 4 — defaulted satisfier write over a live panel", () => {
 
     // and via the panel alias, the kind default differs
     const panelId = "b4r-fresh-id-defaults-panel";
-    const asPanel = await resolve({ type: "uiPanel_write", id: panelId });
+    const asPanel = await resolve({ type: "uiPanel_write", id: panelId, body: "Scope widened" });
     expect(asPanel.status).toBe(200);
     expect(live(panelId)!.kind).toBe("info");
     expect(live(panelId)!.title).toBe("Untitled");
