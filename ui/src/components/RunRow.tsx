@@ -62,7 +62,7 @@ export function RunRow({
   onFocused,
   thread,
 }: RunRowProps): ReactNode {
-  const terminal = row.status === "completed" || row.status === "failed";
+  const terminal = row.status === "completed" || row.status === "failed" || row.status === "gone";
 
   const walkQuery = useWalk(row.dispatchId, {
     enabled: liveDetail && !terminal,
@@ -119,7 +119,7 @@ const TREND_LABEL = { learned: "now reaches", lost: "stopped reaching" } as cons
 
 /** One mark per run, oldest first, then how many reached. */
 export function ThreadMark({ mark }: { mark: LearningMark }): ReactNode {
-  const summary = `${mark.reached} of ${mark.judged} reached${mark.trend ? `, ${TREND_LABEL[mark.trend]}` : ""}${mark.disputed ? `, ${mark.disputed} disputed by you` : ""}`;
+  const summary = `${mark.reached} of ${mark.judged} reached${mark.trend ? `, ${TREND_LABEL[mark.trend]}` : ""}${mark.disputed ? `, ${mark.disputed} disputed by you` : ""}${mark.gone ? `, ${mark.gone} ${mark.gone === 1 ? "record" : "records"} gone` : ""}`;
   return (
     <span className="sf-thread-mark" data-trend={mark.trend ?? "none"} title={summary} aria-label={summary}>
       {mark.marks.map((m, i) => (

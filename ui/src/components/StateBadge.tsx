@@ -20,6 +20,7 @@ const MARKS: Readonly<Record<RunState, string>> = {
   waiting: "?",
   accepted: "○",
   stalled: "◌",
+  gone: "·",
 };
 
 /** `quietForMs`: for `stalled`, the silence that made it so — the fact beside the word. */

@@ -25,6 +25,8 @@ import {
 
 // Upstream stands in for goal-host: a run accepts with a dispatch id; a walk read answers by id.
 const walkStatus = new Map<string, { status: string; reached: boolean | null }>();
+/** Runs goal-host says it no longer holds ("dispatch not found"), as it does once a run ages out. */
+const goneIds = new Set<string>();
 const systemRows = Array.from({ length: 50 }, (_, i) => ({
   dispatchId: `sys-${i}`, goal: "reconcile the trace store back under its configured cap", status: "failed", reached: false,
   operator: null, trigger: "run-goal", startedAt: Date.UTC(2026, 9, 14, 10, 0, 50 - i), learning: null, answerBody: null,
@@ -44,6 +46,7 @@ const fakeUpstream = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (type === "vesselCapability") return new Response(JSON.stringify({ content: { vessels: [] } }), { status: 200 });
   if (type === "goalDispatchAsync") return new Response(JSON.stringify({ dispatchId: `mine-${++nextId}`, status: "running" }), { status: 202 });
   if (type === "goalWalkState") {
+    if (goneIds.has(body.dispatchId ?? "")) return new Response(JSON.stringify({ resolved: false, shape: "goalWalkState", error: "dispatch not found" }), { status: 404 });
     const s = walkStatus.get(body.dispatchId ?? "");
     return new Response(JSON.stringify(s ? { resolved: true, body: { dispatchId: body.dispatchId, ...s } } : { resolved: false }), { status: 200 });
   }
@@ -139,6 +142,38 @@ describe("/api/mine", () => {
     expect(j.body.dispatches[0]?.status).toBe("failed");
     expect(j.body.dispatches[0]?.operator).toBe("human-surface");
     expect(j.body.dispatches.some((d) => d.dispatchId === r2.dispatchId)).toBe(false);
+  });
+});
+
+describe("outcomes the surface keeps", () => {
+  type Row = { dispatchId: string; status: string; reached: boolean | null };
+  const mine = async (): Promise<Row[]> => ((await (await app.request("/api/mine")).json()) as { body: { dispatches: Row[] } }).body.dispatches;
+
+  test("must-fail: a finished run's outcome is read back after a restart, with goal-host unable to answer", async () => {
+    const r = (await (await ask("Who am I?", "human-surface")).json()) as { dispatchId: string };
+    walkStatus.set(r.dispatchId, { status: "completed", reached: true });
+    expect((await mine()).find((d) => d.dispatchId === r.dispatchId)).toMatchObject({ status: "completed", reached: true });
+    resetOwnDispatchesForTest();
+    walkStatus.delete(r.dispatchId);
+    expect((await mine()).find((d) => d.dispatchId === r.dispatchId)).toMatchObject({ status: "completed", reached: true });
+  });
+
+  test("must-fail: a run goal-host no longer holds is drawn as record gone, never as running", async () => {
+    const running = (await (await ask("When is the next transfer window?", "human-surface")).json()) as { dispatchId: string };
+    const finished = (await (await ask("What time is it in Bergen?", "human-surface")).json()) as { dispatchId: string };
+    walkStatus.set(running.dispatchId, { status: "running", reached: null });
+    walkStatus.set(finished.dispatchId, { status: "failed", reached: false });
+    expect((await mine()).find((d) => d.dispatchId === running.dispatchId)?.status).toBe("running");
+    goneIds.add(running.dispatchId);
+    goneIds.add(finished.dispatchId);
+    const after = await mine();
+    expect(after.find((d) => d.dispatchId === running.dispatchId)?.status).toBe("gone");
+    // A kept outcome outlives goal-host's record of the run.
+    expect(after.find((d) => d.dispatchId === finished.dispatchId)).toMatchObject({ status: "failed", reached: false });
+    // And "gone" survives a restart without asking goal-host again.
+    resetOwnDispatchesForTest();
+    goneIds.clear();
+    expect((await mine()).find((d) => d.dispatchId === running.dispatchId)?.status).toBe("gone");
   });
 });
 

@@ -15,7 +15,8 @@
  * into a discriminated union in `lib/ledger.ts` before any component sees it.
  */
 
-export type DispatchStatus = "running" | "completed" | "failed";
+/** "gone": goal-host no longer holds the run and the surface kept no outcome for it. */
+export type DispatchStatus = "running" | "completed" | "failed" | "gone";
 
 /**
  * What KIND of run this was. Use this, never `walkTier` — `walkTier` is a

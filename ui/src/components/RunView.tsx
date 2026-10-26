@@ -7,7 +7,7 @@
  */
 
 import type { ReactNode } from "react";
-import { useWalk } from "../api/queries";
+import { useBoard, useWalk } from "../api/queries";
 import { useBoxTarget } from "../state/boxTarget";
 import { fromText } from "../lib/content";
 import type { ExecutionPath, GoalWalkState } from "../api/types";
@@ -117,6 +117,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   // run that stopped updating while the top bar says "Live" would be lying.
   // The global pause is the reader's lever.
   const query = useWalk(dispatchId, { enabled: !paused, intervalMs });
+  const board = useBoard({ enabled: !paused, intervalMs });
   // The LIVE question list, not the rail's accepted snapshot: a run's question must
   // appear while the run waits, without the reader accepting an update first.
   const liveQuestions = useQuestions().query.data?.questions;
@@ -124,6 +125,23 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const quietForMs = useProgressWatch(walk ? progressFingerprint(walk) : "", now);
 
   if (!walk) {
+    // goal-host no longer holds the run: draw what the surface kept of the ask, not an error.
+    const kept = board.data?.find((d) => d.dispatchId === dispatchId);
+    if (query.isError && kept && /not found/i.test((query.error as Error).message)) {
+      const state = kept.status === "gone" ? "gone" : kept.reached === true ? "reached" : kept.reached === false ? "not-reached" : "ungraded";
+      return (
+        <article className="sf-run" data-state={state}>
+          <header className="sf-view-head">
+            <h2 className="sf-view-title sf-run-title">{kept.goal?.trim() || "goal text not recorded"}</h2>
+            <p className="sf-view-facts">
+              <StateBadge state={state} />
+              {kept.status !== "gone" ? <span className="sf-muted">record gone</span> : null}
+              <span className="sf-mono sf-view-id">{dispatchId}</span>
+            </p>
+          </header>
+        </article>
+      );
+    }
     return (
       <p className="sf-main-empty">
         {query.isError ? `Could not read this run: ${(query.error as Error).message}` : "Loading…"}

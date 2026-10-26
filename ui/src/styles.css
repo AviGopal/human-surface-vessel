@@ -1994,6 +1994,9 @@ body { overflow: hidden; }
 .sf-thread-dot { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--sf-ink-3); }
 .sf-thread-dot[data-mark="reached"] { background: var(--sf-reached); border-color: var(--sf-reached); }
 .sf-thread-dot[data-mark="missed"] { background: transparent; border-color: var(--sf-not-reached); }
+/* A run whose record is gone: neither reached nor missed, shown apart. */
+.sf-thread-dot[data-mark="gone"] { background: transparent; border-color: var(--sf-ink-3); border-style: dashed; }
+.sf-verdict[data-state="gone"] { color: var(--sf-ink-3); background: var(--sf-accepted-bg); }
 .sf-thread-count { margin-left: var(--sf-space-1); font-size: var(--sf-text-xs); color: var(--sf-ink-3); font-variant-numeric: tabular-nums; }
 .sf-thread-earlier .sf-run-row { padding-left: var(--sf-space-6); }
 /* The template the system routed a group of its own runs to. */

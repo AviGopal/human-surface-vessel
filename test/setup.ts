@@ -43,6 +43,7 @@ export async function restoreNativeGlobals(): Promise<void> {
 /** Remove the own-run record file and forget its cache. */
 export async function forgetOwnDispatches(): Promise<void> {
   rmSync(join(process.env.WORKSPACE_ROOT ?? workspace, "state", "human-surface", "own-dispatches.jsonl"), { force: true });
+  rmSync(join(process.env.WORKSPACE_ROOT ?? workspace, "state", "human-surface", "own-outcomes.jsonl"), { force: true });
   (await import("../src/own-dispatches.ts")).resetOwnDispatchesForTest();
 }
 

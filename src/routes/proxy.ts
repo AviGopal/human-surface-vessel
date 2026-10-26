@@ -846,7 +846,10 @@ proxyRouter.get("/api/mine", async (c) => {
   const now = Date.now();
   await Promise.all(
     dueForRead(rows, now).map(async (id) => {
-      const w = await readWalkState(id);
+      const read = await readWalkStateResult(id);
+      // goal-host no longer holds it: the kept outcome stands, or the record is gone. Never "running".
+      if (read.kind === "gone") return rememberState(id, { status: "gone", reached: null, executionId: null, checkedAt: now });
+      const w = read.kind === "state" ? read.body : null;
       const status = w?.["status"];
       if (status === "running" || status === "completed" || status === "failed") {
         rememberState(id, {
@@ -1993,6 +1996,29 @@ proxyRouter.post("/api/calibration/grade", requireCaller("/api/calibration/grade
  * a forged `dispatch_id` must not be able to put a question on a run).
  * Null when goal-host does not answer or does not know the dispatch.
  */
+/**
+ * A run's state, or whether goal-host said it does not hold the run ("gone"), or
+ * could not be asked at all. The two failures differ: a run goal-host no longer has
+ * will never answer again, and one that could not be reached may next time.
+ */
+export async function readWalkStateResult(dispatchId: string): Promise<{ kind: "state"; body: Record<string, unknown> } | { kind: "gone" } | { kind: "unreachable" }> {
+  try {
+    const cand = await resolveGoalHostEndpoint();
+    const res = await fetch(resolveUrl(cand), {
+      method: "POST",
+      headers: upstreamHeaders(true),
+      body: JSON.stringify({ type: "goalWalkState", dispatchId }),
+      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
+    });
+    const j = JSON.parse(unwrapFederated(await res.text())) as { resolved?: boolean; body?: unknown; error?: unknown };
+    if (j.resolved === true && j.body && typeof j.body === "object") return { kind: "state", body: j.body as Record<string, unknown> };
+    if (typeof j.error === "string" && /dispatch not found/i.test(j.error)) return { kind: "gone" };
+    return { kind: "unreachable" };
+  } catch {
+    return { kind: "unreachable" };
+  }
+}
+
 export async function readWalkState(dispatchId: string): Promise<Record<string, unknown> | null> {
   try {
     const cand = await resolveGoalHostEndpoint();

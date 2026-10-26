@@ -112,6 +112,24 @@ describe("threads", () => {
     expect(el.querySelector("[data-dispatch-id='g8'] .sf-thread-mark")?.getAttribute("aria-label")).toBe("1 of 7 reached, now reaches");
   });
 
+  test("must-fail: a run whose record is gone is counted apart, never as reached, missed or unjudged", () => {
+    const m = learningMark([run("a", 1, false), run("b", 2, null, undefined, "gone"), run("c", 3, true), run("d", 4, null, undefined, "gone")]);
+    expect(m.marks).toEqual(["missed", "gone", "reached", "gone"]);
+    expect([m.reached, m.judged, m.gone, m.trend]).toEqual([1, 2, 2, "learned"]);
+  });
+
+  test("must-fail: a thread with gone runs says so in its mark", async () => {
+    dispatches = [
+      { dispatchId: "t1", goal: "Who am I?", operator: "human-surface", status: "completed", reached: false, startedAt: at(30) },
+      { dispatchId: "t2", goal: "Who am I?", operator: "human-surface", status: "gone", reached: null, startedAt: at(31) },
+      { dispatchId: "t3", goal: "who am i", operator: "human-surface", status: "completed", reached: true, startedAt: at(32) },
+    ];
+    const el = await mount(React.createElement(RunsList, { selectedDispatchId: null, onSelect: () => {}, filter: "mine" }));
+    const mark = el.querySelector("[data-dispatch-id='t3'] .sf-thread-mark");
+    expect(mark?.getAttribute("aria-label")).toBe("1 of 2 reached, now reaches, 1 record gone");
+    expect([...mark!.querySelectorAll(".sf-thread-dot")].map((d) => d.getAttribute("data-mark"))).toEqual(["missed", "gone", "reached"]);
+  });
+
   test("a person's verdict against the judge marks the run disputed; the latest verdict counts", () => {
     const said = personReachedByRun([
       { dispatch_id: "a", verdict: "achieved", observedAt: 1 },

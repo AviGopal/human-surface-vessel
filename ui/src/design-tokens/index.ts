@@ -19,6 +19,8 @@ export const RUN_STATES = [
   "waiting",
   "accepted",
   "stalled",
+  /** goal-host no longer holds the run and no outcome was kept: the ask is recorded, its result is not known. */
+  "gone",
 ] as const;
 
 export type RunState = (typeof RUN_STATES)[number];
@@ -71,6 +73,7 @@ export const STATE_TOKENS: Readonly<Record<RunState, StateTokens>> = {
   waiting: { fg: "var(--sf-waiting)", bg: "var(--sf-waiting-bg)", label: "waiting" },
   accepted: { fg: "var(--sf-accepted)", bg: "var(--sf-accepted-bg)", label: "accepted" },
   stalled: { fg: "var(--sf-stalled)", bg: "var(--sf-stalled-bg)", label: "stalled" },
+  gone: { fg: "var(--sf-accepted)", bg: "var(--sf-accepted-bg)", label: "record gone" },
 };
 
 /**

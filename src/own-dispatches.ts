@@ -27,7 +27,11 @@ export interface OwnDispatch {
 }
 
 export interface KnownState {
-  readonly status: "running" | "completed" | "failed";
+  /**
+   * "gone": goal-host no longer holds the run and no outcome was kept for it. The
+   * record of the ask stays; what became of it is not known.
+   */
+  readonly status: "running" | "completed" | "failed" | "gone";
   readonly reached: boolean | null;
   readonly executionId: string | null;
   /** When goal-host was last read for this run. */
@@ -41,6 +45,12 @@ export const MAX_READS_PER_CALL = 8;
 
 const root = (): string => process.env.WORKSPACE_ROOT ?? "/workspace";
 const file = (): string => join(root(), "state", "human-surface", "own-dispatches.jsonl");
+/**
+ * The outcome read for each run, kept beside the asks. goal-host holds a bounded
+ * window of runs; once it drops one, this is the only place its outcome lives, so
+ * the person's list and threads draw from here, not from what goal-host still has.
+ */
+const outcomesFile = (): string => join(root(), "state", "human-surface", "own-outcomes.jsonl");
 /** Where the first version wrote: moved into file() on load, then removed. */
 const legacyFile = (): string => join(root(), "human-surface", "own-dispatches.jsonl");
 
@@ -68,10 +78,28 @@ function migrateLegacy(): void {
   }
 }
 
+/** The kept outcomes, into `states`. The last line for a run wins. */
+function loadOutcomes(): void {
+  const f = outcomesFile();
+  if (!existsSync(f)) return;
+  for (const line of readFileSync(f, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const r = JSON.parse(line) as { dispatchId?: unknown } & Partial<KnownState>;
+      if (typeof r.dispatchId === "string" && (r.status === "completed" || r.status === "failed" || r.status === "gone")) {
+        states.set(r.dispatchId, { status: r.status, reached: typeof r.reached === "boolean" ? r.reached : null, executionId: typeof r.executionId === "string" ? r.executionId : null, checkedAt: typeof r.checkedAt === "number" ? r.checkedAt : 0 });
+      }
+    } catch {
+      /* a torn last line is skipped, never fatal */
+    }
+  }
+}
+
 function load(): OwnDispatch[] {
   if (loaded) return loaded;
   migrateLegacy();
   loaded = [];
+  loadOutcomes();
   const f = file();
   if (!existsSync(f)) return loaded;
   const seen = new Set<string>();
@@ -117,11 +145,35 @@ export function ownDispatchCount(): number {
 }
 
 export function knownState(dispatchId: string): KnownState | undefined {
+  load();
   return states.get(dispatchId);
 }
 
+/**
+ * Hold a run's state; keep it durably once it is an outcome (finished, or gone) and
+ * differs from what was kept. A run already finished is never turned into "gone": its
+ * kept outcome outlives goal-host's record of it.
+ */
 export function rememberState(dispatchId: string, s: KnownState): void {
+  load();
+  const prev = states.get(dispatchId);
+  if (s.status === "gone" && prev && (prev.status === "completed" || prev.status === "failed")) return;
   states.set(dispatchId, s);
+  if (s.status === "running") return;
+  if (prev && prev.status === s.status && prev.reached === s.reached && prev.executionId === s.executionId) return;
+  try {
+    const f = outcomesFile();
+    mkdirSync(dirname(f), { recursive: true });
+    const fd = openSync(f, "a");
+    try {
+      appendFileSync(fd, JSON.stringify({ dispatchId, ...s }) + "\n");
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+  } catch (err) {
+    console.warn(`[human-surface] outcome not kept for ${dispatchId}: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /** Which of these runs to re-read now: unknown first, then running, then stale finished ones. */
@@ -130,6 +182,7 @@ export function dueForRead(rows: readonly OwnDispatch[], now: number, max = MAX_
     const s = states.get(id);
     if (!s) return 0;
     if (s.status === "running") return 1;
+    if (s.status === "gone") return null;
     return now - s.checkedAt >= FINISHED_RECHECK_MS ? 2 : null;
   };
   return rows

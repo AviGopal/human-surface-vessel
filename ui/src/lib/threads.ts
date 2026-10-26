@@ -54,7 +54,8 @@ export function groupThreads<T extends ThreadRun>(runs: readonly T[], templateOf
   });
 }
 
-export type Mark = "reached" | "missed" | "open";
+/** "gone": the run's record is gone and no outcome was kept; counted apart, never as unjudged. */
+export type Mark = "reached" | "missed" | "open" | "gone";
 
 /** What people said about a run, against the judge: agree, disagree, or nothing said. */
 export type PersonSaid = "agree" | "disagree" | null;
@@ -68,6 +69,8 @@ export interface LearningMark {
   readonly disputed: number;
   readonly reached: number;
   readonly judged: number;
+  /** Runs whose record is gone with no outcome kept. */
+  readonly gone: number;
   /** Reached now after missing before; missed now after reaching before; or neither. */
   readonly trend: "learned" | "lost" | null;
 }
@@ -95,11 +98,12 @@ export function learningMark(runs: readonly ThreadRun[], personReached: Readonly
     if (p === undefined || r.reached === null) return null;
     return p === r.reached ? "agree" : "disagree";
   });
-  const marks: Mark[] = oldestFirst.map((r) => (r.status === "running" || r.reached === null ? "open" : r.reached ? "reached" : "missed"));
-  const judged = marks.filter((m) => m !== "open");
+  const marks: Mark[] = oldestFirst.map((r) => (r.status === "gone" ? "gone" : r.status === "running" || r.reached === null ? "open" : r.reached ? "reached" : "missed"));
+  const judged = marks.filter((m) => m === "reached" || m === "missed");
+  const gone = marks.filter((m) => m === "gone").length;
   const reached = judged.filter((m) => m === "reached").length;
   const last = judged[judged.length - 1];
   const before = judged.slice(0, -1);
   const trend = last === "reached" && before.includes("missed") ? "learned" : last === "missed" && before.includes("reached") ? "lost" : null;
-  return { marks: marks.slice(-MARKS_SHOWN), said: said.slice(-MARKS_SHOWN), disputed: said.filter((x) => x === "disagree").length, reached, judged: judged.length, trend };
+  return { marks: marks.slice(-MARKS_SHOWN), said: said.slice(-MARKS_SHOWN), disputed: said.filter((x) => x === "disagree").length, reached, judged: judged.length, gone, trend };
 }

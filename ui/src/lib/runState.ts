@@ -57,6 +57,8 @@ export interface RunFacts {
 }
 
 export function deriveRunState(f: RunFacts): RunState {
+  // A run whose record is gone is never drawn as running or stalled: its result is not known.
+  if (f.status === "gone") return "gone";
   // Terminal first. Both `completed` and `failed` are terminal, and neither of
   // them is the verdict.
   if (f.status === "completed" || f.status === "failed") {
