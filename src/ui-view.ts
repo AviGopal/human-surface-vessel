@@ -18,6 +18,7 @@
  */
 
 import { buildFormCensus, type FormCensus } from "./form-census.ts";
+import { VIEW_REGIONS, currentView, type ViewRegion } from "./ui-views.ts";
 import { aggregateByKind, readExposureCorpus } from "./importance-learn.ts";
 import { isSolicitation } from "./solicitation.ts";
 import { listPanels, questionView } from "./store.ts";
@@ -133,6 +134,31 @@ export interface UiViewReport {
   content_forms: FormCensus;
   /** The questions rail: what is asked of people here, how it is presented, and what they did with it. */
   asks: AsksView;
+  /**
+   * The view in force per region (src/ui-views.ts): which blocks it names, in order,
+   * with their limits, and the revision. Revision 0 is the default. This is the view
+   * the page draws; a block with nothing to show is left out when it is drawn.
+   */
+  views: Record<string, RegionView>;
+}
+
+export interface RegionView {
+  id: string;
+  revision: number;
+  blocks: readonly string[];
+  limits: Readonly<Record<string, number>>;
+  written_by: string | null;
+  written_at: number | null;
+  undo_of: number | null;
+}
+
+function buildViews(): Record<string, RegionView> {
+  const out: Record<string, RegionView> = {};
+  for (const region of Object.keys(VIEW_REGIONS) as ViewRegion[]) {
+    const v = currentView(region);
+    out[region] = { id: v.id, revision: v.revision, blocks: v.blocks, limits: v.limits, written_by: v.writtenBy, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf };
+  }
+  return out;
 }
 
 /**
@@ -175,5 +201,6 @@ export function buildUiView(overrides: Record<string, string> = {}): UiViewRepor
     surface: "human-surface-vessel",
     content_forms: buildFormCensus(),
     asks: buildAsksView(),
+    views: buildViews(),
   };
 }

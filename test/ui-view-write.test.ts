@@ -101,3 +101,27 @@ describe("uiView_write", () => {
     expect(REGISTRATION_PAYLOAD.shapes as readonly string[]).not.toContain("uiView");
   });
 });
+
+describe("human_surface:ui_view names the view each region draws", () => {
+  async function report() {
+    const res = await impulsesRouter.request("/v2/impulses/resolve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pointer: { type: "human_surface:ui_view" } }),
+    });
+    return ((await res.json()) as any).body;
+  }
+
+  test("with nothing written, the report names the default", async () => {
+    expect((await report()).views.landing).toMatchObject({ id: "landing@0", revision: 0, blocks: ["latest_run"], written_by: null, written_at: null });
+  });
+
+  test("must-fail: after a write and an undo, the report names each revision, its blocks, limits and writer", async () => {
+    await write({ region: "landing", blocks: ["needs_you", "health"], limits: { needs_you: 3 } });
+    const after = (await report()).views.landing;
+    expect(after).toMatchObject({ id: "landing@1", revision: 1, blocks: ["needs_you", "health"], limits: { needs_you: 3 }, undo_of: null });
+    expect(after.written_by).toBeTruthy();
+    await write({ region: "landing", undo: true });
+    expect((await report()).views.landing).toMatchObject({ id: "landing@2", revision: 2, blocks: ["latest_run"], undo_of: 0 });
+  });
+});
