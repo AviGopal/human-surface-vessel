@@ -48,7 +48,8 @@ export function isMine(row: ActiveDispatch): boolean {
 export function latestMine(rows: readonly ActiveDispatch[] | undefined): string | null {
   let best: { id: string; at: number } | null = null;
   for (const row of rows ?? []) {
-    if (!isMine(row)) continue;
+    // A run whose record is gone has nothing to show; it never opens the first screen.
+    if (!isMine(row) || row.status === "gone") continue;
     const at = parseStartedAt(row.startedAt, 0);
     if (!best || at > best.at) best = { id: row.dispatchId, at };
   }

@@ -20,6 +20,12 @@ describe("latestMine", () => {
     ).toBe("new");
   });
 
+  test("must-fail: a run whose record is gone never opens the first screen", () => {
+    const gone = { ...row("newest", "human-surface", "2026-10-12T19:58:00Z"), status: "gone" } as unknown as ActiveDispatch;
+    expect(latestMine([gone, row("kept", "human-surface", "2026-10-12T19:40:00Z")])).toBe("kept");
+    expect(latestMine([gone])).toBeNull();
+  });
+
   test("must-fail: system runs never stand in for the reader's", () => {
     expect(latestMine([row("sys", "gap-decompose", "2026-10-12T19:59:00Z")])).toBeNull();
     expect(latestMine(undefined)).toBeNull();
