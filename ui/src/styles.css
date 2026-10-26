@@ -2035,3 +2035,6 @@ body { overflow: hidden; }
 .sf-signin-form { position: absolute; top: calc(100% + var(--sf-space-1)); right: 0; z-index: 20; display: grid; gap: var(--sf-space-2); min-width: 16rem; padding: var(--sf-space-3); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-md); box-shadow: 0 4px 16px rgb(0 0 0 / 0.08); }
 .sf-signin-form input { font: inherit; padding: var(--sf-space-1) var(--sf-space-2); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); }
 .sf-signin-error { margin: 0; font-size: var(--sf-text-sm); color: var(--sf-not-reached); }
+
+/* The grade form's reasons, as chips that put a verdict in the box. */
+.sf-verdict-chips { display: flex; flex-wrap: wrap; gap: var(--sf-space-2); align-items: center; }

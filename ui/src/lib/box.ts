@@ -17,6 +17,8 @@ export interface RunOutcome {
   readonly executionId: string;
   readonly goal: string;
   readonly judgeReached: boolean | null;
+  /** The result shown as the run's answer and where it came from: what a verdict judges. */
+  readonly about?: Readonly<Record<string, string>> | null;
 }
 
 export type BoxContext =
@@ -55,6 +57,48 @@ export function readVerdictPhrase(text: string): "achieved" | "not_achieved" | n
   if (SAYS_REACHED.test(t)) return "achieved";
   if (SAYS_NOT.test(t)) return "not_achieved";
   return null;
+}
+
+/**
+ * The grade form's reasons, as exact phrases the box reads (the form retired with
+ * sign-in, 16f): each says why the run's verdict is wrong, so each is a verdict of
+ * its own. "It actually worked" and "Reached" say it reached; every other reason
+ * says it did not. Mirrors VERDICT_OPTIONS in the design tokens.
+ */
+const REASON_PHRASES: Readonly<Record<string, { verdict: "achieved" | "not_achieved"; label: string }>> = Object.fromEntries(
+  [
+    ["It actually worked", "achieved"],
+    ["Reached", "achieved"],
+    ["Not reached", "not_achieved"],
+    ["Failed for a different reason", "not_achieved"],
+    ["Shouldn't have been tried", "not_achieved"],
+    ["Didn't answer it", "not_achieved"],
+    ["Didn't do it", "not_achieved"],
+    ["Did the wrong thing", "not_achieved"],
+    ["Right idea, wrong change", "not_achieved"],
+    ["Unsafe", "not_achieved"],
+  ].map(([label, verdict]) => [norm(label as string), { verdict: verdict as "achieved" | "not_achieved", label: label as string }]),
+);
+
+function norm(t: string): string {
+  return t.trim().toLowerCase().replace(/[’]/g, "'").replace(/[.!\s]+$/u, "").replace(/\s+/g, " ");
+}
+
+/**
+ * A verdict with what the person said about it: an exact verdict phrase or one of
+ * the form's reasons, optionally followed by a colon and a note ("wrong answer:
+ * Barcelona isn't in Italy"). Notes are kept as the form kept them ("<reason> —
+ * <note>"). Anything else is not a verdict.
+ */
+export function readVerdict(text: string): { verdict: "achieved" | "not_achieved"; notes: string } | null {
+  const at = text.indexOf(":");
+  const head = at >= 0 ? text.slice(0, at) : text;
+  const note = at >= 0 ? text.slice(at + 1).trim() : "";
+  const reason = REASON_PHRASES[norm(head)];
+  if (reason) return { verdict: reason.verdict, notes: note ? `${reason.label} — ${note}` : reason.label };
+  const plain = readVerdictPhrase(head);
+  if (!plain) return null;
+  return { verdict: plain, notes: note ? `${head.trim()} — ${note}` : text };
 }
 
 /**

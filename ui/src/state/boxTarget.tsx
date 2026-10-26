@@ -16,6 +16,14 @@ interface BoxTargetValue {
   /** The last input supplied, so the run page can show whether the walk took it. */
   readonly sent: SupplyTarget | null;
   readonly markSent: (t: SupplyTarget) => void;
+  /** The result the run page shows as its answer, so a verdict typed in the box carries what it judged. */
+  readonly judged: JudgedResult | null;
+  readonly setJudged: (j: JudgedResult | null) => void;
+}
+
+export interface JudgedResult {
+  readonly dispatchId: string;
+  readonly about: Readonly<Record<string, string>>;
 }
 
 const BoxTargetContext = createContext<BoxTargetValue | null>(null);
@@ -23,7 +31,8 @@ const BoxTargetContext = createContext<BoxTargetValue | null>(null);
 export function BoxTargetProvider({ children }: { children: ReactNode }): ReactNode {
   const [target, choose] = useState<SupplyTarget | null>(null);
   const [sent, markSent] = useState<SupplyTarget | null>(null);
-  const value = useMemo(() => ({ target, choose, sent, markSent }), [target, sent]);
+  const [judged, setJudged] = useState<JudgedResult | null>(null);
+  const value = useMemo(() => ({ target, choose, sent, markSent, judged, setJudged }), [target, sent, judged]);
   return <BoxTargetContext.Provider value={value}>{children}</BoxTargetContext.Provider>;
 }
 

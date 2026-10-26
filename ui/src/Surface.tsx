@@ -102,11 +102,18 @@ function Workbench(): ReactNode {
   const waiting = waitingQuestion(questions.query.data?.questions, shownRun, questionId, Date.now());
   const shownRow = shownRun ? (board.data?.find((r) => r.dispatchId === shownRun) ?? null) : null;
   const shownGoal = shownRow?.goal ?? null;
-  const target = useBoxTarget()?.target ?? null;
+  const boxTargetState = useBoxTarget();
+  const target = boxTargetState?.target ?? null;
   // A finished run on screen with an execution id can take a verdict typed in the box.
   const outcome =
     shownRow && shownRow.status !== "running" && shownRow.executionId
-      ? { dispatchId: shownRow.dispatchId, executionId: shownRow.executionId, goal: shownRow.goal ?? "", judgeReached: shownRow.reached }
+      ? {
+          dispatchId: shownRow.dispatchId,
+          executionId: shownRow.executionId,
+          goal: shownRow.goal ?? "",
+          judgeReached: shownRow.reached,
+          about: target === null && boxTargetState?.judged?.dispatchId === shownRow.dispatchId ? boxTargetState.judged.about : null,
+        }
       : null;
   const context = boxContext(waiting, shownGoal, setAside, target && target.dispatchId === shownRun ? target : null, outcome);
 

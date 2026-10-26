@@ -44,6 +44,13 @@ const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tans
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { RunView } = await import("../ui/src/components/RunView");
+const { BoxTargetProvider, useBoxTarget } = await import("../ui/src/state/boxTarget");
+/** What the run page hands the one box as the result a verdict judges. */
+let judged: unknown = null;
+function JudgedProbe(): null {
+  judged = useBoxTarget()?.judged ?? null;
+  return null;
+}
 const { fromAPerson, personDrivenStep } = await import("../ui/src/lib/provenance");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -60,7 +67,7 @@ async function mount(w: Record<string, unknown> = walk): Promise<HTMLElement> {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     createRoot(el).render(
-      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(RunView, { dispatchId })))),
+      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(BoxTargetProvider, null, React.createElement(RunView, { dispatchId }), React.createElement(JudgedProbe))))),
     );
   });
   for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
@@ -89,18 +96,11 @@ describe("person provenance", () => {
     expect(el.querySelector(".sf-person-mark")).toBeNull();
     // Shown, not hidden.
     expect(answer?.textContent).toContain("raining");
-    const option = el.querySelector("input[type='radio'][value='Wrong answer']") as HTMLInputElement;
-    await act(async () => {
-      option.click();
-    });
-    await act(async () => {
-      (el.querySelector("form.sf-grade") as HTMLFormElement).requestSubmit();
-    });
-    for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
-    const about = grades.at(-1)?.["about"] as Record<string, unknown>;
-    expect(about).toMatchObject({ shape: "human_input", produced_by: "satisfier:human_input" });
-    expect(about["provenance"]).toBeUndefined();
-    expect(grades.at(-1)?.["dispatch_id"]).toBe(dispatchId);
+    // A verdict is typed in the box (the grade form retired); the run page hands the box what it judges.
+    const j = judged as { dispatchId: string; about: Record<string, unknown> } | null;
+    expect(j?.dispatchId).toBe(dispatchId);
+    expect(j?.about).toMatchObject({ shape: "human_input", produced_by: "satisfier:human_input" });
+    expect(j?.about["provenance"]).toBeUndefined();
   });
 
   test("an output from the step a person's answer drove is marked as theirs", async () => {

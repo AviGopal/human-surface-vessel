@@ -33,49 +33,11 @@ const settle = async (): Promise<void> => {
   for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
 };
 
-async function submitAndRead(): Promise<HTMLElement> {
-  const el = document.createElement("div");
-  document.body.appendChild(el);
-  const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-  await act(async () => {
-    createRoot(el).render(
-      React.createElement(QueryClientProvider, { client: qc },
-        React.createElement(GradeGesture, { renderedState: "ungraded", executionId: "e1", goal: "g", alreadyGraded: false, humanReachNotes: null })),
-    );
-  });
-  const reached = [...el.querySelectorAll("button, label")].find((b) => b.textContent?.trim() === "Reached") as HTMLElement | undefined;
-  expect(reached).toBeDefined();
-  await act(async () => { reached!.click(); });
-  const form = el.querySelector("form")!;
-  await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
-  await settle();
-  return el;
-}
-
 afterAll(async () => {
   await teardownDom();
 });
 
 describe("a refused verdict", () => {
-  test("must-fail: the scope refusal reads plainly, once, with the server's words folded", async () => {
-    errorText = REFUSED;
-    const el = await submitAndRead();
-    const status = el.querySelector(".sf-ix-status")?.textContent ?? "";
-    expect(status).toContain("this surface's credential can't record a human verdict");
-    expect(status).not.toContain("activity-api 403");
-    expect(status).not.toContain("Not delivered");
-    const folded = el.querySelector("details.sf-grade-refusal");
-    expect(folded).not.toBeNull();
-    expect(folded?.textContent).toContain(REFUSED);
-  });
-
-  test("any other refusal is shown as the server sent it, with nothing folded", async () => {
-    errorText = "trace store unreachable";
-    const el = await submitAndRead();
-    expect(el.querySelector(".sf-ix-status")?.textContent).toContain("Not recorded: trace store unreachable");
-    expect(el.querySelector("details.sf-grade-refusal")).toBeNull();
-  });
-
   test("only the named scope is paraphrased", () => {
     expect(gradeRefusal(REFUSED)).not.toBeNull();
     expect(gradeRefusal("HTTP 403")).toBeNull();

@@ -6,7 +6,7 @@
  * beside it, never in the place a reader scans for the outcome.
  */
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useBoard, useWalk } from "../api/queries";
 import { useBoxTarget } from "../state/boxTarget";
 import { fromText } from "../lib/content";
@@ -290,6 +290,10 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
       {stateIsTerminal(state) ? (
         <section className="sf-view-section" aria-label="Grade">
           <h3 className="sf-view-label">Grade</h3>
+          <PublishJudged
+            dispatchId={walk.dispatchId}
+            about={promoted && promotedContent ? { pool_id: promoted.id, shape: promoted.shape, ...(promoted.producedBy ? { produced_by: promoted.producedBy } : {}), ...(promotedFromPerson ? { provenance: "from-a-person" } : {}) } : null}
+          />
           <GradeGesture
             renderedState={state === "reached" ? "reached" : state === "ungraded" ? "ungraded" : "not-reached"}
             executionId={walk.executionId}
@@ -314,4 +318,23 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
       ) : null}
     </article>
   );
+}
+
+/**
+ * The result this run shows as its answer, handed to the one box, so a verdict typed
+ * there carries what it judged and that result's producer, as the retired grade form's
+ * did. Draws nothing.
+ */
+function PublishJudged({ dispatchId, about }: { dispatchId: string; about: Readonly<Record<string, string>> | null }): ReactNode {
+  const box = useBoxTarget();
+  const setJudged = box?.setJudged;
+  const key = about ? JSON.stringify(about) : "";
+  useEffect(() => {
+    if (!setJudged) return;
+    setJudged(about ? { dispatchId, about } : null);
+    return () => setJudged(null);
+    // `key` stands for `about`'s content, so a new object with the same content does not re-publish.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setJudged, dispatchId, key]);
+  return null;
 }

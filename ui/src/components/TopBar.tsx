@@ -18,7 +18,7 @@ import { useDispatchGoal, useSubmitGrade } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
 import { complaintPayload } from "../lib/interaction";
 import { reportExposureAct } from "../lib/exposure-reporter";
-import { barePrefix, boxWords, presentationScope, readAs, readComplaint, readReplyPhrase, readVerdictPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
+import { barePrefix, boxWords, presentationScope, readAs, readComplaint, readReplyPhrase, readVerdict, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { answerRunQuestion } from "./RunQuestion";
@@ -289,11 +289,12 @@ export function TopBar({
     setReshaped(null);
     // A verdict on the finished run on screen, when the message is one of the exact
     // verdict phrases. The surface keeps it on the run whatever the corpus answers.
-    const verdict = context.outcome ? readVerdictPhrase(text) : null;
+    const read = context.outcome ? readVerdict(text) : null;
+    const verdict = read?.verdict ?? null;
     if (context.outcome && verdict) {
       const o = context.outcome;
       const said = verdict === "achieved" ? "reached" : "not reached";
-      const submission = { executionId: o.executionId, goal: o.goal, verdict, notes: text, dispatchId: o.dispatchId, judgeReached: o.judgeReached };
+      const submission = { executionId: o.executionId, goal: o.goal, verdict, notes: read?.notes ?? text, dispatchId: o.dispatchId, judgeReached: o.judgeReached, ...(o.about ? { about: o.about } : {}) };
       const signedOut = session?.available === true && !session.signedIn;
       const settle = (corpus: boolean): void => {
         if (!corpus && signedOut) setPendingVerdict(submission);

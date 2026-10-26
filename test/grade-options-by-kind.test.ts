@@ -41,6 +41,24 @@ describe("grade options", () => {
     expect(got).not.toContain("Right idea, wrong change");
   });
 
+  test("must-fail: the grade form is retired; its reasons are chips that fill the box and send nothing", async () => {
+    const filled: string[] = [];
+    const listen = (e: Event) => filled.push(String((e as CustomEvent).detail));
+    window.addEventListener("sf:fill-box", listen);
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    await act(async () => {
+      createRoot(el).render(React.createElement(QueryClientProvider, { client: new QueryClient() },
+        React.createElement(GradeGesture, { renderedState: "not-reached", executionId: "e", goal: "g", alreadyGraded: false, humanReachNotes: null })));
+    });
+    expect(el.querySelector("form")).toBeNull();
+    expect(el.querySelector("textarea, input")).toBeNull();
+    const chip = [...el.querySelectorAll("button")].find((b) => b.textContent === "Failed for a different reason") as HTMLButtonElement;
+    await act(async () => chip.click());
+    window.removeEventListener("sf:fill-box", listen);
+    expect(filled).toEqual(["failed for a different reason"]);
+  });
+
   test("a reached code edit keeps the change wording", async () => {
     const got = await options({ renderedState: "reached", changedSomething: true });
     expect(got).toContain("Right idea, wrong change");

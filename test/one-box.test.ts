@@ -218,6 +218,34 @@ describe("one box", () => {
     expect(el.textContent).toContain("Read as your verdict on this run: not reached · kept on the run; the learning corpus didn't take it yet");
   });
 
+  test("must-fail: the grade form's reasons and a note after a colon are verdicts in the box", async () => {
+    for (const [text, verdict, notes] of [
+      ["Failed for a different reason: it timed out", "not_achieved", "Failed for a different reason — it timed out"],
+      ["it actually worked", "achieved", "It actually worked"],
+      ["shouldn't have been tried", "not_achieved", "Shouldn't have been tried"],
+      ["wrong answer: Barcelona isn't in Italy", "not_achieved", "wrong answer — Barcelona isn't in Italy"],
+    ] as const) {
+      calls.length = 0;
+      const el = await mount({ context: boxContext(null, null, null, null, outcome) });
+      await type(el, text);
+      const g = calls.find((c) => c.url.includes("/api/grade"));
+      expect([text, g?.body["verdict"], g?.body["notes"]]).toEqual([text, verdict, notes]);
+      expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(false);
+    }
+    // A verdict carries the result it judged, as the run page hands it to the box.
+    calls.length = 0;
+    const about = { pool_id: "p1", shape: "webSearchResult", produced_by: "satisfier:webSearchResult" };
+    const withAbout = await mount({ context: boxContext(null, null, null, null, { ...outcome, about }) });
+    await type(withAbout, "wrong answer");
+    expect(calls.find((c) => c.url.includes("/api/grade"))?.body["about"]).toEqual(about);
+    // "wrong:" is still a complaint about the interface, never a verdict.
+    calls.length = 0;
+    const el = await mount({ context: boxContext(null, null, null, null, outcome) });
+    await type(el, "wrong: the grey text is unreadable");
+    expect(calls.some((c) => c.url.includes("/api/grade"))).toBe(false);
+    expect(calls.some((c) => c.url.includes("/api/feedback"))).toBe(true);
+  });
+
   test("must-fail: a complaint prefix with nothing after it is not sent; it stays in the box", async () => {
     for (const text of ["hard to understand:", "Hard to see:  ", "wrong:"]) {
       calls.length = 0;

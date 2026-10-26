@@ -17,12 +17,10 @@
  */
 
 import { VERDICT_OPTIONS } from "@avigopal/design-tokens";
-import { useState, type ReactNode } from "react";
-import { useSubmitGrade, useVerdicts } from "../api/queries";
+import type { ReactNode } from "react";
+import { useVerdicts } from "../api/queries";
 import type { KeptVerdict } from "../api/types";
-import { gradePayload } from "../lib/interaction";
-import { gradeRefusal } from "../lib/refusal";
-import { ChoiceInput, InteractionFooter, TextInput, stateOf } from "./Interaction";
+import { fillBox } from "../lib/box";
 
 export function GradeGesture({
   renderedState,
@@ -53,11 +51,7 @@ export function GradeGesture({
   /** Which attempt a grade lands on, when the run walked more than once. */
   appliesTo?: string | null;
 }): ReactNode {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [note, setNote] = useState("");
-  const grade = useSubmitGrade();
   const options = VERDICT_OPTIONS[renderedState === "reached" && !changedSomething ? "reached-answer" : renderedState];
-  const refusal = grade.isError ? gradeRefusal((grade.error as Error).message) : null;
   const kept = useVerdicts(dispatchId).data ?? [];
 
   if (alreadyGraded) {
@@ -70,8 +64,8 @@ export function GradeGesture({
 
   // The write is keyed on execution id, and that key is one of the fields
   // goal-host serializes without a null coalesce — so it is ABSENT, not null,
-  // when it was never recorded. A grade button that posts an undefined key
-  // would fail silently at the far end; saying so is the honest rendering.
+  // when it was never recorded. Offering a verdict that cannot land would be a
+  // reading with no reader.
   if (!executionId) {
     return (
       <div className="sf-grade">
@@ -80,34 +74,24 @@ export function GradeGesture({
     );
   }
 
+  // One input (16f): the form retired with sign-in. Its reasons are phrases the box
+  // reads as verdicts; these chips put one in the box, and never send. A note follows
+  // a colon ("wrong answer: Barcelona isn't in Italy"). The box keeps the verdict on
+  // the run and records it as the person's when they are signed in.
+  void goal;
+  void about;
   return (
     <>
-    {kept.length > 0 ? <KeptVerdicts kept={kept} judgeReached={judgeReached} /> : null}
-    <form
-      className="sf-grade sf-interaction"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!selected) return;
-        grade.mutate({ ...gradePayload({ renderedState, option: selected, note, executionId, goal }), ...(dispatchId ? { dispatchId } : {}), judgeReached, about });
-      }}
-    >
-      {appliesTo ? <p className="sf-note sf-muted sf-grade-applies">{appliesTo}</p> : null}
-      <ChoiceInput label={renderedState === "ungraded" ? "Your verdict" : "Disagree with the verdict?"} options={options} value={selected} onChange={setSelected} disabled={grade.isPending} />
-      <TextInput label="Note" placeholder="Note (optional)" value={note} onChange={setNote} disabled={grade.isPending} />
-      <InteractionFooter
-        state={stateOf(grade)}
-        submitLabel="Record"
-        canSubmit={selected !== null}
-        error={grade.isError ? refusal ?? `Not recorded: ${(grade.error as Error).message}` : null}
-        sentLabel="Recorded"
-      />
-      {refusal ? (
-        <details className="sf-grade-refusal">
-          <summary>Server</summary>
-          <p className="sf-muted sf-mono">{(grade.error as Error).message}</p>
-        </details>
-      ) : null}
-    </form>
+      {kept.length > 0 ? <KeptVerdicts kept={kept} judgeReached={judgeReached} /> : null}
+      <div className="sf-grade sf-verdict-chips" aria-label={renderedState === "ungraded" ? "Your verdict" : "Disagree with the verdict?"}>
+        {appliesTo ? <p className="sf-note sf-muted sf-grade-applies">{appliesTo}</p> : null}
+        <span className="sf-muted">{renderedState === "ungraded" ? "Your verdict" : "Disagree with the verdict?"}</span>
+        {options.map((o) => (
+          <button key={o} type="button" className="sf-chip" onClick={() => fillBox(o.toLowerCase())}>
+            {o}
+          </button>
+        ))}
+      </div>
     </>
   );
 }
