@@ -131,7 +131,7 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
       <header className="sf-view-head">
         <p className="sf-view-eyebrow">{question.title}</p>
         <h2 id={`${id}-title`} className="sf-view-title sf-question-subject" title={questionSubject(question)}>
-          {questionSubject(question)}
+          {questionSubject(question) || <span className="sf-muted">question text not recorded</span>}
         </h2>
         <p className="sf-view-facts">
           {gapId ? <span className="sf-mono">{gapId}</span> : null}

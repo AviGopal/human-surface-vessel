@@ -126,5 +126,15 @@ describe("question titles", () => {
 
   test("a question with no gap keeps its title", () => {
     expect(questionSubject(withAsks)).toBe("Revised");
+    expect(questionSubject(emptyChange)).toBe("Remove 'continue' statement in pickMostLandable");
+  });
+
+  test("must-fail: a question written with no text has no subject, not its placeholder title", () => {
+    // One node 10-26: a run's solicitation stored with an empty brief, drawn as a row reading "Question".
+    const hollow = q("solicitation-d4fbbc93", "question", "", { title: "Question" });
+    expect(questionSubject(hollow)).toBe("");
+    expect(questionRowSubject(hollow)).toBe("");
+    expect(questionSubject(untitled)).toBe("");
+    expect(questionSubject(q("solicitation-x", "question", "Where are you?", { title: "Question" }))).toBe("Where are you?");
   });
 });

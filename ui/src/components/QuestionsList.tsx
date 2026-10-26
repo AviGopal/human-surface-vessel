@@ -76,7 +76,7 @@ export function QuestionsList({
                     aria-current={selectedId === question.id ? "true" : undefined}
                     onClick={() => onSelect(question.id)}
                   >
-                    <span className="sf-qrow-subject">{questionRowSubject(question)}</span>
+                    <span className="sf-qrow-subject">{questionRowSubject(question) || <span className="sf-muted">question text not recorded</span>}</span>
                     <span className="sf-qrow-meta">
                       {status !== "open" ? <span className="sf-qrow-status">{status}</span> : null}
                       {gapId && !gapTitle(gapId) ? <span className="sf-mono">{gapId}</span> : null}
