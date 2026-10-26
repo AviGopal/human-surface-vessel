@@ -28,6 +28,7 @@ import {
   VESSEL_ID,
   VESSEL_NAME,
 } from "./config.ts";
+import { viewShapeDescriptions } from "./ui-views.ts";
 
 const REREGISTER_INTERVAL_MS = 60_000;
 
@@ -37,6 +38,9 @@ export const REGISTRATION_PAYLOAD = {
   name: VESSEL_NAME,
   endpoint: SELF_ENDPOINT,
   shapes: [...DISCOVERY_SHAPES],
+  // Per-shape descriptions goal recall matches against, each derived from the contract
+  // that serves the shape; a shape with none here is described by discovery's own tick.
+  shape_descriptions: viewShapeDescriptions(),
   resolve_endpoint: `${SELF_ENDPOINT}${RESOLVE_PATH}`,
   resolve_request_format: "pointer",
   auth_scheme: "ApiKey",

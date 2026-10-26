@@ -38,6 +38,38 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { blocks: readonly string[]; limi
   landing: { blocks: ["latest_run"], limits: {} },
 };
 
+/** The contract a region's views are checked against: blocks, limits and default per region. */
+export interface ViewContract {
+  readonly regions: Readonly<Record<string, readonly string[]>>;
+  readonly limits: Readonly<Record<string, Readonly<Record<string, { min: number; max: number }>>>>;
+  readonly defaults: Readonly<Record<string, { blocks: readonly string[] }>>;
+}
+
+const CONTRACT: ViewContract = { regions: VIEW_REGIONS, limits: VIEW_LIMITS, defaults: DEFAULT_VIEWS };
+
+/**
+ * What discovery is told about the view shapes, generated from the contract above, so a
+ * goal is matched against the vocabulary a write is actually checked against and the
+ * description cannot drift from it: a region or block added here is advertised with it.
+ */
+export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
+  const regions = Object.entries(contract.regions).map(([region, blocks]) => {
+    const limits = Object.entries(contract.limits[region] ?? {}).map(([k, r]) => `${k} lists ${r.min} to ${r.max} items`);
+    const fallback = contract.defaults[region]?.blocks ?? [];
+    return `region ${region}: blocks ${blocks.join(", ")}${limits.length ? `; ${limits.join(", ")}` : ""}; default ${fallback.join(", ") || "none"}`;
+  });
+  const names = Object.keys(contract.regions).join(", ");
+  return {
+    uiView_write:
+      `writes the view of a human surface region (${names}): which blocks the region draws and in what order, ` +
+      `top to bottom as the blocks list orders them; a block left out is not drawn. ${regions.join(". ")}. ` +
+      `undo restores the view in force before the current one; read back in human_surface:ui_view`,
+    "human_surface:ui_view":
+      `reads what the human surface draws now: for each region (${names}) the view in force, its blocks in draw order, ` +
+      `item limits, revision and writer. ${regions.join(". ")}. Views are written by uiView_write`,
+  };
+}
+
 /** Why a write stored nothing. Closed, so the writer can act on it without parsing prose. */
 export type ViewRefusal =
   | "unknown_region"
