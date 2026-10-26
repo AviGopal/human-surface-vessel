@@ -59,9 +59,39 @@ export interface UiView {
   readonly note: string | null;
   /** The caller label the write door admitted; never a key. */
   readonly writtenBy: string | null;
+  /**
+   * The run the write says it came from, as its pointer names it: a walk puts its
+   * dispatch and execution ids on the impulses its steps send, and a template step its
+   * template or activity id. The caller is authenticated; these ids are what it claims.
+   * Null for a write that names none.
+   */
+  readonly run: ViewRun | null;
   readonly writtenAt: number;
   /** On a revision written by "undo": the revision whose view it restored (0 = the default). */
   readonly undoOf: number | null;
+}
+
+export interface ViewRun {
+  readonly dispatchId: string | null;
+  readonly executionId: string | null;
+  readonly templateId: string | null;
+}
+
+/** The run ids a pointer names, in either spelling the fleet writes; null when it names none. */
+export function runOf(pointer: Record<string, unknown>): ViewRun | null {
+  const pick = (...keys: string[]): string | null => {
+    for (const k of keys) {
+      const v = pointer[k];
+      if (typeof v === "string" && v.trim()) return v.trim().slice(0, 200);
+    }
+    return null;
+  };
+  const run = {
+    dispatchId: pick("dispatch_id", "dispatchId"),
+    executionId: pick("execution_id", "executionId", "parent_execution_id"),
+    templateId: pick("template_id", "templateId", "activity_id", "activityId"),
+  };
+  return run.dispatchId || run.executionId || run.templateId ? run : null;
 }
 
 export type ViewWrite =
@@ -141,7 +171,7 @@ export function currentView(region: ViewRegion): UiView {
   const latest = history.get(region)?.at(-1);
   if (latest) return latest;
   const d = DEFAULT_VIEWS[region];
-  return { region, revision: 0, id: `${region}@0`, blocks: d.blocks, limits: d.limits, note: null, writtenBy: null, writtenAt: 0, undoOf: null };
+  return { region, revision: 0, id: `${region}@0`, blocks: d.blocks, limits: d.limits, note: null, writtenBy: null, run: null, writtenAt: 0, undoOf: null };
 }
 
 /** Write a view for a region; refused writes store nothing. */
@@ -149,6 +179,7 @@ export function writeView(
   input: { region: unknown; blocks: unknown; limits?: unknown; note?: unknown },
   writtenBy: string | null,
   now: number = Date.now(),
+  run: ViewRun | null = null,
 ): ViewWrite {
   load();
   const { refusal, detail } = validate(input.region, input.blocks, input.limits);
@@ -163,6 +194,7 @@ export function writeView(
     limits: { ...((input.limits as Record<string, number> | undefined) ?? {}) },
     note: typeof input.note === "string" && input.note.trim() ? input.note.trim().slice(0, 500) : null,
     writtenBy,
+    run,
     writtenAt: now,
     undoOf: null,
   };
@@ -174,7 +206,7 @@ export function writeView(
  * Restore the view in force before the current one, as a new revision. Undoing the
  * first view restores the default.
  */
-export function undoView(region: unknown, writtenBy: string | null, now: number = Date.now()): ViewWrite {
+export function undoView(region: unknown, writtenBy: string | null, now: number = Date.now(), run: ViewRun | null = null): ViewWrite {
   load();
   if (!isRegion(region)) return { ok: false, refusal: "unknown_region", detail: `regions: ${Object.keys(VIEW_REGIONS).join(", ")}` };
   const list = history.get(region) ?? [];
@@ -194,6 +226,7 @@ export function undoView(region: unknown, writtenBy: string | null, now: number 
     limits: { ...base.limits },
     note: base.note,
     writtenBy,
+    run,
     writtenAt: now,
     undoOf: restoredRevision,
   };

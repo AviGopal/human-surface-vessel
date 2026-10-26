@@ -45,4 +45,19 @@ describe("a region's view through the routes", () => {
     expect(REGISTRATION_PAYLOAD.shapes as readonly string[]).toContain("uiView_write");
     expect(REGISTRATION_PAYLOAD.shapes as readonly string[]).not.toContain("uiView");
   });
+
+  test("must-fail: the report ties a view to the run that wrote it, when the write names one", async () => {
+    const report = async () => {
+      const res = await impulsesRouter.request("/v2/impulses/resolve", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pointer: { type: "human_surface:ui_view" } }),
+      });
+      return ((await res.json()) as any).body.views.landing;
+    };
+    await write({ region: "landing", blocks: ["needs_you", "changed", "health"], dispatch_id: "d-teach", execution_id: "exec-teach", template_id: "activity:view-landing" });
+    expect((await report()).run).toEqual({ dispatch_id: "d-teach", execution_id: "exec-teach", template_id: "activity:view-landing" });
+    await write({ region: "landing", blocks: ["health"] });
+    expect((await report()).run).toBeNull();
+  });
 });
