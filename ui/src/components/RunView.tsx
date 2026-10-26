@@ -25,7 +25,7 @@ import { Attempts } from "./Attempts";
 import { answerNode, buildChains } from "../lib/chain";
 import { fromProvenance } from "../lib/content";
 import { Chain, FoundLinks } from "./Chain";
-import { splitVerdict } from "../lib/verdict";
+import { splitOverride, splitVerdict } from "../lib/verdict";
 import { RunQuestion } from "./RunQuestion";
 import { useQuestions } from "../state/questions";
 import { Rendered } from "./Rendered";
@@ -165,6 +165,9 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const state: RunState = deriveRunState(facts);
   const span = spanMs(walk);
   const reason = state === "not-reached" || state === "ungraded" ? (walk.goalReachReason?.trim() || walk.error || null) : null;
+  const override = reason ? splitOverride(reason) : null;
+  const judgeReason = override?.judge || null;
+  const personLine = walk.humanReachNotes ?? override?.person ?? null;
   const who = walk.operator ?? walk.trigger;
   const answer = walk.answerBody?.trim() ? walk.answerBody : null;
   // The builder pastes the reach verdict where no step wrote an answer: label it as what it is.
@@ -209,13 +212,13 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
           {walk.requeueOf ? <span className="sf-mono">requeue of {walk.requeueOf}</span> : null}
           {query.isError ? <span className="sf-error-inline">refresh failed</span> : null}
         </p>
-        {reason ? (
+        {judgeReason ? (
           // The system's code for the reason stays on hover; the fold draws it beside each attempt.
-          <div className="sf-run-reason-full" title={splitVerdict(reason).code ?? undefined}>
-            <Rendered content={fromText("goal_reach_reason", splitVerdict(reason).text)} density="inline" header={false} region="run_reason" />
+          <div className="sf-run-reason-full" title={splitVerdict(judgeReason).code ?? undefined}>
+            <Rendered content={fromText("goal_reach_reason", splitVerdict(judgeReason).text)} density="inline" header={false} region="run_reason" />
           </div>
         ) : null}
-        {walk.humanReachNotes ? <p className="sf-run-reason-full">“{walk.humanReachNotes}”</p> : null}
+        {personLine ? <p className="sf-run-reason-full">“{personLine}”</p> : null}
         {known === "not-understood" ? <p className="sf-known-line" data-known="not-understood">Didn't understand the question: inference returned no target.</p> : null}
       </header>
 

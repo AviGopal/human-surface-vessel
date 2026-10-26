@@ -48,3 +48,17 @@ export function splitVerdict(text: string): { code: string | null; text: string 
   }
   return { code: null, text: trimmed };
 }
+
+/**
+ * goal-host prefixes the reason with the person's verdict when a person's grade
+ * overrode the judge: `[human override: <the person's words>] <the judge's reason>`.
+ * The person's words are their line, and the rest is the judge's; left together,
+ * the leading bracket reads as structured data and the whole reason is drawn as code.
+ */
+const OVERRIDE = /^\[human override:\s*([^\]]*)\]\s*/;
+
+export function splitOverride(reason: string): { person: string | null; judge: string } {
+  const m = OVERRIDE.exec(reason.trim());
+  if (!m) return { person: null, judge: reason.trim() };
+  return { person: (m[1] ?? "").trim() || null, judge: reason.trim().slice(m[0].length).trim() };
+}
