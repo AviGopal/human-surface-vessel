@@ -14,7 +14,11 @@ globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
   const ask = JSON.parse(String(init?.body ?? "{}")) as { type?: string };
   if (String(_input).includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
   if (String(_input).includes("/api/verdicts")) return new Response(JSON.stringify({ body: { verdicts } }), { status: 200 });
-  if (String(_input).includes("/api/mine")) return new Response(JSON.stringify({ dispatches: [] }), { status: 200 });
+  // The surface's own record of what the signed-in person asked: here, the rows the page sent.
+  if (String(_input).includes("/api/mine")) {
+    const own = dispatches.filter((d) => (d as { operator?: unknown }).operator === "human-surface").map((d) => ({ ...d, own: true, person: { userId: "user:person-a", name: "Person A" } }));
+    return new Response(JSON.stringify({ resolved: true, shape: "ownDispatches", body: { dispatches: own } }), { status: 200 });
+  }
   if (ask.type === "activeDispatches") return new Response(JSON.stringify({ resolved: true, shape: "activeDispatches", body: { dispatches } }), { status: 200 });
   return new Response("{}", { status: 200 });
 }) as typeof fetch;

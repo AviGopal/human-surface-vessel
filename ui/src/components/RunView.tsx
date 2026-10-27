@@ -168,7 +168,9 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const override = reason ? splitOverride(reason) : null;
   const judgeReason = override?.judge || null;
   const personLine = walk.humanReachNotes ?? override?.person ?? null;
-  const who = walk.operator ?? walk.trigger;
+  // Who asked: the person, when the surface's own record says this person asked it; else goal-host's attribution.
+  const asker = board.data?.find((d) => d.dispatchId === walk.dispatchId)?.person?.name ?? null;
+  const who = asker ?? walk.operator ?? walk.trigger;
   const answer = walk.answerBody?.trim() ? walk.answerBody : null;
   // The builder pastes the reach verdict where no step wrote an answer: label it as what it is.
   const verdictOnly = answer !== null && answerIsVerdict(answer, walk.goal ?? undefined, walk.goalReachReason);

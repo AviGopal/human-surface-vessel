@@ -788,6 +788,15 @@ async function resolveThrough(
  */
 proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
   const caller = admittedCaller(c);
+  // ASKING NEEDS A SIGNED-IN PERSON (user ruling 10-27): an ask from the page carries who
+  // asked, so "Mine" is that person's runs. Signed out, it is refused before anything is
+  // read or sent upstream, and the page offers sign-in. The person is the session's, which
+  // only a sign-in validated by identity creates; nothing in the body names them. A keyed
+  // caller is not the page and is named by its key.
+  const person = caller.kind === "browser" ? sessionOf(c.req.header("Cookie")) : null;
+  if (caller.kind === "browser" && !person) {
+    return c.json({ error: "sign_in_required" }, 401, corsHeaders(c.req.header("Origin")));
+  }
   const cand = await resolveGoalHostEndpoint();
   const raw = await rawBodyOf(c);
   let req: Record<string, unknown>;
@@ -802,6 +811,7 @@ proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
   // credential until sign-in, by this surface's own label, which is also how the surface
   // finds the runs it asked (backfillOwnDispatches).
   const operator = caller.kind === "browser" ? SURFACE_OPERATOR : caller.label;
+
   // WHO ASKED, on the tag channel goal-host already reads into the walk's trace tags
   // (body.tags -> effectiveTags -> runGoalWithRecovery): caller:browser-unverified for the
   // page, caller:<validated label> for a key. A caller:* tag in the body is the caller's
@@ -809,7 +819,9 @@ proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
   const ownTags = Array.isArray(req["tags"])
     ? (req["tags"] as unknown[]).filter((t): t is string => typeof t === "string" && !t.startsWith("caller:"))
     : [];
-  const tags = [...ownTags, `caller:${caller.label}`];
+  const tags = [...ownTags, `caller:${caller.label}`, ...(person ? [`person:${person.userId}`] : [])];
+  // Who asked is the session's, never the body's: a person claimed in the body is dropped, not forwarded.
+  for (const k of ["person", "userId", "user_id", "personId", "person_id"]) delete req[k];
   const res = await resolveThrough(
     cand,
     JSON.stringify({ ...req, operator, tags, type: "goalDispatchAsync" }),
@@ -826,6 +838,7 @@ proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
           goal: typeof req["goal"] === "string" ? (req["goal"] as string).slice(0, 200) : null,
           operator: SURFACE_OPERATOR,
           startedAt: Date.now(),
+          person: person ? { userId: person.userId, name: person.name } : null,
         });
       }
     } catch (err) {
@@ -843,7 +856,13 @@ proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
  */
 proxyRouter.get("/api/mine", async (c) => {
   if (ownDispatchCount() === 0) void backfillOwnDispatches();
-  const rows = listOwnDispatches(OWN_LIST_LIMIT);
+  // The signed-in person's asks, by the record of who asked. A row recorded before asks
+  // carried a person is no one's in particular, so it is in no one's Mine (it stays in All
+  // while goal-host lists it). Signed out, there is no "mine".
+  const person = sessionOf(c.req.header("Cookie"));
+  const rows = person
+    ? listOwnDispatches(Number.MAX_SAFE_INTEGER).filter((r) => r.person?.userId === person.userId).slice(0, OWN_LIST_LIMIT)
+    : [];
   const now = Date.now();
   await Promise.all(
     dueForRead(rows, now).map(async (id) => {
@@ -865,7 +884,7 @@ proxyRouter.get("/api/mine", async (c) => {
   const dispatches = rows.flatMap((r) => {
     const s = knownState(r.dispatchId);
     return s
-      ? [{ dispatchId: r.dispatchId, goal: r.goal, status: s.status, reached: s.reached, operator: r.operator, trigger: null, startedAt: r.startedAt, learning: null, answerBody: null, ...(s.executionId ? { executionId: s.executionId } : {}) }]
+      ? [{ dispatchId: r.dispatchId, goal: r.goal, status: s.status, reached: s.reached, operator: r.operator, trigger: null, startedAt: r.startedAt, learning: null, answerBody: null, own: true, person: r.person ?? null, ...(s.executionId ? { executionId: s.executionId } : {}) }]
       : [];
   });
   return c.json({ resolved: true, shape: "ownDispatches", body: { dispatches } }, 200, corsHeaders(c.req.header("Origin")));

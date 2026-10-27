@@ -24,6 +24,11 @@ export interface OwnDispatch {
   readonly operator: string;
   /** Epoch ms when this surface dispatched it (or goal-host's startedAt on backfill). */
   readonly startedAt: number;
+  /**
+   * The signed-in person who asked. Asking needs a signed-in person, so every ask this
+   * surface sends carries one; a row recorded before that (or by backfill) has none.
+   */
+  readonly person?: { readonly userId: string; readonly name: string | null } | null;
 }
 
 export interface KnownState {

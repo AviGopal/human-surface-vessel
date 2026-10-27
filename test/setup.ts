@@ -47,6 +47,16 @@ export async function forgetOwnDispatches(): Promise<void> {
   (await import("../src/own-dispatches.ts")).resetOwnDispatchesForTest();
 }
 
+// A SIGNED-IN PERSON (src/person-session.ts). Asking from the page needs one, and "Mine" is that person's asks, so a
+// test that asks or reads Mine opens a session and sends its cookie. Nothing reaches identity: the session is held
+// in this process only, as a sign-in would hold it.
+/** Open a person session; the Cookie header value that names it. */
+export async function signedInCookie(userId = "user:person-a", name: string | null = "Person A"): Promise<string> {
+  const { openSession } = await import("../src/person-session.ts");
+  const { id } = openSession({ token: `test-token-${userId}`, userId, orgId: null, email: null, name, expiresAt: Date.now() + 900_000 });
+  return `sf_person=${id}`;
+}
+
 // THE SURFACE'S VIEWS (src/ui-views.ts) are a file under the same WORKSPACE_ROOT plus a module cache, so a file that
 // writes a view calls this before and after, and the next file draws each region's default.
 /** Remove the views file and forget its cache. */

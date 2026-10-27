@@ -158,6 +158,7 @@ export async function dispatchGoal(req: DispatchRequest): Promise<DispatchOutcom
     body: JSON.stringify(goal),
   });
   const body = await readJson(res);
+  if (res.status === 401 && body.error === "sign_in_required") return { kind: "signIn" };
 
   // Branch on the flag, NOT on the status code: a refusal is 200 and an
   // acceptance is 202, so `res.ok` is true for both and tells you nothing.
@@ -243,10 +244,21 @@ export async function fetchOwnDispatches(): Promise<readonly ActiveDispatch[]> {
   }
 }
 
-/** The board's rows, plus the surface's own runs it no longer lists. The board's copy wins: it is the fresher. */
+/**
+ * The board's rows, plus the surface's own runs it no longer lists. The board's copy wins
+ * on state, being the fresher; who asked comes from the surface's own record, which is the
+ * only place that knows (goal-host names the surface's key, not the person).
+ */
 export function mergeOwnDispatches(board: readonly ActiveDispatch[], mine: readonly ActiveDispatch[]): readonly ActiveDispatch[] {
+  const own = new Map(mine.map((d) => [d.dispatchId, d]));
   const listed = new Set(board.map((d) => d.dispatchId));
-  return [...board, ...mine.filter((d) => !listed.has(d.dispatchId))];
+  return [
+    ...board.map((d) => {
+      const o = own.get(d.dispatchId);
+      return o ? { ...d, own: true, person: o.person ?? null } : d;
+    }),
+    ...mine.filter((d) => !listed.has(d.dispatchId)).map((d) => ({ ...d, own: true })),
+  ];
 }
 
 /** Answer a mid-walk question in place. */

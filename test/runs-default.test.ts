@@ -6,8 +6,9 @@ import { describe, expect, test } from "bun:test";
 import type { ActiveDispatch } from "../ui/src/api/types";
 import { initialFilter, latestMine } from "../ui/src/components/RunsList";
 
+// A row is the person's when the surface's own record has it (`own`), as the merge marks it; the operator label decides nothing.
 const row = (dispatchId: string, operator: string, startedAt: string): ActiveDispatch =>
-  ({ dispatchId, operator, startedAt, status: "completed", reached: false }) as unknown as ActiveDispatch;
+  ({ dispatchId, operator, startedAt, status: "completed", reached: false, ...(operator === "human-surface" ? { own: true } : {}) }) as unknown as ActiveDispatch;
 
 describe("latestMine", () => {
   test("the newest run asked from this surface", () => {

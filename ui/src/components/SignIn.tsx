@@ -5,18 +5,22 @@
  * Nothing here is shown where sign-in isn't offered.
  */
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useSession, useSignIn, useSignOut } from "../api/session";
 
 function until(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export function SignIn({ onSignedIn }: { onSignedIn?: () => void }): ReactNode {
+export function SignIn({ onSignedIn, openSignal = 0 }: { onSignedIn?: () => void; openSignal?: number }): ReactNode {
   const session = useSession();
   const signIn = useSignIn();
   const signOut = useSignOut();
   const [open, setOpen] = useState(false);
+  // Asked to open (an ask sent signed out): the form opens where the person is looking.
+  useEffect(() => {
+    if (openSignal > 0) setOpen(true);
+  }, [openSignal]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 

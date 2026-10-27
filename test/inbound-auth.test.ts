@@ -9,7 +9,7 @@
  * goal-host" is read off the record, not assumed.
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { forgetOwnDispatches, restoreNativeGlobals, testAuth } from "./setup.ts";
+import { forgetOwnDispatches, restoreNativeGlobals, signedInCookie, testAuth } from "./setup.ts";
 
 // First: in one process an earlier file may have left happy-dom or a fetch stub installed (test/setup.ts).
 await restoreNativeGlobals();
@@ -149,7 +149,7 @@ describe("every write route names its caller", () => {
   });
 
   test("must-fail: a browser-supplied operator is ignored on /api/run-goal", async () => {
-    const browser = await post("/api/run-goal", { goal: "What is 2 + 2?", operator: "operator:claude-avi" }, { Origin: HERE });
+    const browser = await post("/api/run-goal", { goal: "What is 2 + 2?", operator: "operator:claude-avi" }, { Origin: HERE, Cookie: await signedInCookie() });
     expect(browser.status).toBe(202);
     expect(outbound.filter((o) => o.body["type"] === "goalDispatchAsync").at(-1)?.body["operator"]).toBe("human-surface");
     const keyed = await post("/api/run-goal", { goal: "What is 2 + 2?", operator: "operator:claude-avi" }, { Authorization: "ApiKey valid-operator-1" });
@@ -275,12 +275,20 @@ describe("the browser's reads on /api/resolve are their own list", () => {
 describe("/api/run-goal tags the dispatch with the admitted caller", () => {
   const lastDispatch = () => outbound.filter((o) => o.body["type"] === "goalDispatchAsync").at(-1)?.body;
 
-  test("must-fail: a keyless same-origin ask is tagged caller:browser-unverified, keeping its operator and its own tags", async () => {
-    const r = await post("/api/run-goal", { goal: "What is 2 + 2?", tags: ["probe:x", "caller:operator:claude-avi"] }, { Origin: HERE });
+  test("must-fail: a keyless same-origin ask is tagged caller:browser-unverified and the person who asked, keeping its operator and its own tags", async () => {
+    const r = await post("/api/run-goal", { goal: "What is 2 + 2?", tags: ["probe:x", "caller:operator:claude-avi"] }, { Origin: HERE, Cookie: await signedInCookie() });
     expect(r.status).toBe(202);
     const sent = lastDispatch();
     expect(sent?.["operator"]).toBe("human-surface");
-    expect(sent?.["tags"]).toEqual(["probe:x", "caller:browser-unverified"]);
+    expect(sent?.["tags"]).toEqual(["probe:x", "caller:browser-unverified", "person:user:person-a"]);
+  });
+
+  test("must-fail: a keyless same-origin ask with nobody signed in dispatches nothing and asks for sign-in", async () => {
+    const before = outbound.filter((o) => o.body["type"] === "goalDispatchAsync").length;
+    const r = await post("/api/run-goal", { goal: "What is 2 + 2?" }, { Origin: HERE });
+    expect(r.status).toBe(401);
+    expect(((await r.json()) as { error?: string }).error).toBe("sign_in_required");
+    expect(outbound.filter((o) => o.body["type"] === "goalDispatchAsync").length).toBe(before);
   });
 
   test("must-fail: a keyed ask is tagged caller:<validated label>", async () => {

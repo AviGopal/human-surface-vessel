@@ -39,9 +39,9 @@ export function isGoalless(row: ActiveDispatch): boolean {
   return !row.goal?.trim();
 }
 
-/** Runs asked from this surface. Everything else was started by the system. */
+/** The signed-in person's runs: those in the surface's own record of what they asked. Everything else was started by the system or by someone else. */
 export function isMine(row: ActiveDispatch): boolean {
-  return row.operator === "human-surface";
+  return row.own === true;
 }
 
 /** The newest run asked from this surface, or null: what the main pane shows before anything is selected. */

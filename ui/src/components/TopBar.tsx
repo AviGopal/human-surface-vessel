@@ -47,6 +47,7 @@ function OutcomeLine({
   let tone = "error";
   switch (outcome.kind) {
     case "view":
+    case "signIn":
       return null;
     case "viewRefused":
       tone = "warn";
@@ -159,6 +160,9 @@ export function TopBar({
   const session = useSession().data;
   // A verdict given while signed out, where sign-in is offered: recorded as the person's once they sign in.
   const [pendingVerdict, setPendingVerdict] = useState<Parameters<typeof grade.mutate>[0] | null>(null);
+  // An ask sent signed out: nothing was dispatched, sign-in opens, and the ask goes once signed in.
+  const [pendingAsk, setPendingAsk] = useState<string | null>(null);
+  const [signInSignal, setSignInSignal] = useState(0);
   const queryClient = useQueryClient();
   // A complaint (16f-3): the same human_reported gap the form filed, about what is on screen.
   const complain = useMutation({
@@ -307,6 +311,10 @@ export function TopBar({
       grade.mutate(submission, { onSuccess: () => settle(true), onError: () => settle(false) });
       return;
     }
+    ask(text);
+  };
+
+  const ask = (text: string): void => {
     dispatch.mutate(
       { goal: text, operator: "human-surface", tags: ["surface:do-anything"], onScreen: onScreenReport(onScreen) },
       {
@@ -314,6 +322,16 @@ export function TopBar({
           if (outcome.kind === "view") {
             dispatch.reset();
             redraw(outcome.form);
+            return;
+          }
+          if (outcome.kind === "signIn") {
+            dispatch.reset();
+            if (session?.available) {
+              setPendingAsk(text);
+              setSignInSignal((n) => n + 1);
+            } else {
+              setEcho("Not sent: sign-in is unavailable");
+            }
             return;
           }
           if ((outcome.kind === "accepted" || outcome.kind === "refused") && outcome.dispatchId) {
@@ -402,7 +420,13 @@ export function TopBar({
           {paused ? "Paused" : "Live"}
         </button>
         <SignIn
+          openSignal={signInSignal}
           onSignedIn={() => {
+            if (pendingAsk) {
+              const text = pendingAsk;
+              setPendingAsk(null);
+              ask(text);
+            }
             if (!pendingVerdict) return;
             const said = pendingVerdict.verdict === "achieved" ? "reached" : "not reached";
             grade.mutate(pendingVerdict, {

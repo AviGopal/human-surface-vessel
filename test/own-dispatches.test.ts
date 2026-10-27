@@ -12,7 +12,7 @@ const nativeFetch = globalThis.fetch;
 GlobalRegistrator.register({ url: "http://127.0.0.1:28310/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { forgetOwnDispatches, testAuth, teardownDom, trackRoot } from "./setup.ts";
+import { forgetOwnDispatches, signedInCookie, testAuth, teardownDom, trackRoot } from "./setup.ts";
 import { Hono } from "hono";
 import {
   FINISHED_RECHECK_MS,
@@ -33,9 +33,13 @@ const systemRows = Array.from({ length: 50 }, (_, i) => ({
 }));
 let nextId = 0;
 const upstreamTypes: string[] = [];
+/** Every call that reached the stub standing in for goal-host and discovery, and the dispatch bodies it was sent. */
+const upstreamCalls: string[] = [];
+const dispatchBodies: Record<string, unknown>[] = [];
 const fakeUpstream = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
-  if (url.endsWith("/api/mine")) return app.request("/api/mine");
+  if (!url.endsWith("/api/mine")) upstreamCalls.push(url);
+  if (url.endsWith("/api/mine")) return readMine(personA);
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
   if (url.endsWith("/api/resolve")) {
     return new Response(JSON.stringify({ resolved: true, shape: "activeDispatches", body: { dispatches: systemRows } }), { status: 200 });
@@ -44,6 +48,7 @@ const fakeUpstream = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const type = body.type ?? body.pointer?.type ?? "";
   upstreamTypes.push(type);
   if (type === "vesselCapability") return new Response(JSON.stringify({ content: { vessels: [] } }), { status: 200 });
+  if (type === "goalDispatchAsync") dispatchBodies.push(body as Record<string, unknown>);
   if (type === "goalDispatchAsync") return new Response(JSON.stringify({ dispatchId: `mine-${++nextId}`, status: "running" }), { status: 202 });
   if (type === "goalWalkState") {
     if (goneIds.has(body.dispatchId ?? "")) return new Response(JSON.stringify({ resolved: false, shape: "goalWalkState", error: "dispatch not found" }), { status: 404 });
@@ -66,9 +71,14 @@ const app = new Hono();
 app.route("/", proxyRouter);
 
 const own = "http://127.0.0.1:28310";
+/** Mine as a signed-in person reads it. Bun's own Request: happy-dom's drops the Cookie header. */
+const readMine = (cookie: string) => app.fetch(new NativeRequest(`${own}/api/mine`, { headers: { cookie } }));
+/** The signed-in person asking from the page (asking needs one), and another person. */
+const personA = await signedInCookie("user:person-a", "Person A");
+const personB = await signedInCookie("user:person-b", "Person B");
 /** The person's page: same-origin and keyless (src/inbound-auth.ts admits it as browser-unverified). */
 const ask = (goal: string, operator: string) =>
-  app.fetch(new NativeRequest(`${own}/api/run-goal`, { method: "POST", body: JSON.stringify({ goal, operator }), headers: { "content-type": "application/json", origin: own } }));
+  app.fetch(new NativeRequest(`${own}/api/run-goal`, { method: "POST", body: JSON.stringify({ goal, operator }), headers: { "content-type": "application/json", origin: own, cookie: personA } }));
 /** A system caller: keyed, no Origin. */
 const systemAsk = (goal: string, operator: string) =>
   app.request(`${own}/api/run-goal`, { method: "POST", body: JSON.stringify({ goal, operator }), headers: { "content-type": "application/json", ...testAuth() } });
@@ -137,7 +147,7 @@ describe("/api/mine", () => {
     const r1 = (await (await ask("What time is it in France?", "human-surface")).json()) as { dispatchId: string };
     const r2 = (await (await ask("forgotten", "human-surface")).json()) as { dispatchId: string };
     walkStatus.set(r1.dispatchId, { status: "failed", reached: false });
-    const j = (await (await app.request("/api/mine")).json()) as { body: { dispatches: Array<{ dispatchId: string; status: string; operator: string }> } };
+    const j = (await (await readMine(personA)).json()) as { body: { dispatches: Array<{ dispatchId: string; status: string; operator: string }> } };
     expect(j.body.dispatches.map((d) => d.dispatchId)).toEqual([r1.dispatchId]);
     expect(j.body.dispatches[0]?.status).toBe("failed");
     expect(j.body.dispatches[0]?.operator).toBe("human-surface");
@@ -145,9 +155,58 @@ describe("/api/mine", () => {
   });
 });
 
+describe("Mine is the signed-in person's", () => {
+  type Row = { dispatchId: string; person: { userId: string; name: string | null } | null; own: boolean };
+  const mineOf = async (cookie: string): Promise<Row[]> => ((await (await readMine(cookie)).json()) as { body: { dispatches: Row[] } }).body.dispatches;
+
+  test("must-fail: an ask Person A sends is in Person A's Mine with Person A as its sender, and not in Person B's", async () => {
+    const r = (await (await ask("Where is it raining?", "human-surface")).json()) as { dispatchId: string };
+    walkStatus.set(r.dispatchId, { status: "completed", reached: true });
+    const personAs = await mineOf(personA);
+    expect(personAs.find((d) => d.dispatchId === r.dispatchId)).toMatchObject({ own: true, person: { userId: "user:person-a", name: "Person A" } });
+    expect((await mineOf(personB)).some((d) => d.dispatchId === r.dispatchId)).toBe(false);
+  });
+
+  test("must-fail: signed out, an ask reaches nothing upstream and there is no Mine", async () => {
+    const before = upstreamCalls.length;
+    const res = await app.fetch(new NativeRequest(`${own}/api/run-goal`, { method: "POST", body: JSON.stringify({ goal: "Who am I?" }), headers: { "content-type": "application/json", origin: own } }));
+    expect(res.status).toBe(401);
+    expect(upstreamCalls.length).toBe(before);
+    const none = (await (await app.fetch(new NativeRequest(`${own}/api/mine`))).json()) as { body: { dispatches: unknown[] } };
+    expect(none.body.dispatches).toEqual([]);
+  });
+});
+
+describe("who asked comes from the session", () => {
+  type Row = { dispatchId: string; person: { userId: string; name: string | null } | null };
+  const mineOf = async (cookie: string): Promise<Row[]> => ((await (await readMine(cookie)).json()) as { body: { dispatches: Row[] } }).body.dispatches;
+
+  test("must-fail: a person named in the body is ignored: Mine and the sender are the signed-in person's, and nothing claimed is forwarded", async () => {
+    const res = await app.fetch(new NativeRequest(`${own}/api/run-goal`, {
+      method: "POST",
+      body: JSON.stringify({ goal: "Is the trace store under its cap?", person: { userId: "user:person-c", name: "Person C" }, userId: "user:person-c" }),
+      headers: { "content-type": "application/json", origin: own, cookie: personA },
+    }));
+    const { dispatchId } = (await res.json()) as { dispatchId: string };
+    walkStatus.set(dispatchId, { status: "completed", reached: true });
+    expect((await mineOf(personA)).find((d) => d.dispatchId === dispatchId)?.person).toEqual({ userId: "user:person-a", name: "Person A" });
+    const sent = dispatchBodies.at(-1)!;
+    expect(sent["person"]).toBeUndefined();
+    expect(sent["userId"]).toBeUndefined();
+    expect(sent["tags"]).toContain("person:user:person-a");
+  });
+
+  test("must-fail: a row recorded before asks carried a person is in no one's Mine", async () => {
+    recordOwnDispatch({ dispatchId: "pre-1", goal: "Where are we?", operator: "human-surface", startedAt: Date.now() });
+    rememberState("pre-1", { status: "completed", reached: true, executionId: null, checkedAt: Date.now() });
+    expect((await mineOf(personA)).some((d) => d.dispatchId === "pre-1")).toBe(false);
+    expect((await mineOf(personB)).some((d) => d.dispatchId === "pre-1")).toBe(false);
+  });
+});
+
 describe("outcomes the surface keeps", () => {
   type Row = { dispatchId: string; status: string; reached: boolean | null };
-  const mine = async (): Promise<Row[]> => ((await (await app.request("/api/mine")).json()) as { body: { dispatches: Row[] } }).body.dispatches;
+  const mine = async (): Promise<Row[]> => ((await (await readMine(personA)).json()) as { body: { dispatches: Row[] } }).body.dispatches;
 
   test("must-fail: a finished run's outcome is read back after a restart, with goal-host unable to answer", async () => {
     const r = (await (await ask("Who am I?", "human-surface")).json()) as { dispatchId: string };

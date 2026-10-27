@@ -132,6 +132,10 @@ export interface ActiveDispatch {
   readonly answerBody: string | null;
   readonly selectedTemplateId?: string;
   readonly executionId?: string;
+  /** This surface asked it, by its own record of asks (never by an operator label). */
+  readonly own?: boolean;
+  /** The signed-in person who asked, from that record; null for an ask recorded before asks carried one. */
+  readonly person?: { readonly userId: string; readonly name: string | null } | null;
 }
 
 /**
@@ -187,7 +191,9 @@ export type DispatchOutcome =
   | { readonly kind: "accepted"; readonly dispatchId: string; readonly coalesced: boolean }
   | { readonly kind: "refused"; readonly dispatchId: string; readonly reason: string | null }
   | { readonly kind: "draining"; readonly message: string }
-  | { readonly kind: "rejected"; readonly message: string; readonly httpStatus: number };
+  | { readonly kind: "rejected"; readonly message: string; readonly httpStatus: number }
+  /** Asking needs a signed-in person: nothing was dispatched. */
+  | { readonly kind: "signIn" };
 
 export interface DispatchRequest {
   readonly goal: string;

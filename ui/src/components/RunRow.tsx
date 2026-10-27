@@ -104,7 +104,7 @@ export function RunRow({
     >
       <span className="sf-run-line">
         <StateBadge state={state} quietForMs={stalledForMs(facts)} />
-        <span className="sf-run-meta">{row.operator ?? row.trigger ?? "unattributed"}</span>
+        <span className="sf-run-meta">{row.person?.name ?? row.operator ?? row.trigger ?? "unattributed"}</span>
         {thread ? <ThreadMark mark={thread} /> : null}
         <span className="sf-run-elapsed">{formatElapsed(now - startedAtMs)}</span>
       </span>
