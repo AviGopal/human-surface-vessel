@@ -309,6 +309,9 @@ export function TopBar({
         cleared();
       };
       grade.mutate(submission, { onSuccess: () => settle(true), onError: () => settle(false) });
+      // A message in two parts ("that worked, now also list the sources"): the verdict
+      // above, and the request after it sent as an ask of its own.
+      if (read?.ask) ask(read.ask);
       return;
     }
     ask(text);

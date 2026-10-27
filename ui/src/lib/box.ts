@@ -53,7 +53,7 @@ const SAYS_NOT = /^(wrong( answer)?|that'?s wrong|it'?s wrong|(that|it) didn'?t 
  * would read real asks as grades.
  */
 export function readVerdictPhrase(text: string): "achieved" | "not_achieved" | null {
-  const t = text.trim().toLowerCase().replace(/[.!\s]+$/u, "").replace(/\s+/g, " ");
+  const t = text.trim().toLowerCase().replace(/[.,;:!\s]+$/u, "").replace(/\s+/g, " ");
   if (SAYS_REACHED.test(t)) return "achieved";
   if (SAYS_NOT.test(t)) return "not_achieved";
   return null;
@@ -81,24 +81,61 @@ const REASON_PHRASES: Readonly<Record<string, { verdict: "achieved" | "not_achie
 );
 
 function norm(t: string): string {
-  return t.trim().toLowerCase().replace(/[’]/g, "'").replace(/[.!\s]+$/u, "").replace(/\s+/g, " ");
+  return t.trim().toLowerCase().replace(/[’]/g, "'").replace(/[.,;:!\s]+$/u, "").replace(/\s+/g, " ");
 }
 
 /**
- * A verdict with what the person said about it: an exact verdict phrase or one of
- * the form's reasons, optionally followed by a colon and a note ("wrong answer:
- * Barcelona isn't in Italy"). Notes are kept as the form kept them ("<reason> —
- * <note>"). Anything else is not a verdict.
+ * Where something may follow a verdict phrase: a colon, a comma, a semicolon, a full
+ * stop or a dash ("wrong answer: …", "wrong answer, the dates are off").
  */
-export function readVerdict(text: string): { verdict: "achieved" | "not_achieved"; notes: string } | null {
-  const at = text.indexOf(":");
-  const head = at >= 0 ? text.slice(0, at) : text;
-  const note = at >= 0 ? text.slice(at + 1).trim() : "";
+const NOTE_SEPARATOR = /\s*(?::|,|;|\.(?=\s)|\s[—–-])\s*/g;
+
+/**
+ * What follows a verdict asks for MORE rather than saying WHY: a question, or a clause
+ * that opens with a request ("now also show …", "can you …", "list …"). Then the
+ * message has two parts, the verdict and a new ask, and both are acted on.
+ */
+const ASKS_FOR_MORE =
+  /\?\s*$|^(?:(?:and|but|so|then|ok|okay)\s+)?(?:(?:now|also|next|please)\b[\s,]*)*(?:can you|could you|would you|will you|please|show|list|find|give|tell|make|try|do|add|open|search|check|fetch|get|run|send|compare|summari[sz]e|explain|write|draw|put|lead|sort|rank|filter|what|how|why|where|when|who|which)\b/i;
+
+/** Whether the words after a verdict ask for more, not explain it. */
+export function asksForMore(rest: string): boolean {
+  return ASKS_FOR_MORE.test(rest.trim());
+}
+
+/**
+ * A verdict with what the person said after it: an exact verdict phrase or one of the
+ * grade reasons, optionally followed by a separator and more words. The words before
+ * the separator must be the whole phrase, so an ask that merely contains one ("wrong
+ * answers to common questions") is not read as a grade. What follows is the verdict's
+ * reason, kept as "<phrase> — <reason>". After a reached verdict, words that ask for
+ * more ("that worked, now also list the sources") are a new ask sent as well, and the
+ * verdict is bare; after a not-reached verdict, whatever follows is about that run and
+ * stays its reason. Anything else is not a verdict.
+ */
+export function readVerdict(text: string): { verdict: "achieved" | "not_achieved"; notes: string; ask?: string } | null {
+  const whole = readHead(text, "");
+  if (whole) return whole;
+  for (const m of text.matchAll(NOTE_SEPARATOR)) {
+    const rest = text.slice((m.index ?? 0) + m[0].length).trim();
+    if (!rest) continue;
+    const head = text.slice(0, m.index);
+    const bare = readHead(head, "");
+    // After "it worked", a request is a new ask; after "wrong answer", whatever follows is
+    // about that run (why it is wrong, or how to try again) and stays its reason.
+    if (bare?.verdict === "achieved" && asksForMore(rest)) return { ...bare, ask: rest };
+    const read = readHead(head, rest);
+    if (read) return read;
+  }
+  return null;
+}
+
+function readHead(head: string, note: string): { verdict: "achieved" | "not_achieved"; notes: string } | null {
   const reason = REASON_PHRASES[norm(head)];
   if (reason) return { verdict: reason.verdict, notes: note ? `${reason.label} — ${note}` : reason.label };
   const plain = readVerdictPhrase(head);
   if (!plain) return null;
-  return { verdict: plain, notes: note ? `${head.trim()} — ${note}` : text };
+  return { verdict: plain, notes: note ? `${head.trim()} — ${note}` : head.trim().replace(/[,;:\s]+$/u, "") };
 }
 
 /**
