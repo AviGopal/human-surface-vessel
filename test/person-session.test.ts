@@ -145,16 +145,16 @@ describe("a person signed in on the surface", () => {
     expect(v?.["delivery"]).toMatchObject({ recorded: true });
   });
 
-  test("signed out, a verdict goes as before: this vessel's key, to activity-api, kept either way", async () => {
+  test("must-fail: signed out, a verdict is kept on the run, refused sign_in_required, and nothing is sent", async () => {
     labelStatus = 403;
     const r = await grade("d-anon");
-    expect(r.status).toBe(403);
-    expect(calls.some((c) => c.url.endsWith("/v1/auth/on-behalf-of"))).toBe(false);
-    const write = calls.find((c) => c.url.endsWith("/v2/impulses/resolve"));
-    expect(write?.auth).toBe(`ApiKey ${process.env.METABOB_API_KEY}`);
+    expect(r.status).toBe(401);
+    expect(((await r.json()) as Row)["error"]).toBe("sign_in_required");
+    expect(calls).toEqual([]);
     const [v] = await kept("d-anon");
     expect(v?.["by"]).toBeNull();
-    expect(v?.["delivery"]).toMatchObject({ recorded: false, status: 403 });
+    expect(v?.["note"]).toBe("wrong answer");
+    expect(v?.["delivery"]).toMatchObject({ recorded: false, status: 401, reason: "sign_in_required" });
   });
 
   test("where the writer is only reachable over the overlay, a signed-in verdict is kept and not sent", async () => {

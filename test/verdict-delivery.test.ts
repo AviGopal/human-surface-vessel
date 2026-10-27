@@ -5,7 +5,7 @@
  * survives a reload and says why in aa's words. Nothing retries the write.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { testAuth } from "./setup.ts";
+import { labelWriterStub, signedInCookie, testAuth } from "./setup.ts";
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { readParticipation } from "../src/participation-journal.ts";
@@ -15,6 +15,8 @@ let next: Upstream = { status: 200, body: { success: true } };
 const labelWrites: string[] = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const writer = labelWriterStub(input, init);
+  if (writer) return writer;
   if (String(input).includes("/v2/impulses/resolve") && String(init?.body ?? "").includes("goal_verification_label_write")) {
     labelWrites.push(String(init?.body ?? ""));
     if (next === "unreachable") throw new Error("connect ECONNREFUSED");
@@ -33,7 +35,7 @@ async function grade(dispatchId: string, upstream: Upstream) {
   next = upstream;
   return app.request("/api/grade", {
     method: "POST",
-    headers: { "content-type": "application/json", ...testAuth() },
+    headers: { "content-type": "application/json", ...testAuth(), Cookie: await signedInCookie() },
     body: JSON.stringify({ execution_id: `e-${dispatchId}`, dispatch_id: dispatchId, goal: "Where is it raining?", verdict: "not_achieved", notes: "Wrong answer", judge_reached: true }),
   });
 }

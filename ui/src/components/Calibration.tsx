@@ -11,6 +11,7 @@
  * system); "system" sends a calibration-only label the server re-checks.
  */
 
+import { SignIn } from "./SignIn";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -150,7 +151,10 @@ export function BlindRun({
           <button type="submit" className="sf-button" disabled={!grade || mutation.isPending || (!dirty && saved !== null)}>
             {saved && !dirty ? "Saved" : "Save"}
           </button>
-          {mutation.isError ? (
+          {mutation.isError && (mutation.error as Error).message === "sign_in_required" ? (
+            // A grade is a person's verdict: signed out, sign-in opens here and the grade is saved once signed in.
+            <SignIn openSignal={1} onSignedIn={() => { if (mutation.variables) mutation.mutate(mutation.variables); }} />
+          ) : mutation.isError ? (
             <span className="sf-error-inline" title={(mutation.error as Error).message}>
               {gradeRefusal((mutation.error as Error).message) ?? `Not saved: ${(mutation.error as Error).message}`}
             </span>

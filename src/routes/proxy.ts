@@ -32,7 +32,7 @@ import { admitCaller, admittedCaller, carry, remoteOf, requireCaller, type Calle
 import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, verdictDelivery, writeRenderPolicy } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
-import { arrivedOverTls, closeSession, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, viewOf } from "../person-session.ts";
+import { arrivedOverTls, closeSession, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, viewOf, type PersonSession } from "../person-session.ts";
 import { VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
@@ -1200,6 +1200,20 @@ proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve
  * latch. A verdict recorded without it is inert, so the proxy sets it here
  * rather than trusting a browser to.
  */
+/**
+ * Where a person's label goes and the credential it carries: the producer the registry
+ * names for the label write, with an on-behalf-of token minted for that producer's node
+ * and this one shape from the person's session. A Response when sign-in isn't available
+ * or the token can't be minted.
+ */
+async function asPersonLabelWrite(c: Context, person: PersonSession): Promise<{ url: string; authorization: string } | Response> {
+  const { available, producer } = await signInAvailable();
+  if (!available || !producer) return c.json({ success: false, error: "sign-in isn't available on this node" }, 503);
+  const minted = await mintLabelToken(person, producer.node);
+  if (!minted.ok) return c.json({ success: false, error: minted.error }, minted.status >= 400 ? (minted.status as 400) : 502);
+  return { url: producer.url, authorization: `Bearer ${minted.token}` };
+}
+
 proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
   const person = sessionOf(c.req.header("Cookie"));
@@ -1233,19 +1247,22 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
       about: aboutOf(body["about"]),
     },
   });
+  // A HUMAN VERDICT NEEDS A SIGNED-IN PERSON (as an ask does, user ruling 10-27). Signed out,
+  // the verdict is kept on the run (above) and nothing is sent: under this vessel's own key
+  // the label writer refuses a human verdict, so sending it only produced a refusal.
+  if (!person) {
+    recordObservation({
+      type: "verdict_delivery",
+      caller: callerOf(admittedCaller(c)),
+      visibility: "operator_only",
+      body: { dispatch_id: kept.body?.["dispatch_id"] ?? null, execution_id: body["execution_id"], verdict_at: kept.observedAt, status: 401, recorded: false, reason: "sign_in_required", upstream: null, as: null },
+    });
+    return c.json({ success: false, error: "sign_in_required" }, 401, corsHeaders(c.req.header("Origin")));
+  }
   let unreachable = false;
-  // Signed in: the write goes to the producer the registry names, as the person, with a
-  // token minted for that producer's node and this one shape. Signed out: as before,
-  // under this vessel's own key, which the label writer refuses for a human verdict.
-  const asPerson = person
-    ? await (async (): Promise<{ url: string; authorization: string } | Response> => {
-        const { available, producer } = await signInAvailable();
-        if (!available || !producer) return c.json({ success: false, error: "sign-in isn't available on this node" }, 503);
-        const minted = await mintLabelToken(person, producer.node);
-        if (!minted.ok) return c.json({ success: false, error: minted.error }, minted.status >= 400 ? (minted.status as 400) : 502);
-        return { url: producer.url, authorization: `Bearer ${minted.token}` };
-      })()
-    : null;
+  // The write goes to the producer the registry names, as the person, with a token
+  // minted for that producer's node and this one shape.
+  const asPerson = await asPersonLabelWrite(c, person);
   const labelBody = JSON.stringify({
       impulse: {
         pointer: {
@@ -1273,12 +1290,12 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
     asPerson instanceof Response
       ? asPerson
       : await passthrough({
-          url: asPerson ? asPerson.url : `${ACTIVITY_API_ENDPOINT}/v2/impulses/resolve`,
+          url: asPerson.url,
           method: "POST",
           rawBody: labelBody,
           origin: c.req.header("Origin"),
           onUnreachable: () => (unreachable = true),
-          ...(asPerson ? { authorization: asPerson.authorization } : {}),
+          authorization: asPerson.authorization,
         });
   // What upstream answered, kept beside the verdict in its own words, so a
   // refusal reads as "not recorded" after a reload. Observation only: nothing
@@ -1304,8 +1321,8 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
       recorded,
       reason: unreachable ? "unreachable" : recorded ? null : (said ?? `HTTP ${upstream.status}`).slice(0, 300),
       upstream: "activity-api",
-      // Whose credential the write carried: a signed-in person's, or this vessel's own.
-      as: person ? "person" : "surface",
+      // Whose credential the write carried: always the signed-in person's.
+      as: "person",
     },
   });
   return upstream;
@@ -1994,6 +2011,10 @@ proxyRouter.post("/api/calibration/grade", requireCaller("/api/calibration/grade
   if (!windowId || !dispatchId || !isGrade(grade)) {
     return c.json({ error: "window_id, dispatch_id and grade are required" }, 400);
   }
+  // A calibration grade is a human verdict: it needs a signed-in person, and is refused
+  // before anything is read or sent when nobody is (under this vessel's key it was refused).
+  const person = sessionOf(c.req.header("Cookie"));
+  if (!person) return c.json({ error: "sign_in_required" }, 401);
   const { windows } = await readCalibrationWindows();
   const w = windows.find((x) => x.windowId === windowId);
   if (!w) return c.json({ error: "no open window" }, 404);
@@ -2004,9 +2025,12 @@ proxyRouter.post("/api/calibration/grade", requireCaller("/api/calibration/grade
   if (!executionId) return c.json({ error: "no execution id" }, 409);
   // "" not null: the label store rejects NULL in option<string> (see /api/grade).
   const notes = typeof body?.["notes"] === "string" ? body["notes"].trim() : "";
+  const asPerson = await asPersonLabelWrite(c, person);
+  if (asPerson instanceof Response) return asPerson;
   return passthrough({
-    url: `${ACTIVITY_API_ENDPOINT}/v2/impulses/resolve`,
+    url: asPerson.url,
     method: "POST",
+    authorization: asPerson.authorization,
     rawBody: JSON.stringify({
       impulse: {
         pointer: {

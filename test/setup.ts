@@ -57,6 +57,26 @@ export async function signedInCookie(userId = "user:person-a", name: string | nu
   return `sf_person=${id}`;
 }
 
+// WHERE A SIGNED-IN PERSON'S LABEL GOES. A human verdict needs a signed-in person, and is then written as them: the
+// registry names this node's label writer and identity mints an on-behalf-of token for it. A test that grades stubs
+// both with this (null for any other call).
+export const TEST_LABEL_WRITER = "http://writer.local:8080";
+export const TEST_OBO = "eyJ.test-obo.sig";
+export function labelWriterStub(input: RequestInfo | URL, init?: RequestInit): Response | null {
+  const url = String(input);
+  if (url.endsWith("/v1/auth/on-behalf-of")) return Response.json({ success: true, data: { token: TEST_OBO, expires_at: new Date(Date.now() + 60_000).toISOString() } });
+  let body: { pointer?: { type?: unknown } } = {};
+  try {
+    body = JSON.parse(String(init?.body ?? "{}")) as typeof body;
+  } catch {
+    /* not json */
+  }
+  if (body.pointer?.type === "vesselRegistry") {
+    return Response.json({ content: { vessels: [{ vesselId: "activity-api", shapes: ["goal_verification_label_write"], endpoint: TEST_LABEL_WRITER, protocol: "http", origin: "local", metadata: { node: "node-a" } }] } });
+  }
+  return null;
+}
+
 // THE SURFACE'S VIEWS (src/ui-views.ts) are a file under the same WORKSPACE_ROOT plus a module cache, so a file that
 // writes a view calls this before and after, and the next file draws each region's default.
 /** Remove the views file and forget its cache. */

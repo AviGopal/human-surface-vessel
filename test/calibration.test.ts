@@ -5,7 +5,8 @@
  * `purpose:"calibration"` label, which goal-host and every credit reader skip.
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { testAuth } from "./setup.ts";
+import { signedInCookie, testAuth } from "./setup.ts";
+import { resetLabelProducerCache } from "../src/person-session.ts";
 import { Hono } from "hono";
 import { corpusVerdict, isOwnSubstrate, parseWindow } from "../src/calibration.ts";
 import { proxyRouter } from "../src/routes/proxy.ts";
@@ -76,7 +77,12 @@ describe("parseWindow", () => {
 let poolRows: unknown[] = [];
 let vessels: Array<Record<string, unknown>> = [];
 const labelWrites: Record<string, unknown>[] = [];
+/** The Authorization each label write carried, in order. */
+const labelAuth: (string | null)[] = [];
 const poolReadsFrom: string[] = [];
+/** Every call that left this vessel. */
+const upstream: string[] = [];
+const OBO = "eyJ.calibration-obo.sig";
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -87,9 +93,17 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   } catch {
     /* not json */
   }
+  upstream.push(url);
+  if (url.endsWith("/v1/auth/on-behalf-of")) {
+    return new Response(JSON.stringify({ success: true, data: { token: OBO, expires_at: new Date(Date.now() + 60_000).toISOString() } }), { status: 200 });
+  }
   const pointer = ((parsed["impulse"] as { pointer?: Record<string, unknown> } | undefined)?.pointer ??
     parsed["pointer"] ??
     parsed) as Record<string, unknown>;
+  // The label writer, as the registry names it on this node (the person's token is minted for it).
+  if (pointer["type"] === "vesselRegistry") {
+    return new Response(JSON.stringify({ content: { vessels: [{ vesselId: "activity-api", shapes: ["goal_verification_label_write"], endpoint: "http://writer.local:8080", protocol: "http", origin: "local", metadata: { node: "node-a" } }] } }), { status: 200 });
+  }
   if (pointer["type"] === "vesselCapability") {
     return new Response(JSON.stringify({ content: { vessels } }), { status: 200 });
   }
@@ -99,6 +113,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (pointer["type"] === "goal_verification_label_write") {
     labelWrites.push(pointer);
+    labelAuth.push(new Headers(init?.headers).get("Authorization"));
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   }
   if (pointer["type"] === "goalWalkState" || parsed["type"] === "goalWalkState") {
@@ -113,6 +128,9 @@ afterAll(() => {
 
 beforeEach(() => {
   labelWrites.length = 0;
+  labelAuth.length = 0;
+  upstream.length = 0;
+  resetLabelProducerCache();
   poolReadsFrom.length = 0;
   vessels = [{ endpoint: "http://127.0.0.1:8090", resolve_endpoint: "/v2/impulses/resolve" }];
   const now = Date.now();
@@ -127,10 +145,12 @@ beforeEach(() => {
 const app = new Hono();
 app.route("/", proxyRouter);
 
-function grade(body: Record<string, unknown>): Promise<Response> {
+/** A calibration grade from the page, as a signed-in person (a grade is a person's verdict). */
+const person = await signedInCookie("user:person-a", "Person A");
+function grade(body: Record<string, unknown>, cookie: string | null = person): Promise<Response> {
   return app.request("/api/calibration/grade", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...testAuth() },
+    headers: { "Content-Type": "application/json", ...testAuth(), ...(cookie ? { Cookie: cookie } : {}) },
     body: JSON.stringify(body),
   });
 }
@@ -172,6 +192,23 @@ describe("/api/calibration/windows", () => {
 });
 
 describe("/api/calibration/grade", () => {
+  test("must-fail: signed out, a grade is refused sign_in_required and nothing leaves this vessel", async () => {
+    withSink("system");
+    const res = await grade({ window_id: "w1", dispatch_id: "run-a", grade: "reached" }, null);
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error?: string }).error).toBe("sign_in_required");
+    expect(upstream).toEqual([]);
+    expect(labelWrites).toEqual([]);
+  });
+
+  test("must-fail: signed in, the label goes to the registry's writer as the person, with a minted token", async () => {
+    withSink("system");
+    const res = await grade({ window_id: "w1", dispatch_id: "run-a", grade: "reached" });
+    expect(res.status).toBe(200);
+    expect(labelAuth).toEqual([`Bearer ${OBO}`]);
+    expect(upstream).toContain("http://writer.local:8080/v2/impulses/resolve");
+  });
+
   test("must-fail: with the default report sink nothing is written to the system", async () => {
     const res = await grade({ window_id: "w1", dispatch_id: "run-a", grade: "reached" });
     expect(res.status).toBe(409);
@@ -227,7 +264,7 @@ describe("/api/grade", () => {
     labelWrites.length = 0;
     const res = await app.request("/api/grade", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...testAuth() },
+      headers: { "Content-Type": "application/json", ...testAuth(), Cookie: person },
       body: JSON.stringify({ execution_id: "exec_a", verdict: "achieved" }),
     });
     expect(res.status).toBe(200);
