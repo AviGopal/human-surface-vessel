@@ -63,6 +63,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     uiView_write:
       `writes the view of a human surface region (${names}): which blocks the region draws and in what order, ` +
       `top to bottom as the blocks list orders them; a block left out is not drawn. ${regions.join(". ")}. ` +
+      `a write naming the view already in force succeeds as unchanged and writes no revision; ` +
       `undo restores the view in force before the current one; read back in human_surface:ui_view`,
     "human_surface:ui_view":
       `reads what the human surface draws now: for each region (${names}) the view in force, its blocks in draw order, ` +
@@ -127,7 +128,8 @@ export function runOf(pointer: Record<string, unknown>): ViewRun | null {
 }
 
 export type ViewWrite =
-  | { ok: true; view: UiView }
+  /** `unchanged`: the write named exactly the view in force; nothing was written and `view` is that view. */
+  | { ok: true; view: UiView; unchanged?: true }
   | { ok: false; refusal: ViewRefusal; detail: string };
 
 const root = (): string => process.env.WORKSPACE_ROOT ?? "/workspace";
@@ -206,6 +208,14 @@ export function currentView(region: ViewRegion): UiView {
   return { region, revision: 0, id: `${region}@0`, blocks: d.blocks, limits: d.limits, note: null, writtenBy: null, run: null, writtenAt: 0, undoOf: null };
 }
 
+/** Same blocks in the same order, and the same limits. The note is not drawn, so it does not make a view different. */
+function sameView(v: UiView, blocks: readonly string[], limits: Readonly<Record<string, number>>): boolean {
+  if (v.blocks.length !== blocks.length || v.blocks.some((b, i) => b !== blocks[i])) return false;
+  const a = Object.entries(v.limits).sort(([x], [y]) => x.localeCompare(y));
+  const b = Object.entries(limits).sort(([x], [y]) => x.localeCompare(y));
+  return a.length === b.length && a.every(([k, n], i) => b[i]![0] === k && b[i]![1] === n);
+}
+
 /** Write a view for a region; refused writes store nothing. */
 export function writeView(
   input: { region: unknown; blocks: unknown; limits?: unknown; note?: unknown },
@@ -217,6 +227,14 @@ export function writeView(
   const { refusal, detail } = validate(input.region, input.blocks, input.limits);
   if (refusal) return { ok: false, refusal, detail };
   const region = input.region as ViewRegion;
+  // A view identical to the one in force changes nothing on screen, so it is not a revision:
+  // one run's retried step wrote the same view three times in a row (revisions 4 to 6 on one
+  // node), and each read as a change to anything reading the log. The write still succeeds,
+  // since what it asked for is in force, so a walk reads it as done, not as a failure.
+  const current = currentView(region);
+  if (sameView(current, input.blocks as string[], (input.limits as Record<string, number> | undefined) ?? {})) {
+    return { ok: true, view: current, unchanged: true };
+  }
   const revision = currentView(region).revision + 1;
   const view: UiView = {
     region,

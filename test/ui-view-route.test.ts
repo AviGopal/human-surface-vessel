@@ -60,4 +60,21 @@ describe("a region's view through the routes", () => {
     await write({ region: "landing", blocks: ["health"] });
     expect((await report()).run).toBeNull();
   });
+
+  test("must-fail: a write naming exactly the view in force succeeds as unchanged and writes no revision", async () => {
+    await write({ region: "landing", blocks: ["changed", "needs_you"], limits: { needs_you: 4 } });
+    const before = await read();
+    const again = await write({ region: "landing", blocks: ["changed", "needs_you"], limits: { needs_you: 4 } });
+    expect(again.status).toBe(200);
+    expect(again.json).toMatchObject({ resolved: true, success: true, body: { unchanged: true, revision: before.json.revision } });
+    expect((await read()).json.revision).toBe(before.json.revision);
+  });
+
+  test("control: a write that changes the view still gets a new revision", async () => {
+    const before = await read();
+    const changed = await write({ region: "landing", blocks: ["needs_you", "changed"], limits: { needs_you: 4 } });
+    expect(changed.status).toBe(200);
+    expect(changed.json.body.unchanged).toBeUndefined();
+    expect((await read()).json.revision).toBe(before.json.revision + 1);
+  });
 });

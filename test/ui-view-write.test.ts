@@ -87,6 +87,22 @@ describe("uiView_write", () => {
     expect(u3.json.body.view).toMatchObject({ revision: 2, blocks: ["latest_run"], undoOf: 0 });
   });
 
+  test("must-fail: an identical view is unchanged, whatever its limits' order or note, and writes no revision", async () => {
+    await write({ region: "landing", blocks: ["health", "needs_you"], limits: { needs_you: 3 } });
+    const same = await write({ region: "landing", blocks: ["health", "needs_you"], limits: { needs_you: 3 }, note: "a different note" });
+    expect(same.status).toBe(200);
+    expect(same.json.body).toMatchObject({ unchanged: true, revision: 1 });
+    const reordered = await write({ region: "landing", blocks: ["needs_you", "health"], limits: { needs_you: 3 } });
+    expect(reordered.json.body).toMatchObject({ revision: 2 });
+    expect(reordered.json.body.unchanged).toBeUndefined();
+    const relimited = await write({ region: "landing", blocks: ["needs_you", "health"], limits: { needs_you: 2 } });
+    expect(relimited.json.body.revision).toBe(3);
+    // undo still restores, and the default counts as a view in force
+    expect((await write({ region: "landing", undo: true })).json.body.view).toMatchObject({ revision: 4, blocks: ["needs_you", "health"], limits: { needs_you: 3 } });
+    await forgetViews();
+    expect((await write({ region: "landing", blocks: ["latest_run"] })).json.body).toMatchObject({ unchanged: true, revision: 0 });
+  });
+
   test("must-fail: views survive a restart, and a stored line outside the vocabulary is not replayed", async () => {
     await write({ region: "landing", blocks: ["health", "needs_you"] });
     const file = join(process.env.WORKSPACE_ROOT!, "state", "human-surface", "ui-views.jsonl");

@@ -22,6 +22,7 @@ describe("view shape descriptions come from the view contract", () => {
       for (const b of blocks) expect(d).toContain(b);
     }
     expect(d).toContain("in what order");
+    expect(d).toContain("succeeds as unchanged");
     expect(d).toContain("block");
   });
 

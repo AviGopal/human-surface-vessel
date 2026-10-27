@@ -1023,7 +1023,8 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       if (!write.ok) {
         return c.json({ resolved: false, success: false, shape: type, refusal: write.refusal, error: `${write.refusal}: ${write.detail}` }, 422);
       }
-      return c.json({ resolved: true, success: true, shape: type, body: { region: write.view.region, revision: write.view.revision, view: write.view } });
+      // `unchanged`: the view asked for was already in force; nothing was written and the revision stands.
+      return c.json({ resolved: true, success: true, shape: type, body: { region: write.view.region, revision: write.view.revision, view: write.view, ...(write.unchanged ? { unchanged: true } : {}) } });
     }
 
     case "human_surface:ui_view": {
