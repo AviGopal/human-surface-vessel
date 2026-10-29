@@ -69,8 +69,11 @@ export interface FormCensus {
    * The decision briefs this surface DREW, newest first (at most RECENT_BRIEFS_MAX): each a `form_decision` row
    * whose form is "brief", with the run it was drawn for (when the page knew it), the region and when the
    * browser reported it. What a run showed in its answer is then readable by dispatch id, from the record.
+   * Always present, [] when nothing was drawn or nothing was reported: a list, not a count, so a reader
+   * asking "was a brief drawn for this run" gets an answer it can search. `observed` still says whether
+   * anyone looked — an empty list beside `observed: false` is "no report", not "no brief".
    */
-  readonly recent_briefs?: readonly RecentBrief[];
+  readonly recent_briefs: readonly RecentBrief[];
   /** Named so a reader knows the census is a window, not the whole history. */
   readonly window: number;
 }
@@ -141,7 +144,7 @@ export function buildFormCensus(
   read: (limit: number) => readonly Observation[] = recentObservations,
 ): FormCensus {
   const decisions = read(CENSUS_WINDOW).filter((o) => o.type === "form_decision");
-  if (decisions.length === 0) return { observed: false, window: CENSUS_WINDOW };
+  if (decisions.length === 0) return { observed: false, recent_briefs: [], window: CENSUS_WINDOW };
 
   const byForm: Record<string, number> = {};
   const byDecidedBy: Record<string, number> = {};
@@ -205,7 +208,7 @@ export function buildFormCensus(
   // the route refuses an empty `decisions[]`, so this means malformed entries
   // got through, and reporting `observed: true` with zero counts would claim a
   // measurement nobody made.
-  if (total === 0) return { observed: false, window: CENSUS_WINDOW };
+  if (total === 0) return { observed: false, recent_briefs: [], window: CENSUS_WINDOW };
 
   return {
     observed: true,
