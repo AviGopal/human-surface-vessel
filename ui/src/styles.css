@@ -2053,3 +2053,14 @@ body { overflow: hidden; }
 .sf-landing-health { display: flex; flex-wrap: wrap; gap: var(--sf-space-2) var(--sf-space-4); align-items: baseline; width: 100%; text-align: left; font: inherit; color: var(--sf-ink); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); cursor: pointer; min-height: 44px; }
 .sf-landing-num { font-weight: 700; font-variant-numeric: tabular-nums; }
 .sf-landing-stuck { color: var(--sf-not-reached); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60ch; }
+
+/* A decision brief (ContentRender BriefView): one block per item the person decides. */
+.sf-brief { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.sf-brief-item { border-left: 2px solid var(--sf-rule); padding-left: 0.75rem; }
+.sf-brief-subject { font-weight: 600; margin: 0; }
+.sf-brief-ask { margin: 0.25rem 0; }
+.sf-brief-why { margin: 0.25rem 0; opacity: 0.8; }
+.sf-brief-evidence { list-style: none; margin: 0.25rem 0; padding: 0; }
+.sf-brief-evidence-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.sf-brief-source { opacity: 0.7; font-size: var(--sf-text-xs); }
+.sf-brief-options { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0; }

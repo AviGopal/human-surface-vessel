@@ -129,6 +129,7 @@ export function Rendered({
   header = true,
   extraHeader,
   lead = false,
+  dispatchId,
 }: {
   content: Content;
   density?: Density;
@@ -145,6 +146,8 @@ export function Rendered({
    * previewed through the same path a pin or a learned form takes.
    */
   lead?: boolean;
+  /** The run this content belongs to, when the caller knows it: recorded with the form decision. */
+  dispatchId?: string;
 }): ReactNode {
   const { paused, intervalMs } = useLiveControls();
   const policy = useRenderPolicy({ enabled: !paused, intervalMs }).data;
@@ -254,6 +257,7 @@ export function Rendered({
           truncated={truncated}
           policyRevision={policy?.revision ?? null}
           region={region}
+          {...(dispatchId ? { dispatchId } : {})}
         />
       ) : null}
     </div>

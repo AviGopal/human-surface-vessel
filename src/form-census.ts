@@ -65,9 +65,24 @@ export interface FormCensus {
   readonly bare_values_as_verbatim?: number;
   /** Epoch ms of the most recent decision the census read. */
   readonly last_observed_at?: number;
+  /**
+   * The decision briefs this surface DREW, newest first (at most RECENT_BRIEFS_MAX): each a `form_decision` row
+   * whose form is "brief", with the run it was drawn for (when the page knew it), the region and when the
+   * browser reported it. What a run showed in its answer is then readable by dispatch id, from the record.
+   */
+  readonly recent_briefs?: readonly RecentBrief[];
   /** Named so a reader knows the census is a window, not the whole history. */
   readonly window: number;
 }
+
+export interface RecentBrief {
+  readonly dispatch_id: string | null;
+  readonly region: string | null;
+  /** Epoch ms of the observation that carried the row. */
+  readonly at: number;
+}
+/** How many drawn briefs the census lists. */
+export const RECENT_BRIEFS_MAX = 20;
 
 interface DecisionRow {
   shape?: unknown;
@@ -78,6 +93,7 @@ interface DecisionRow {
   single_line?: unknown;
   truncated?: unknown;
   region?: unknown;
+  dispatch_id?: unknown;
 }
 
 function rowsOf(observation: Observation): DecisionRow[] {
@@ -135,6 +151,7 @@ export function buildFormCensus(
   let total = 0;
   let bareVerbatim = 0;
   let lastAt = 0;
+  const briefs: RecentBrief[] = [];
 
   for (const observation of decisions) {
     lastAt = Math.max(lastAt, observation.observedAt);
@@ -143,6 +160,13 @@ export function buildFormCensus(
       bump(byForm, row.form);
       bump(byDecidedBy, row.decided_by);
       bump(byRegion, row.region);
+      if (row.form === "brief") {
+        briefs.push({
+          dispatch_id: typeof row.dispatch_id === "string" && row.dispatch_id ? row.dispatch_id : null,
+          region: typeof row.region === "string" && row.region ? row.region : null,
+          at: observation.observedAt,
+        });
+      }
       if (typeof row.shape === "string") shapes.add(row.shape);
       if (typeof row.shape === "string" && typeof row.content_signature === "string") {
         payloads.add(`${row.shape}${KEY_SEP}${row.content_signature}`);
@@ -193,6 +217,7 @@ export function buildFormCensus(
     by_region: byRegion,
     bare_values_as_verbatim: bareVerbatim,
     last_observed_at: lastAt,
+    recent_briefs: briefs.sort((a, b) => b.at - a.at).slice(0, RECENT_BRIEFS_MAX),
     window: CENSUS_WINDOW,
   };
 }

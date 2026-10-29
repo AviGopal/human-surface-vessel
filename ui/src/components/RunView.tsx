@@ -235,7 +235,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
         {promoted && promotedContent ? (
           <section className="sf-view-section sf-known" data-known={known} aria-label="Answer">
             <h3 className="sf-view-label">Answer{KNOWNNESS_LABEL[known] ? <span className="sf-known-label"> · {KNOWNNESS_LABEL[known]}</span> : null} <PersonMark fromPerson={promotedFromPerson} /></h3>
-            <Rendered content={promotedContent} density="full" header={false} region="run_answer" lead />
+            <Rendered content={promotedContent} density="full" header={false} region="run_answer" lead dispatchId={walk.dispatchId} />
           </section>
         ) : basisLead ? (
           <section className="sf-view-section sf-known" data-known={known} aria-label="Answer">
@@ -243,7 +243,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
             {basisLinks.length > 0 ? (
               <FoundLinks links={basisLinks} />
             ) : (
-              <Rendered content={basisLead} density="full" header={false} region="run_answer" lead />
+              <Rendered content={basisLead} density="full" header={false} region="run_answer" lead dispatchId={walk.dispatchId} />
             )}
           </section>
         ) : null}

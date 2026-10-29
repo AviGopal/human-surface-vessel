@@ -29,6 +29,7 @@
  *    branch anywhere.
  */
 
+import { parseBrief } from "./brief";
 import {
   CONTENT_FORMS,
   DEFAULT_CONTENT_FORM,
@@ -298,6 +299,8 @@ export type FormDecisionSource =
   | "nested_field"
   /** `renderPolicy.learnedFormByShape`: a form a learner earned for this shape. */
   | "learned"
+  /** The content is a decision brief by its structure (lib/brief.ts). */
+  | "brief"
   /** `{success, shape, body}` — the resolver's reply wrapper; `body` is what is drawn. */
   | "resolver_envelope"
   /** `{success, content: "<json>"}` — content carried as an encoded string. */
@@ -791,6 +794,16 @@ function withMeta(plan: RenderPlan, extra: readonly MetaChip[], decidedBy: FormD
 
 /** Plan a parsed value. `depth` bounds the wrapper unwraps; `partial` marks a cut preview. */
 function planValue(shape: string, v: unknown, text: string, depth: number, partial: boolean): RenderPlan {
+  // A DECISION BRIEF, by its structure: drawn as one, never as the record it also is. A cut preview is not a
+  // whole brief, so it is not one (its items may be missing). Under one wrapper key it is the content.
+  if (!partial) {
+    if (parseBrief(v) !== null) return { form: "brief", text, decidedBy: "brief" };
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      const ks = Object.keys(v);
+      const inner = ks.length === 1 ? (v as Record<string, unknown>)[ks[0] as string] : undefined;
+      if (parseBrief(inner) !== null) return { form: "brief", text: JSON.stringify(inner, null, 2), label: ks[0], decidedBy: "brief" };
+    }
+  }
   if (Array.isArray(v)) {
     if (v.length === 0) return { form: "empty", text: "", decidedBy: partial ? "partial_json" : "record" };
     const objects = v.every((e) => typeof e === "object" && e !== null && !Array.isArray(e));

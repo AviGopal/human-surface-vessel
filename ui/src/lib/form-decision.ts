@@ -89,6 +89,8 @@ export interface FormDecision {
   readonly single_line: boolean;
   /** Where on the surface it was drawn. A question card and a ledger row are different reads. */
   readonly region: string;
+  /** The run it was drawn for, where the caller knows it (a run's answer). Lets the census say what a run showed. */
+  readonly dispatch_id?: string;
 }
 
 /**
@@ -105,7 +107,7 @@ const KEY_SEP = "\u0000";
 
 /** The key two identical decisions collapse onto. */
 function keyOf(d: FormDecision): string {
-  return `${d.shape}${KEY_SEP}${d.content_signature}${KEY_SEP}${d.form}${KEY_SEP}${d.decided_by}${KEY_SEP}${String(d.policy_revision)}${KEY_SEP}${d.region}`;
+  return `${d.shape}${KEY_SEP}${d.content_signature}${KEY_SEP}${d.form}${KEY_SEP}${d.decided_by}${KEY_SEP}${String(d.policy_revision)}${KEY_SEP}${d.region}${KEY_SEP}${d.dispatch_id ?? ""}`;
 }
 
 /**

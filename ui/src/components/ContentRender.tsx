@@ -23,6 +23,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { CUT_KEY, findMarkup, heuristicForm, parseDiff, parseRows, readableNumber, type MetaChip, type RenderPlan } from "../lib/ledger";
 import { Prose } from "./Prose";
+import { parseBriefText } from "../lib/brief";
 
 /** Above this a value is not a scalar, whatever the plan said. */
 const SCALAR_MAX_CHARS = 300;
@@ -536,6 +537,55 @@ function SandboxedPage({ source }: { source: string }): ReactNode {
   return <iframe className="sf-page-frame" title="Page" sandbox="" referrerPolicy="no-referrer" src={src} />;
 }
 
+/**
+ * A decision brief: each item the system leaves to the person, with what it asks, why it is theirs, the
+ * evidence (every line with its source) and the options as chips. Content that is not a whole brief (lib/brief.ts)
+ * is drawn verbatim under a visible note, never as a brief with holes.
+ */
+function BriefView({ text }: { text: string }): ReactNode {
+  const brief = parseBriefText(text);
+  if (!brief) {
+    return (
+      <>
+        <p className="sf-note sf-muted" data-brief="invalid">Not a complete decision brief: every item needs a question id and an ask. Shown as received.</p>
+        <Verbatim text={text} />
+      </>
+    );
+  }
+  if (brief.items.length === 0) return <p className="sf-note" data-brief="empty">Nothing needs you now.</p>;
+  return (
+    <ol className="sf-brief" data-brief="items">
+      {brief.items.map((item) => (
+        <li key={item.questionId} className="sf-brief-item" data-question-id={item.questionId}>
+          {item.subject ? <p className="sf-brief-subject">{item.subject}</p> : null}
+          <p className="sf-brief-ask">{item.ask}</p>
+          {item.whyYou ? <p className="sf-brief-why">{item.whyYou}</p> : null}
+          {item.evidence.length > 0 ? (
+            <ul className="sf-brief-evidence">
+              {item.evidence.map((e, i) => (
+                <li key={i} className="sf-brief-evidence-row">
+                  {e.label ? <span className="sf-record-key">{e.label}</span> : null}
+                  {e.value ? <span className="sf-brief-evidence-value">{e.value}</span> : null}
+                  {e.source ? <span className="sf-brief-source">{e.source}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {item.options.length > 0 ? (
+            <p className="sf-brief-options">
+              {item.options.map((o, i) => (
+                <span key={i} className="sf-chip sf-brief-option" title={o.effect || undefined}>
+                  {o.label}
+                </span>
+              ))}
+            </p>
+          ) : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function FormBody({ plan }: { plan: RenderPlan }): ReactNode {
   switch (plan.form) {
     case "prose":
@@ -564,6 +614,8 @@ function FormBody({ plan }: { plan: RenderPlan }): ReactNode {
     case "page":
       // The markup the payload carries, found inside a wrapper if need be.
       return <SandboxedPage source={findMarkup(plan.text) ?? plan.text} />;
+    case "brief":
+      return <BriefView text={plan.text} />;
     case "text":
     default:
       // THE DEFAULT BRANCH. Every unrecognised form lands here and renders

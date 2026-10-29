@@ -105,6 +105,9 @@ export const CONTENT_FORMS = [
   // Markup drawn as a page, in a sandboxed frame with nothing granted. Never a
   // default: a person asks for it ("show this as a page" in the box).
   "page",
+  // A decision brief ({asOf, items:[{questionId, ask, …}]}): what the system leaves to the person,
+  // recognised by its structure (ui/src/lib/brief.ts), never by its shape name.
+  "brief",
 ] as const;
 export type ContentForm = (typeof CONTENT_FORMS)[number];
 
@@ -117,9 +120,10 @@ export const DEFAULT_CONTENT_FORM: ContentForm = "text";
  * preferences, and pinning one would hide the thing it describes: an `empty`
  * pin on a shape that later carries content renders that content as an
  * emptiness notice, and a `stub` pin claims "no content carried" over a payload
- * that was carried. A pin has to be a preference to be honourable.
+ * that was carried. A pin has to be a preference to be honourable. A `brief` is a fact
+ * about the content too: it is drawn only where the content IS a brief.
  */
-export const NON_PINNABLE_FORMS = ["empty", "stub"] as const satisfies readonly ContentForm[];
+export const NON_PINNABLE_FORMS = ["empty", "stub", "brief"] as const satisfies readonly ContentForm[];
 
 export const PINNABLE_FORMS: readonly ContentForm[] = CONTENT_FORMS.filter(
   (f) => !(NON_PINNABLE_FORMS as readonly ContentForm[]).includes(f),
@@ -153,7 +157,8 @@ type MirroredForm =
   | "record"
   | "scalar"
   | "stub"
-  | "page";
+  | "page"
+  | "brief";
 type FormsMirrorOk = [ContentForm] extends [MirroredForm]
   ? [MirroredForm] extends [ContentForm]
     ? true

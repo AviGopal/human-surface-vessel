@@ -31,6 +31,7 @@ export function FormDecisionRecorder({
   truncated,
   policyRevision,
   region,
+  dispatchId,
 }: {
   shape: string;
   plan: RenderPlan;
@@ -39,6 +40,8 @@ export function FormDecisionRecorder({
   policyRevision: number | null;
   /** Where on the surface this was drawn — a question card and a ledger row are different reads. */
   region: string;
+  /** The run this was drawn for, when the caller knows it. */
+  dispatchId?: string;
 }): ReactNode {
   const signature = contentSignature(plan.text);
   useEffect(() => {
@@ -56,12 +59,13 @@ export function FormDecisionRecorder({
       single_line: !plan.text.includes("\n"),
       truncated,
       region,
+      ...(dispatchId ? { dispatch_id: dispatchId } : {}),
     });
     // `signature` stands in for `plan.text`: a decision is identified by the
     // content it was made about, and a paint that re-derives the same plan for
     // the same bytes is not a new decision. The ledger dedupes regardless; this
     // keeps the effect from re-firing on every identical re-render in the first
     // place.
-  }, [shape, signature, plan.form, plan.decidedBy, policyRevision, plan.text, truncated, region]);
+  }, [shape, signature, plan.form, plan.decidedBy, policyRevision, plan.text, truncated, region, dispatchId]);
   return null;
 }
