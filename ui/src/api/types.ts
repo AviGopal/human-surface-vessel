@@ -85,6 +85,8 @@ export interface RouteAround {
 
 export interface GoalWalkState {
   readonly dispatchId: string;
+  /** Set when this run's reach waits for a person's verdict (see PersonVerdict). */
+  readonly personVerdict?: PersonVerdict | null;
   readonly status: DispatchStatus;
   readonly reached: boolean | null;
   readonly goalReachReason: string | null;
@@ -136,6 +138,23 @@ export interface ActiveDispatch {
   readonly own?: boolean;
   /** The signed-in person who asked, from that record; null for an ask recorded before asks carried one. */
   readonly person?: { readonly userId: string; readonly name: string | null } | null;
+  /** A judge-only reach waiting for a person's verdict (goal-host person-verdict.ts); null or absent otherwise. */
+  readonly personVerdict?: PersonVerdict | null;
+}
+
+/**
+ * A reach the judge alone called reached, deferred to a person: only a signed-in
+ * person's grade decides it (goal-host `personVerdict`, on `activeDispatches` rows
+ * and `goalWalkState`). Times are ms epoch.
+ */
+export interface PersonVerdict {
+  readonly executionId: string;
+  readonly state: "open" | "delivered" | "ungraded" | "expired" | "judge-fallback";
+  readonly deferredAt: number;
+  /** When the window ends: after it a self-goal falls back to the judge, any other run resolves ungraded. */
+  readonly expiresAt: number;
+  /** "system" for the system's own goal. */
+  readonly originator: "system" | "operator" | null;
 }
 
 /**

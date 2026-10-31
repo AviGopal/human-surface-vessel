@@ -2030,6 +2030,16 @@ body { overflow: hidden; }
 .sf-gap-attempts li[data-landed="true"] { color: var(--sf-reached); }
 .sf-gap-when { font-family: var(--sf-font-mono); color: var(--sf-ink-3); margin-right: var(--sf-space-2); }
 
+/* Runs whose reach waits for a person's verdict: each opens the run, where it is graded. */
+.sf-awaiting-verdicts { border-bottom: 1px solid var(--sf-rule-strong); padding-block: var(--sf-space-2); }
+.sf-awaiting-verdicts > ul { margin: 0; padding: 0; list-style: none; }
+.sf-awaiting-head { margin: 0; padding: var(--sf-space-1) var(--sf-space-4); font-size: var(--sf-text-xs); color: var(--sf-ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.sf-awaiting-open { display: grid; gap: 2px; width: 100%; text-align: left; padding: var(--sf-space-2) var(--sf-space-4); border: 0; border-bottom: 1px solid var(--sf-rule); background: none; color: inherit; font: inherit; cursor: pointer; }
+.sf-awaiting-verdicts li[aria-current="true"] .sf-awaiting-open { background: var(--sf-rule); }
+.sf-awaiting-goal { font-size: var(--sf-text-sm); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sf-awaiting-mark { font-size: var(--sf-text-xs); font-variant-numeric: tabular-nums; }
+.sf-awaiting-grade { font-size: var(--sf-text-xs); text-decoration: underline; }
+
 /* A person signed in on this surface: who, until when, and the two-field form when signed out. */
 .sf-signin { position: relative; display: inline-flex; align-items: center; gap: var(--sf-space-2); }
 .sf-signin-who { font-size: var(--sf-text-sm); color: var(--sf-ink-2); white-space: nowrap; }

@@ -229,6 +229,18 @@ export async function fetchActiveDispatches(): Promise<readonly ActiveDispatch[]
 }
 
 /**
+ * The runs whose reach waits for a person's verdict: goal-host's `activeDispatches`
+ * filtered server-side to open deferrals (the board's newest 50 would drop an older
+ * one), soonest to lapse first. Kept only when the row says so itself, so a goal-host
+ * that ignores the filter lists nothing rather than every run.
+ */
+export async function fetchAwaitingVerdicts(): Promise<readonly ActiveDispatch[]> {
+  const body = await resolveShape<{ dispatches?: readonly ActiveDispatch[] }>({ type: "activeDispatches", awaiting: "person_verdict" });
+  const rows = Array.isArray(body?.dispatches) ? body.dispatches : [];
+  return rows.filter((r) => r.personVerdict?.state === "open");
+}
+
+/**
  * The runs this surface asked, from its own record. goal-host's listing is the
  * newest 50 of everyone's runs, so on a busy node a person's asks fall off it
  * and "Mine" goes empty. Never fails the board: an error here is no rows.

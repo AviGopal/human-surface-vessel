@@ -16,7 +16,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { useAllVerdicts, useBoard, useGapThreads } from "../api/queries";
+import { useAllVerdicts, useAwaitingVerdicts, useBoard, useGapThreads } from "../api/queries";
+import { AwaitingVerdicts } from "./AwaitingVerdicts";
 import { GapThreads } from "./GapThreads";
 import type { ActiveDispatch } from "../api/types";
 import { sortRuns } from "../lib/sort";
@@ -102,6 +103,8 @@ export function RunsList({
   const board = useBoard({ enabled: !paused && !frozen, intervalMs });
   const verdicts = useAllVerdicts({ enabled: !paused && !frozen, intervalMs });
   const gapThreads = useGapThreads({ enabled: filter === "system" && !paused && !frozen });
+  // Runs only a person's grade can decide, under every filter: they are asked of whoever is reading.
+  const awaiting = useAwaitingVerdicts({ enabled: !paused && !frozen, intervalMs });
   // A lane run that belongs to a gap thread is drawn inside that thread and nowhere else.
   const inGapThread = new Set((filter === "system" ? (gapThreads.data ?? []) : []).flatMap((t) => t.attempts.map((a) => a.dispatchId).filter((d): d is string => !!d)));
   const personReached = personReachedByRun(verdicts.data ?? []);
@@ -215,6 +218,7 @@ export function RunsList({
         aria-label="Runs, newest first"
         onKeyDown={onListKeyDown}
       >
+        {awaiting.data ? <AwaitingVerdicts rows={awaiting.data} now={now} onSelect={onSelect} selectedDispatchId={selectedDispatchId} /> : null}
         {filter === "system" && gapThreads.data ? <GapThreads threads={gapThreads.data} onSelect={onSelect} selectedDispatchId={selectedDispatchId} /> : null}
         {failed && committed.length === 0 ? <p className="sf-rail-empty sf-error">Runs unavailable</p> : null}
         {!failed && committed.length === 0 ? <p className="sf-rail-empty">{board.isLoading ? "Loading…" : "No runs"}</p> : null}

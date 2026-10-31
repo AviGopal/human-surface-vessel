@@ -3,6 +3,7 @@ import { streamAwareInterval, useStreamConnected } from "../state/stream";
 import {
   dispatchGoal,
   fetchActiveDispatches,
+  fetchAwaitingVerdicts,
   fetchCapability,
   fetchFleetShapes,
   fetchGap,
@@ -55,6 +56,20 @@ export function useBoard(opts: { enabled: boolean; intervalMs: number }): UseQue
     // With retry off, a failed poll is a failed poll until the next one, and
     // the region reads `failureCount` rather than `isError` so even a
     // momentary return to `pending` cannot repaint the failure as loading.
+    retry: false,
+  });
+}
+
+/** Runs waiting for a person's verdict. Under the board's key, so a grade's board refresh re-reads it too. */
+export function useAwaitingVerdicts(opts: { enabled: boolean; intervalMs: number }): UseQueryResult<readonly ActiveDispatch[]> {
+  return useQuery({
+    queryKey: [...queryKeys.board, "awaiting", "person_verdict"],
+    queryFn: fetchAwaitingVerdicts,
+    enabled: opts.enabled,
+    // A deferral waits minutes to days: no need for the live cadence.
+    refetchInterval: opts.enabled ? Math.max(opts.intervalMs, 30_000) : false,
+    refetchOnWindowFocus: false,
+    placeholderData: (previous) => previous,
     retry: false,
   });
 }

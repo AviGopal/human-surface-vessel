@@ -110,6 +110,16 @@ function duration(ms: number): string {
   return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+/**
+ * Which options the grade offers. A reach waiting for a person (goal-host personVerdict
+ * open) is not decided yet, so the person gives the verdict either way ("Reached" /
+ * "Not reached"); a reached run's options only dispute, and cannot say it worked.
+ */
+export function gradeState(state: RunState, personVerdict: GoalWalkState["personVerdict"]): "reached" | "not-reached" | "ungraded" {
+  if (personVerdict?.state === "open") return "ungraded";
+  return state === "reached" ? "reached" : state === "ungraded" ? "ungraded" : "not-reached";
+}
+
 export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
   const { paused, intervalMs } = useLiveControls();
   const now = useNow(paused);
@@ -300,7 +310,7 @@ export function RunView({ dispatchId }: { dispatchId: string }): ReactNode {
             about={promoted && promotedContent ? { pool_id: promoted.id, shape: promoted.shape, ...(promoted.producedBy ? { produced_by: promoted.producedBy } : {}), ...(promotedFromPerson ? { provenance: "from-a-person" } : {}) } : null}
           />
           <GradeGesture
-            renderedState={state === "reached" ? "reached" : state === "ungraded" ? "ungraded" : "not-reached"}
+            renderedState={gradeState(state, walk.personVerdict)}
             executionId={walk.executionId}
             goal={walk.goal ?? ""}
             alreadyGraded={walk.humanGraded}
