@@ -44,6 +44,25 @@ const VIEW_LIMITS: Record<ViewRegion, Record<string, { min: number; max: number 
  */
 export type ReportPointer = Readonly<Record<string, string | number | boolean>> & { readonly type: string };
 
+/**
+ * How an answer is drawn, kept beside the pointer and never sent with it. `rows`: a list of
+ * rows, each with every field in full. `judge: "outcome"`: each row offers a verdict, written
+ * as an outcome row citing it, under the signed-in person's own key.
+ */
+export type ReportForm = { readonly pointer: ReportPointer; readonly form?: "rows"; readonly judge?: "outcome" };
+
+/** What a view names in `reports`: a bare pointer (drawn as fields), or a pointer with its form. */
+export type ReportItem = ReportPointer | ReportForm;
+
+/** The pointer an item reads: the producer is sent this and nothing else. */
+export function pointerOfItem(item: ReportItem): ReportPointer {
+  return isReportForm(item) ? item.pointer : item;
+}
+
+export function isReportForm(item: ReportItem): item is ReportForm {
+  return typeof (item as { pointer?: unknown }).pointer === "object" && (item as { pointer?: unknown }).pointer !== null;
+}
+
 /** How many reports one view may name. */
 const MAX_REPORTS = 8;
 const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_:.-]{0,79}$/;
@@ -53,11 +72,13 @@ const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_:.-]{0,79}$/;
  * only read (they file and change nothing), so drawing the screen never acts on the
  * system; a view written by the system replaces this list.
  */
-export const DEFAULT_VIEWS: Record<ViewRegion, { blocks: readonly string[]; limits: Record<string, number>; reports: readonly ReportPointer[] }> = {
+export const DEFAULT_VIEWS: Record<ViewRegion, { blocks: readonly string[]; limits: Record<string, number>; reports: readonly ReportItem[] }> = {
   landing: {
     blocks: ["needs_you", "reports"],
     limits: {},
     reports: [
+      // What the walk answered, each answer in full, with a person's verdict offered on it.
+      { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome" },
       { type: "trace_failure_pattern_report" },
       { type: "failure_count_report" },
       { type: "execution_trace", limit: 10 },
@@ -70,7 +91,7 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { blocks: readonly string[]; limi
 export interface ViewContract {
   readonly regions: Readonly<Record<string, readonly string[]>>;
   readonly limits: Readonly<Record<string, Readonly<Record<string, { min: number; max: number }>>>>;
-  readonly defaults: Readonly<Record<string, { blocks: readonly string[]; reports?: readonly ReportPointer[] }>>;
+  readonly defaults: Readonly<Record<string, { blocks: readonly string[]; reports?: readonly ReportItem[] }>>;
 }
 
 const CONTRACT: ViewContract = { regions: VIEW_REGIONS, limits: VIEW_LIMITS, defaults: DEFAULT_VIEWS };
@@ -86,7 +107,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     const fallback = contract.defaults[region]?.blocks ?? [];
     const reports = contract.defaults[region]?.reports ?? [];
     return `region ${region}: blocks ${blocks.join(", ")}${limits.length ? `; ${limits.join(", ")}` : ""}; default ${fallback.join(", ") || "none"}` +
-      (blocks.includes("reports") ? `; the reports block draws the answer to each pointer in reports (1 to ${MAX_REPORTS}, each {type, ...plain arguments}, never a _write shape)${reports.length ? `, by default ${reports.map((r) => r.type).join(", ")}` : ""}` : "");
+      (blocks.includes("reports") ? `; the reports block draws the answer to each pointer in reports (1 to ${MAX_REPORTS}, each {type, ...plain arguments}, never a _write shape; or {pointer, form: "rows", judge?: "outcome"} to draw each row in full and offer a person's verdict on it)${reports.length ? `, by default ${reports.map((r) => pointerOfItem(r).type).join(", ")}` : ""}` : "");
   });
   const names = Object.keys(contract.regions).join(", ");
   return {
@@ -121,7 +142,7 @@ export interface UiView {
   readonly blocks: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
   /** What the reports block reads, in draw order; empty when the view draws no reports. */
-  readonly reports: readonly ReportPointer[];
+  readonly reports: readonly ReportItem[];
   readonly note: string | null;
   /** The caller label the write door admitted; never a key. */
   readonly writtenBy: string | null;
@@ -202,7 +223,23 @@ function load(): void {
 }
 
 /** A report pointer as written, or why it is not one. */
-function reportOf(r: unknown): { pointer: ReportPointer } | { detail: string } {
+function reportOf(r: unknown): { pointer: ReportPointer; item: ReportItem } | { detail: string } {
+  if (typeof r === "object" && r !== null && !Array.isArray(r) && Object.hasOwn(r, "pointer")) {
+    const { pointer, form, judge, ...rest } = r as Record<string, unknown>;
+    if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form and judge only` };
+    const got = pointerOf(pointer);
+    if ("detail" in got) return got;
+    if (form !== undefined && form !== "rows") return { detail: `form: "rows"` };
+    if (judge !== undefined && judge !== "outcome") return { detail: `judge: "outcome"` };
+    if (judge !== undefined && form !== "rows") return { detail: `judge needs form "rows": a verdict is on a row` };
+    const item: ReportForm = { pointer: got.pointer, ...(form ? { form } : {}), ...(judge ? { judge } : {}) };
+    return { pointer: got.pointer, item };
+  }
+  const got = pointerOf(r);
+  return "detail" in got ? got : { pointer: got.pointer, item: got.pointer };
+}
+
+function pointerOf(r: unknown): { pointer: ReportPointer } | { detail: string } {
   if (typeof r !== "object" || r === null || Array.isArray(r)) return { detail: "each report is a pointer object with a type" };
   const out: Record<string, string | number | boolean> = {};
   for (const [k, v] of Object.entries(r as Record<string, unknown>)) {
@@ -272,7 +309,7 @@ export function currentView(region: ViewRegion): UiView {
 }
 
 /** Same blocks in the same order, the same limits and the same reports. The note is not drawn, so it does not make a view different. */
-function sameView(v: UiView, blocks: readonly string[], limits: Readonly<Record<string, number>>, reports: readonly ReportPointer[]): boolean {
+function sameView(v: UiView, blocks: readonly string[], limits: Readonly<Record<string, number>>, reports: readonly ReportItem[]): boolean {
   if (v.blocks.length !== blocks.length || v.blocks.some((b, i) => b !== blocks[i])) return false;
   if (JSON.stringify(v.reports) !== JSON.stringify(reports)) return false;
   const a = Object.entries(v.limits).sort(([x], [y]) => x.localeCompare(y));
@@ -291,7 +328,7 @@ export function writeView(
   const { refusal, detail } = validate(input.region, input.blocks, input.limits, input.reports ?? []);
   if (refusal) return { ok: false, refusal, detail };
   const region = input.region as ViewRegion;
-  const reports = ((input.reports as unknown[] | undefined) ?? []).map((r) => (reportOf(r) as { pointer: ReportPointer }).pointer);
+  const reports = ((input.reports as unknown[] | undefined) ?? []).map((r) => (reportOf(r) as { item: ReportItem }).item);
   // A view identical to the one in force changes nothing on screen, so it is not a revision:
   // one run's retried step wrote the same view three times in a row (revisions 4 to 6 on one
   // node), and each read as a change to anything reading the log. The write still succeeds,

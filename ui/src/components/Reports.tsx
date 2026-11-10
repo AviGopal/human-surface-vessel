@@ -4,10 +4,15 @@
  * and the size of its lists, and says plainly when nothing answered and why. Which
  * reports appear is the view's (src/ui-views.ts), so the system changes this screen
  * by writing a view, not by a rebuild.
+ *
+ * A view may ask for a report's rows in full (`form: "rows"`): each row with every field as
+ * records wrote it, nothing chosen or reordered by the surface. With `judge: "outcome"` each
+ * row offers a person's verdict, written as an outcome row citing it under their own key.
  */
-import type { ReactNode } from "react";
-import type { ReportAnswer, ReportPointer } from "../api/client";
+import { useState, type ReactNode } from "react";
+import { formOfItem, writeOutcome, type ReportAnswer, type ReportForm, type ReportItem } from "../api/client";
 import { useReport } from "../api/queries";
+import { useSession } from "../api/session";
 
 /** How many plain values a report shows before "and N more". */
 const FIELDS_SHOWN = 8;
@@ -63,13 +68,84 @@ export function reportRows(answer: unknown): { label: string; value: string; ite
   return rows;
 }
 
-function Report({ pointer, enabled, intervalMs }: { pointer: ReportPointer; enabled: boolean; intervalMs: number }): ReactNode {
+/** A field's value as words, in full: text as written, a list as its items, a nested object as JSON. */
+export function fieldText(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) return v.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(", ");
+  if (typeof v === "object" && v !== null) return JSON.stringify(v);
+  return plain(v);
+}
+
+type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number | null } | { state: "refused"; reason: string };
+
+function Judge({ rowId }: { rowId: string }): ReactNode {
+  const session = useSession();
+  const [verdict, setVerdict] = useState<Verdict>({ state: "idle" });
+  const signedIn = session.data?.signedIn === true;
+  const give = async (r: 0 | 1): Promise<void> => {
+    setVerdict({ state: "sending", r });
+    const got = await writeOutcome(rowId, r);
+    setVerdict(got.ok ? { state: "done", r, seq: got.seq } : { state: "refused", reason: got.reason });
+  };
+  return (
+    <div className="sf-row-judge" role="group" aria-label="Your verdict on this">
+      {verdict.state === "done" ? (
+        <p className="sf-row-note">
+          You judged this {verdict.r === 1 ? "right" : "wrong"}
+          {verdict.seq !== null ? ` (record #${verdict.seq})` : ""}. Judging again replaces it.
+        </p>
+      ) : null}
+      <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} onClick={() => void give(1)}>
+        Right
+      </button>
+      <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} onClick={() => void give(0)}>
+        Wrong
+      </button>
+      {!signedIn ? <p className="sf-muted sf-row-note">Sign in with your key to give a verdict.</p> : null}
+      {verdict.state === "refused" ? (
+        <p className="sf-row-note" role="alert">
+          Not recorded: {verdict.reason}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function Rows({ answer, judge }: { answer: unknown; judge: boolean }): ReactNode {
+  const rows = Array.isArray(answer) ? answer : [answer];
+  if (rows.length === 0) return <p className="sf-muted sf-report-note">answered with nothing</p>;
+  return (
+    <ol className="sf-rows">
+      {rows.map((row, i) => {
+        const o: Record<string, unknown> = typeof row === "object" && row !== null && !Array.isArray(row) ? (row as Record<string, unknown>) : { value: row };
+        const id = typeof o["id"] === "string" ? (o["id"] as string) : null;
+        return (
+          <li key={id ?? i} className="sf-row" data-row={id ?? undefined}>
+            <dl className="sf-row-fields">
+              {Object.entries(o).map(([k, v]) => (
+                <div key={k} className="sf-row-field">
+                  <dt>{k.replace(/_/g, " ")}</dt>
+                  <dd>{fieldText(v)}</dd>
+                </div>
+              ))}
+            </dl>
+            {judge && id ? <Judge rowId={id} /> : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Report({ entry, enabled, intervalMs }: { entry: ReportForm; enabled: boolean; intervalMs: number }): ReactNode {
+  const pointer = entry.pointer;
   const q = useReport(pointer, { enabled, intervalMs });
   const title = reportTitle(pointer.type);
   const a: ReportAnswer | undefined = q.data;
   let inner: ReactNode;
   if (!a) inner = <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>;
   else if (!a.ok) inner = <p className="sf-muted sf-report-note">no answer: {a.reason}</p>;
+  else if (entry.form === "rows") inner = <Rows answer={a.answer} judge={entry.judge === "outcome"} />;
   else {
     const rows = reportRows(a.answer);
     const shown = rows.slice(0, FIELDS_SHOWN);
@@ -100,11 +176,11 @@ function Report({ pointer, enabled, intervalMs }: { pointer: ReportPointer; enab
   );
 }
 
-export function Reports({ pointers, enabled, intervalMs }: { pointers: readonly ReportPointer[]; enabled: boolean; intervalMs: number }): ReactNode {
+export function Reports({ pointers, enabled, intervalMs }: { pointers: readonly ReportItem[]; enabled: boolean; intervalMs: number }): ReactNode {
   return (
     <div className="sf-reports">
       {pointers.map((p) => (
-        <Report key={JSON.stringify(p)} pointer={p} enabled={enabled} intervalMs={intervalMs} />
+        <Report key={JSON.stringify(p)} entry={formOfItem(p)} enabled={enabled} intervalMs={intervalMs} />
       ))}
     </div>
   );

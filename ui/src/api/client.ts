@@ -475,10 +475,41 @@ export interface UiViewState {
   readonly blocks: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
   /** What the reports block reads: pointers, each with its shape in `type`. Absent from a server that predates them. */
-  readonly reports?: readonly ReportPointer[];
+  readonly reports?: readonly ReportItem[];
 }
 
 export type ReportPointer = Readonly<Record<string, string | number | boolean>> & { readonly type: string };
+/** A pointer with how its answer is drawn (src/ui-views.ts ReportForm). Only the pointer is sent. */
+export type ReportForm = { readonly pointer: ReportPointer; readonly form?: "rows"; readonly judge?: "outcome" };
+export type ReportItem = ReportPointer | ReportForm;
+
+export function formOfItem(item: ReportItem): ReportForm {
+  return typeof (item as { pointer?: unknown }).pointer === "object" && (item as { pointer?: unknown }).pointer !== null ? (item as ReportForm) : { pointer: item as ReportPointer };
+}
+
+/**
+ * A person's verdict on a row: an outcome row citing it, written through discovery. The
+ * surface sends it under the signed-in person's own key and refuses it signed out
+ * (routes/proxy.ts), so the row names the person as its writer.
+ */
+export async function writeOutcome(rowId: string, r: 0 | 1): Promise<{ ok: true; seq: number | null } | { ok: false; reason: string }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/discovery/resolve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ pointer: { type: "record_write", row: { shape: "outcome", r, input_refs: [rowId] } } }),
+    });
+  } catch {
+    return { ok: false, reason: "the surface did not answer" };
+  }
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const inner = (body["body"] ?? body["content"] ?? body) as Record<string, unknown>;
+  const said = [body["error"], body["reason"], body["detail"], inner?.["error"], inner?.["detail"]].filter((x): x is string => typeof x === "string" && x.length > 0);
+  if (!res.ok || said.length > 0 || body["success"] === false) return { ok: false, reason: [...new Set(said)].join(": ") || `not recorded (${res.status})` };
+  return { ok: true, seq: typeof inner?.["seq"] === "number" ? (inner["seq"] as number) : null };
+}
 
 /** A report's answer, or why there is none. `answer` is what the producer returned, uninterpreted. */
 export type ReportAnswer = { readonly ok: true; readonly shape: string; readonly answer: unknown } | { readonly ok: false; readonly reason: string };
