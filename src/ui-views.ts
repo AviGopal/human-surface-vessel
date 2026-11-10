@@ -20,9 +20,13 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/** Each region and the blocks it can draw. */
+/**
+ * Each region and the blocks it can draw. The landing's run blocks (the newest run, the
+ * person's runs, a reached count over runs) are gone with goal-host, the only producer of
+ * what they drew; a stored view naming one is no longer replayed.
+ */
 export const VIEW_REGIONS = {
-  landing: ["needs_you", "changed", "health", "latest_run", "reports"],
+  landing: ["needs_you", "reports"],
 } as const;
 
 export type ViewRegion = keyof typeof VIEW_REGIONS;

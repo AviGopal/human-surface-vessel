@@ -2,6 +2,7 @@
  * The whole page, mounted through its router: with a view written for the landing,
  * the first screen draws that view's blocks in order. Nothing here imports the
  * landing component, so at a build without views it fails on what the page draws.
+ * No run is drawn and no goal-host shape is read: the landing has no such block.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -13,19 +14,13 @@ const decision = {
   id: "q1", revision: 1, title: "Question", body: "Gap reach-gap-docs-align-tick (unreachable_producer) has failed auto-repair 8+ times. Summary: docs align",
   createdAt: 0, updatedAt: 0, responses: [], answers: [], answered: false, declined: false, kind: "gap_needs_human",
 };
+const goalHostReads: string[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
-  if (url.includes("/api/ui-view")) return Response.json({ region: "landing", revision: 4, id: "landing@4", blocks: ["health", "needs_you"], limits: {} });
+  if (url.includes("/api/ui-view")) return Response.json({ region: "landing", revision: 4, id: "landing@4", blocks: ["reports", "needs_you"], limits: {}, reports: [{ type: "system_load_report" }] });
+  if (url.includes("/api/discovery/resolve")) return Response.json({ success: true, shape: "systemLoadReport", body: { load_avg_1m: 2.61, cpu_cores: 16 } });
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [decision] } });
-  if (url.includes("/api/gap-threads")) return Response.json({ body: { scope: "this node", threads: [{ gapId: "trace-store-over-cap", summary: "Trace store over its cap", status: "open", reopenCount: 0, attempts: [], attemptCount: 875, landedCount: 0, lastAt: null }] } });
-  if (url.includes("/api/resolve")) {
-    const type = JSON.parse(String(init?.body ?? "{}")).type;
-    if (type === "activeDispatches") return Response.json({ resolved: true, shape: "activeDispatches", body: { dispatches: [
-      { dispatchId: "s1", goal: "reconcile the trace store", operator: null, trigger: "run-goal", status: "failed", reached: false, startedAt: "2026-10-26T07:00:00Z" },
-      { dispatchId: "s2", goal: "What time is it?", operator: null, trigger: "run-goal", status: "completed", reached: true, startedAt: "2026-10-26T07:01:00Z" },
-      { dispatchId: "m1", goal: "Who am I?", operator: "human-surface", status: "completed", reached: false, startedAt: "2026-10-26T06:00:00Z" },
-    ] } });
-  }
+  if (url.includes("/api/resolve")) goalHostReads.push(JSON.parse(String(init?.body ?? "{}")).type);
   return Response.json({});
 }) as typeof fetch;
 
@@ -55,9 +50,10 @@ describe("the first screen follows the landing's view", () => {
     for (let i = 0; i < 8; i++) await act(async () => { await new Promise((r) => setTimeout(r, 40)); });
     const main = el.querySelector("main")!;
     const blocks = [...main.querySelectorAll("[data-block]")].map((b) => b.getAttribute("data-block"));
-    expect(blocks).toEqual(["health", "needs_you"]);
+    expect(blocks).toEqual(["reports", "needs_you"]);
     expect(main.textContent).toContain("Reach gap docs align tick");
-    expect(main.textContent).toContain("875 attempts");
+    expect(main.querySelector("[data-report=system_load_report]")?.textContent).toContain("2.61");
     expect(main.querySelector(".sf-run")).toBeNull();
+    expect(goalHostReads.filter((t) => /^goalWalk/.test(t))).toEqual([]);
   });
 });

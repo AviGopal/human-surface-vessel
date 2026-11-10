@@ -4,8 +4,7 @@
  * draw, it draws its default: open questions. Its rows select what to look at and
  * send nothing.
  *
- * Shapes: one node 10-26: five open decisions, the person's own runs all "record gone",
- * the trace store gap at 875 attempts with none landed. Reports: answers as two nodes
+ * Shapes: one node 10-26: five open decisions. Reports: answers as two nodes
  * gave them 11-10 (a load report; a forward that timed out; a peer refusing a keyless read).
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
@@ -47,7 +46,7 @@ const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
-const { Landing, landingBlocks, stuckTitle } = await import("../ui/src/components/Landing");
+const { Landing, landingBlocks } = await import("../ui/src/components/Landing");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
@@ -68,12 +67,6 @@ const decisions = [
   ask("q4", "region-lint-is-never-scheduled-so-bad-armed-regions-surface"),
   ask("q5", "reach-gap-capability-gap-audit"),
 ];
-const gone = { dispatchId: "d-gone", goal: "Where are we?", operator: "human-surface", status: "gone", reached: null, startedAt: "2026-10-21T10:00:00Z" };
-const systemRuns = [
-  { dispatchId: "s1", goal: "reconcile the trace store", operator: null, trigger: "run-goal", status: "failed", reached: false, startedAt: "2026-10-26T07:00:00Z" },
-  { dispatchId: "s2", goal: "What time is it?", operator: null, trigger: "run-goal", status: "completed", reached: true, startedAt: "2026-10-26T07:01:00Z" },
-];
-const stuck = [{ gapId: "trace-store-over-cap", summary: "Trace store over its cap", status: "open", reopenCount: 0, attempts: [], attemptCount: 875, landedCount: 0, lastAt: null }];
 const view = (blocks: string[], limits: Record<string, number> = {}, revision = 1) => ({ region: "landing", revision, id: `landing@${revision}`, blocks, limits });
 
 async function mount(props: Record<string, unknown>, calls: string[] = []): Promise<HTMLElement> {
@@ -81,8 +74,8 @@ async function mount(props: Record<string, unknown>, calls: string[] = []): Prom
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const all = {
-    view: undefined, ordered: decisions, board: [gone, ...systemRuns], gapThreads: stuck, latest: "d-latest",
-    onOpenRun: (id: string) => calls.push(`run:${id}`), onOpenQuestion: (id: string) => calls.push(`question:${id}`), onOpenSystem: () => calls.push("system"),
+    view: undefined, ordered: decisions,
+    onOpenQuestion: (id: string) => calls.push(`question:${id}`),
     ...props,
   };
   await act(async () => {
@@ -117,18 +110,24 @@ describe("the landing drawn from its view", () => {
   });
 
   test("must-fail: a view's blocks are drawn in its order, and the landing names the view it drew", async () => {
-    const el = await mount({ view: view(["health", "needs_you"], {}, 3) });
-    expect(blocksDrawn(el)).toEqual(["health", "needs_you"]);
+    const el = await mount({ view: { ...view(["reports", "needs_you"], {}, 3), reports: [{ type: "system_load_report" }] } });
+    expect(blocksDrawn(el)).toEqual(["reports", "needs_you"]);
     const root = el.querySelector(".sf-landing")!;
     expect(root.getAttribute("data-view-id")).toBe("landing@3");
     expect(root.getAttribute("data-view-revision")).toBe("3");
-    expect(el.querySelector("[data-block=health]")?.textContent).toContain("1 / 2");
-    expect(el.querySelector("[data-block=health]")?.textContent).toContain("875 attempts");
   });
 
-  test("must-fail: a block with nothing to show is left out (the person's runs are all gone)", async () => {
-    const el = await mount({ view: view(["needs_you", "changed", "health"]) });
-    expect(blocksDrawn(el)).toEqual(["needs_you", "health"]);
+  test("must-fail: a block with nothing to show is left out (no open questions)", async () => {
+    const el = await mount({ view: { ...view(["needs_you", "reports"]), reports: [{ type: "system_load_report" }] }, ordered: [] });
+    expect(blocksDrawn(el)).toEqual(["reports"]);
+  });
+
+  test("must-fail: the blocks only goal-host could fill are gone: a view naming one is not drawn", async () => {
+    for (const gone of ["latest_run", "changed", "health"]) {
+      const el = await mount({ view: view(["needs_you", gone]) });
+      expect(blocksDrawn(el)).toEqual(["needs_you"]);
+      expect(el.querySelector(".sf-landing")?.getAttribute("data-view-default")).toBe("true");
+    }
   });
 
   test("must-fail: the needs_you limit is the view's", async () => {
@@ -139,25 +138,17 @@ describe("the landing drawn from its view", () => {
   });
 
   test("must-fail: a view naming a block this build cannot draw falls back to the default", async () => {
-    const el = await mount({ view: view(["health", "weather"]) });
+    const el = await mount({ view: view(["reports", "weather"]) });
     expect(blocksDrawn(el)).toEqual(["needs_you"]);
     expect(el.querySelector(".sf-landing")?.getAttribute("data-view-default")).toBe("true");
-    expect(landingBlocks(view(["health", "weather"]) as never).fromView).toBe(false);
+    expect(landingBlocks(view(["reports", "weather"]) as never).fromView).toBe(false);
   });
 
   test("rows select and send nothing", async () => {
     const calls: string[] = [];
-    const el = await mount({ view: view(["needs_you", "health"]) }, calls);
+    const el = await mount({ view: view(["needs_you"]) }, calls);
     await act(async () => (el.querySelector("[data-block=needs_you] button") as HTMLButtonElement).click());
-    await act(async () => (el.querySelector("[data-block=health] button") as HTMLButtonElement).click());
-    expect(calls).toEqual(["question:q1", "system"]);
-    expect(posts.filter((u) => !u.includes("/api/resolve") && !u.includes("/api/observations"))).toEqual([]);
-  });
-
-  test("must-fail: what the system is stuck on reads as the gap, not its evidence", () => {
-    const t = { ...stuck[0]!, summary: "Trace store row_count=312744 exceeds cap=150000 (last_reconciled_at=2026-10-26T07:02:01Z). Reconcile runs every 10 min." };
-    expect(stuckTitle(t as never)).toBe("Trace store row_count=312744 exceeds cap=150000");
-    expect(stuckTitle({ ...t, summary: "Reach gap docs align tick" } as never)).toBe("Reach gap docs align tick");
-    expect(stuckTitle({ ...t, summary: null } as never)).toBe("trace-store-over-cap");
+    expect(calls).toEqual(["question:q1"]);
+    expect(posts.filter((u) => !u.includes("/api/observations"))).toEqual([]);
   });
 });

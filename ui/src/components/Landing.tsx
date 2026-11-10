@@ -9,26 +9,18 @@
  */
 import type { ReactNode } from "react";
 import type { UiViewState } from "../api/client";
-import type { GapThreadView } from "../api/client";
 import type { Question } from "../api/participation";
-import type { ActiveDispatch } from "../api/types";
 import { classifyQuestion } from "../lib/questionClass";
-import { deriveRunState } from "../lib/runState";
 import { questionRowSubject } from "../state/questions";
-import { isMine } from "./RunsList";
 import { Reports } from "./Reports";
-import { RunView } from "./RunView";
-import { StateBadge } from "./StateBadge";
 
-export const LANDING_BLOCKS = ["needs_you", "changed", "health", "latest_run", "reports"] as const;
+export const LANDING_BLOCKS = ["needs_you", "reports"] as const;
 export type LandingBlock = (typeof LANDING_BLOCKS)[number];
 /** With no view read, nothing names a report, so the default is what the page holds itself. */
 export const DEFAULT_LANDING: { blocks: readonly LandingBlock[]; limits: Record<string, number> } = { blocks: ["needs_you"], limits: {} };
 
 /** How many decisions "Needs you" lists when the view sets no limit. */
 const NEEDS_YOU_DEFAULT = 5;
-/** How many of the person's runs "Your threads" lists. */
-const CHANGED_SHOWN = 5;
 
 /** The blocks to draw: the view's when every block is one this build draws, else the default. */
 export function landingBlocks(view: UiViewState | undefined): { blocks: readonly LandingBlock[]; limits: Readonly<Record<string, number>>; fromView: boolean } {
@@ -43,51 +35,15 @@ export function needsYou(ordered: readonly Question[], limit: number): readonly 
   return ordered.filter((q) => !q.answered && !q.declined && classifyQuestion(q) === "ask").slice(0, limit);
 }
 
-/** The person's own finished runs whose outcome is known, newest first. */
-export function yourThreads(rows: readonly ActiveDispatch[] | undefined, limit: number): readonly ActiveDispatch[] {
-  return (rows ?? [])
-    .filter((r) => isMine(r) && r.status !== "gone")
-    .slice()
-    .sort((a, b) => String(b.startedAt ?? "").localeCompare(String(a.startedAt ?? "")))
-    .slice(0, limit);
-}
-
-/** The open gap with the most attempts and none landed: what the system is stuck on. */
-export function stuckOn(threads: readonly GapThreadView[] | undefined): GapThreadView | null {
-  let best: GapThreadView | null = null;
-  for (const t of threads ?? []) {
-    if (t.status === "closed" || t.landedCount > 0) continue;
-    if (!best || t.attemptCount > best.attemptCount) best = t;
-  }
-  return best;
-}
-
-/** A gap's summary up to its first parenthetical or sentence end: the gap, not its evidence. */
-export function stuckTitle(t: GapThreadView): string {
-  const s = (t.summary ?? t.gapId).trim();
-  const cut = s.search(/\s\(|\.\s/);
-  return cut > 0 ? s.slice(0, cut) : s;
-}
-
 export function Landing({
   view,
   ordered,
-  board,
-  gapThreads,
-  latest,
-  onOpenRun,
   onOpenQuestion,
-  onOpenSystem,
   live = true,
 }: {
   view: UiViewState | undefined;
   ordered: readonly Question[];
-  board: readonly ActiveDispatch[] | undefined;
-  gapThreads: readonly GapThreadView[] | undefined;
-  latest: string | null;
-  onOpenRun: (dispatchId: string) => void;
   onOpenQuestion: (id: string) => void;
-  onOpenSystem: () => void;
   /** False while the page is paused: reports are not re-read. */
   live?: boolean;
 }): ReactNode {
@@ -111,39 +67,6 @@ export function Landing({
           </ul>
         </section>,
       );
-    } else if (block === "changed") {
-      const items = yourThreads(board, CHANGED_SHOWN);
-      if (items.length === 0) continue;
-      drawn.push(
-        <section key={block} className="sf-landing-block" data-block={block} aria-labelledby="sf-landing-changed">
-          <h2 id="sf-landing-changed" className="sf-landing-head">Your threads</h2>
-          <ul className="sf-landing-list">
-            {items.map((r) => (
-              <li key={r.dispatchId}>
-                <button type="button" className="sf-landing-row" onClick={() => onOpenRun(r.dispatchId)}>
-                  <StateBadge state={deriveRunState({ status: r.status, reached: r.reached, awaitingAnswer: false, hasProgress: true, quietForMs: null, acceptedForMs: null })} />
-                  <span className="sf-landing-text">{r.goal ?? r.dispatchId}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>,
-      );
-    } else if (block === "health") {
-      // Finished runs whose outcome is known: a running run has none yet, a gone one has lost it.
-      const runs = (board ?? []).filter((r) => r.status === "completed" || r.status === "failed");
-      if (runs.length === 0) continue;
-      const reached = runs.filter((r) => r.reached === true).length;
-      const stuck = stuckOn(gapThreads);
-      drawn.push(
-        <section key={block} className="sf-landing-block" data-block={block} aria-label="The system">
-          <button type="button" className="sf-landing-health" onClick={onOpenSystem}>
-            <span className="sf-landing-num">{reached} / {runs.length}</span>
-            <span>reached</span>
-            {stuck ? <span className="sf-landing-stuck">stuck: {stuckTitle(stuck)} · {stuck.attemptCount} attempts</span> : null}
-          </button>
-        </section>,
-      );
     } else if (block === "reports") {
       const pointers = fromView && view ? (view.reports ?? []) : [];
       if (pointers.length === 0) continue;
@@ -152,13 +75,6 @@ export function Landing({
           <h2 id="sf-landing-reports" className="sf-landing-head">The system</h2>
           <Reports pointers={pointers} enabled={live} />
         </section>,
-      );
-    } else if (block === "latest_run") {
-      if (!latest) continue;
-      drawn.push(
-        <div key={block} className="sf-landing-run" data-block={block}>
-          <RunView key={latest} dispatchId={latest} />
-        </div>,
       );
     }
   }

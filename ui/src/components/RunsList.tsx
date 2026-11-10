@@ -45,18 +45,6 @@ export function isMine(row: ActiveDispatch): boolean {
   return row.own === true;
 }
 
-/** The newest run asked from this surface, or null: what the main pane shows before anything is selected. */
-export function latestMine(rows: readonly ActiveDispatch[] | undefined): string | null {
-  let best: { id: string; at: number } | null = null;
-  for (const row of rows ?? []) {
-    // A run whose record is gone has nothing to show; it never opens the first screen.
-    if (!isMine(row) || row.status === "gone") continue;
-    const at = parseStartedAt(row.startedAt, 0);
-    if (!best || at > best.at) best = { id: row.dispatchId, at };
-  }
-  return best?.id ?? null;
-}
-
 const FILTER_KEY = "sf-run-filter";
 
 /** The reader's last filter; their own runs until they choose otherwise. */
