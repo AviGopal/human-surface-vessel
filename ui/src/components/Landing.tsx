@@ -40,12 +40,15 @@ export function Landing({
   ordered,
   onOpenQuestion,
   live = true,
+  intervalMs = 60_000,
 }: {
   view: UiViewState | undefined;
   ordered: readonly Question[];
   onOpenQuestion: (id: string) => void;
   /** False while the page is paused: reports are not re-read. */
   live?: boolean;
+  /** The page's live cadence (the render policy's); reports are re-read no faster than once a minute. */
+  intervalMs?: number;
 }): ReactNode {
   const { blocks, limits, fromView } = landingBlocks(view);
   const drawn: ReactNode[] = [];
@@ -73,7 +76,7 @@ export function Landing({
       drawn.push(
         <section key={block} className="sf-landing-block" data-block={block} aria-labelledby="sf-landing-reports">
           <h2 id="sf-landing-reports" className="sf-landing-head">The system</h2>
-          <Reports pointers={pointers} enabled={live} />
+          <Reports pointers={pointers} enabled={live} intervalMs={intervalMs} />
         </section>,
       );
     }

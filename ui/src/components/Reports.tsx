@@ -63,8 +63,8 @@ export function reportRows(answer: unknown): { label: string; value: string; ite
   return rows;
 }
 
-function Report({ pointer, enabled }: { pointer: ReportPointer; enabled: boolean }): ReactNode {
-  const q = useReport(pointer, { enabled });
+function Report({ pointer, enabled, intervalMs }: { pointer: ReportPointer; enabled: boolean; intervalMs: number }): ReactNode {
+  const q = useReport(pointer, { enabled, intervalMs });
   const title = reportTitle(pointer.type);
   const a: ReportAnswer | undefined = q.data;
   let inner: ReactNode;
@@ -100,11 +100,11 @@ function Report({ pointer, enabled }: { pointer: ReportPointer; enabled: boolean
   );
 }
 
-export function Reports({ pointers, enabled }: { pointers: readonly ReportPointer[]; enabled: boolean }): ReactNode {
+export function Reports({ pointers, enabled, intervalMs }: { pointers: readonly ReportPointer[]; enabled: boolean; intervalMs: number }): ReactNode {
   return (
     <div className="sf-reports">
       {pointers.map((p) => (
-        <Report key={JSON.stringify(p)} pointer={p} enabled={enabled} />
+        <Report key={JSON.stringify(p)} pointer={p} enabled={enabled} intervalMs={intervalMs} />
       ))}
     </div>
   );

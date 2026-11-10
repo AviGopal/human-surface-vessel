@@ -189,6 +189,7 @@ function Workbench(): ReactNode {
             view={landingView.data}
             ordered={questions.ordered}
             live={!paused}
+            intervalMs={intervalMs}
             onOpenQuestion={openQuestion}
           />
         )}
