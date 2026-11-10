@@ -29,10 +29,11 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { joinGapThreads, type GapThread } from "../gap-threads.ts";
 import { dueForRead, knownState, listOwnDispatches, ownDispatchCount, recordOwnDispatch, rememberState } from "../own-dispatches.ts";
 import { admitCaller, admittedCaller, carry, remoteOf, requireCaller, type Caller } from "../inbound-auth.ts";
+import { isWritePointerType } from "../caller-credential.ts";
 import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, personVerdicts, recentSurfaceIntents, recordObservation, recordSurfaceIntent, verdictDelivery, writeRenderPolicy } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
-import { arrivedOverTls, closeSession, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, viewOf, type PersonSession } from "../person-session.ts";
+import { arrivedOverTls, closeSession, keySignInAvailable, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, signInWithKey, viewOf, type PersonSession } from "../person-session.ts";
 import { VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import { corpusVerdict, isGrade, parseWindow, type CalibrationWindow } from "../calibration.ts";
@@ -715,9 +716,28 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
  * A lookup in the registry: this node's discovery, which asks its peers itself
  * when it has no producer for a capability.
  */
+/**
+ * A READ goes under this node's key. A WRITE goes only under the signed-in person's own key,
+ * so the row records the person as its writer; with no person signed in with a key, it is
+ * refused here and nothing is sent. A write under the node's key would be the node writing,
+ * whatever the row claims, so the page never sends one.
+ */
 proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve"), async (c) => {
   const rawBody = await rawBodyOf(c);
-  return passthrough({ url: `${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`, method: "POST", rawBody, origin: c.req.header("Origin") });
+  const url = `${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`;
+  let type = "";
+  try {
+    const pointer = (JSON.parse(rawBody) as { pointer?: { type?: unknown } }).pointer;
+    type = typeof pointer?.type === "string" ? pointer.type : "";
+  } catch {
+    /* not JSON: forwarded as a read, and discovery answers it */
+  }
+  if (!isWritePointerType(type)) return passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin") });
+  const person = sessionOf(c.req.header("Cookie"));
+  if (!person?.apiKey) {
+    return c.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, 401, corsHeaders(c.req.header("Origin")));
+  }
+  return passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin"), authorization: `ApiKey ${person.apiKey}` });
 });
 
 // ─── human verdicts ───────────────────────────────────
@@ -866,7 +886,7 @@ proxyRouter.post("/api/grade", requireCaller("/api/grade"), async (c) => {
 proxyRouter.get("/api/session", async (c) => {
   const person = sessionOf(c.req.header("Cookie"));
   const { available } = await signInAvailable();
-  return c.json({ available, signedIn: person !== null, ...(person ? { person: viewOf(person) } : {}) }, 200);
+  return c.json({ available, keySignIn: keySignInAvailable(), signedIn: person !== null, ...(person ? { person: viewOf(person) } : {}) }, 200);
 });
 
 /**
@@ -900,6 +920,28 @@ proxyRouter.post("/api/session/login", requireCaller("/api/session/login"), asyn
   }
   const { cookie } = openSession(result.session, Date.now(), arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c)));
   recordObservation({ type: "person_session", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { event: "signed_in", user_id: result.session.userId } });
+  return c.json({ signedIn: true, person: viewOf(result.session) }, 200, { "Set-Cookie": cookie });
+});
+
+/**
+ * Sign in with the person's own key: it goes to identity once to be checked, then stays in
+ * this process for the session, never in the browser, a log or a record. The node's own key
+ * is refused: a person's rows must not be written under it.
+ */
+proxyRouter.post("/api/session/key", requireCaller("/api/session/key"), async (c) => {
+  if (!fromOwnPage(c)) return c.json({ error: "sign-in is accepted only from this surface's page" }, 403);
+  if (!keySignInAvailable()) return c.json({ error: "sign-in isn't available on this node" }, 503);
+  if (!loginAllowed()) return c.json({ error: "too many attempts; try again in a minute" }, 429);
+  const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
+  const key = typeof body?.["key"] === "string" ? body["key"].trim() : "";
+  if (!key || key.length > 1024 || /\s/.test(key)) return c.json({ error: "your key is required" }, 400);
+  const result = await signInWithKey(key);
+  if (!result.ok) {
+    if (result.status === 401 || result.status === 403) noteLoginFailure();
+    return c.json({ error: result.error }, result.status as 401);
+  }
+  const { cookie } = openSession(result.session, Date.now(), arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c)));
+  recordObservation({ type: "person_session", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { event: "signed_in", user_id: result.session.userId, with: "key" } });
   return c.json({ signedIn: true, person: viewOf(result.session) }, 200, { "Set-Cookie": cookie });
 });
 

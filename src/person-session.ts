@@ -27,6 +27,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { identityCredential, isNodeSelfCredential } from "./caller-credential.ts";
 import { DISCOVERY_ENDPOINT, IDENTITY_VESSEL_URL, METABOB_API_KEY } from "./config.ts";
 
 export const PERSON_COOKIE = "sf_person";
@@ -38,9 +39,22 @@ const LOGIN_FAILURES_PER_WINDOW = 5;
 const LOGIN_WINDOW_MS = 60_000;
 /** How long a registry answer about the label writer is trusted. */
 const PRODUCER_TTL_MS = 60_000;
+/**
+ * How long a sign-in with a person's own key lasts before they sign in again. A key does not
+ * expire on its own; this matches identity's session (900 s) so both ways of signing in end
+ * alike. A behaviour constant, named as debt: it belongs in a shape the surface reads.
+ */
+const KEY_SESSION_MS = 900_000;
 
 export interface PersonSession {
+  /** identity's session token, for a sign-in with email and password; empty for a sign-in with a key. */
   readonly token: string;
+  /**
+   * The person's own API key, for a sign-in with a key. A person's rows (a verdict, an ask)
+   * are written through discovery under it, so records names the person as their writer.
+   * Held in this process's memory only, like the token; never sent to the browser.
+   */
+  readonly apiKey?: string;
   readonly userId: string;
   readonly orgId: string | null;
   readonly email: string | null;
@@ -185,6 +199,24 @@ export async function loginAtIdentity(email: string, password: string): Promise<
   };
 }
 
+/**
+ * Sign a person in with their own API key: identity must authenticate it, and it must not be
+ * this node's own key, which would let anyone at the page write as a person under the node's
+ * credential. Who they are is the key id identity gives; the key itself is kept only here.
+ */
+export async function signInWithKey(apiKey: string, now = Date.now()): Promise<LoginResult> {
+  if (!IDENTITY_VESSEL_URL) return { ok: false, status: 503, error: "sign-in is not available on this node" };
+  const cred = await identityCredential(`ApiKey ${apiKey}`, { cache: false });
+  if (isNodeSelfCredential(cred)) return { ok: false, status: 403, error: "this is the node's own key, not a person's" };
+  if (!cred.authenticated) {
+    const unreachable = (cred.why ?? "").startsWith("identity unreachable") || (cred.why ?? "").startsWith("IDENTITY_VESSEL_URL");
+    return unreachable ? { ok: false, status: 502, error: "identity did not answer" } : { ok: false, status: 401, error: "identity does not know this key" };
+  }
+  const keyId = cred.keyId ?? null;
+  if (!keyId) return { ok: false, status: 502, error: "identity did not say whose key this is" };
+  return { ok: true, session: { token: "", apiKey, userId: keyId, orgId: null, email: null, name: null, expiresAt: now + KEY_SESSION_MS } };
+}
+
 export type OboResult = { readonly ok: true; readonly token: string } | { readonly ok: false; readonly status: number; readonly error: string };
 
 /** A token for one write of the label shape at `node`, on the person's behalf. */
@@ -265,7 +297,12 @@ export async function labelProducer(now = Date.now()): Promise<LabelProducer | n
   return value;
 }
 
-/** Whether a person can sign in here: identity is configured and this node serves the label write itself. */
+/** Whether a person can sign in here with their own key: identity alone decides that. */
+export function keySignInAvailable(): boolean {
+  return IDENTITY_VESSEL_URL.length > 0;
+}
+
+/** Whether a person can sign in here with email and password: identity is configured and this node serves the label write itself. */
 export async function signInAvailable(): Promise<{ available: boolean; producer: LabelProducer | null }> {
   if (!IDENTITY_VESSEL_URL || !METABOB_API_KEY) return { available: false, producer: null };
   const producer = await labelProducer();

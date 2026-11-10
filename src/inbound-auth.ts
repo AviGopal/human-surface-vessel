@@ -75,6 +75,7 @@ export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string; re
   { route: "/api/run-goal" },
   // ui/src/api/session.ts (a person signing in and out; the credential goes to identity, never to a store)
   { route: "/api/session/login" },
+  { route: "/api/session/key" },
   { route: "/api/session/logout" },
   // ui/src/api/client.ts:188 resolveShape, these WRITES only. They forward to goal-host and
   // answer, extend or inject into a RUNNING walk, any walk, autonomous ones included:
@@ -85,7 +86,8 @@ export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string; re
     route: "/api/resolve",
     shapes: ["solicitationResponse_write", "solicitationHeartbeat_write", "poolImpulse_write"],
   },
-  // ui/src/api/client.ts:294 (fetchCapability: a capability read sent as a POST)
+  // ui/src/api/client.ts (fetchCapability, fetchReport: reads sent as a POST; a person's verdict row).
+  // A write on this route is forwarded only under the signed-in person's own key (routes/proxy.ts).
   { route: "/api/discovery/resolve" },
   // ui/src/components/ContentRender.tsx:517 (a page drawn in its own frame). Its frame-session cookie is
   // handed to whoever loads "/", so it scopes which frames a session may read back, and names no caller.

@@ -1,7 +1,8 @@
 /**
  * Sign in, in the top bar: the one place on the surface that takes something
  * other than the box. A password typed into the box would be echoed back and
- * read as a message, so credentials get their own two fields (user ruling 10-24).
+ * read as a message, so credentials get their own fields (user ruling 10-24). Where a
+ * person's own key is accepted, that is the one field: a verdict is written under it.
  * Nothing here is shown where sign-in isn't offered.
  */
 
@@ -23,12 +24,14 @@ export function SignIn({ onSignedIn, openSignal = 0 }: { onSignedIn?: () => void
   }, [openSignal]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [key, setKey] = useState("");
 
   const state = session.data;
-  if (!state?.available) return null;
+  if (!state?.available && !state?.keySignIn) return null;
+  const withKey = state.keySignIn === true;
 
   if (state.signedIn && state.person) {
-    const who = state.person.name ?? state.person.email ?? "Signed in";
+    const who = state.person.name ?? state.person.email ?? (withKey ? `Signed in (${state.person.userId})` : "Signed in");
     return (
       <span className="sf-signin" data-signed-in="true">
         <span className="sf-signin-who" title={state.person.email ?? undefined}>
@@ -43,17 +46,18 @@ export function SignIn({ onSignedIn, openSignal = 0 }: { onSignedIn?: () => void
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
-    signIn.mutate(
-      { email, password },
-      {
-        onSuccess: () => {
-          setPassword("");
-          setOpen(false);
-          onSignedIn?.();
-        },
-        onError: () => setPassword(""),
+    signIn.mutate(withKey ? { key } : { email, password }, {
+      onSuccess: () => {
+        setPassword("");
+        setKey("");
+        setOpen(false);
+        onSignedIn?.();
       },
-    );
+      onError: () => {
+        setPassword("");
+        setKey("");
+      },
+    });
   };
 
   return (
@@ -63,9 +67,15 @@ export function SignIn({ onSignedIn, openSignal = 0 }: { onSignedIn?: () => void
       </button>
       {open ? (
         <form className="sf-signin-form" onSubmit={submit} aria-label="Sign in">
-          <input type="email" name="email" autoComplete="username" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <input type="password" name="password" autoComplete="current-password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          <button type="submit" className="sf-button" disabled={signIn.isPending || !email || !password}>
+          {withKey ? (
+            <input type="password" name="key" autoComplete="off" placeholder="Your key" aria-label="Your key" value={key} onChange={(e) => setKey(e.target.value)} required />
+          ) : (
+            <>
+              <input type="email" name="email" autoComplete="username" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <input type="password" name="password" autoComplete="current-password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </>
+          )}
+          <button type="submit" className="sf-button" disabled={signIn.isPending || (withKey ? !key : !email || !password)}>
             Sign in
           </button>
           {signIn.isError ? <p className="sf-signin-error" role="alert">{(signIn.error as Error).message}</p> : null}
