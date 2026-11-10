@@ -229,6 +229,10 @@ export function resetLabelProducerCache(): void {
 /**
  * The producer of the label write, from the vessel registry: a local row first.
  * Null when discovery has no row for the shape, or no row names its node.
+ *
+ * THE ONE CALL NOT PLACED BY DISCOVERY. The write carries the person's on-behalf-of
+ * token, and discovery's /resolve admits only `ApiKey` credentials, so it goes to the
+ * address this row names (test/discovery-only.test.ts holds it to this one place).
  */
 export async function labelProducer(now = Date.now()): Promise<LabelProducer | null> {
   if (producerCache && now - producerCache.at < PRODUCER_TTL_MS) return producerCache.value;

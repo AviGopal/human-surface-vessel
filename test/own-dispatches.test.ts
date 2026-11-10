@@ -44,7 +44,8 @@ const fakeUpstream = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.endsWith("/api/resolve")) {
     return new Response(JSON.stringify({ resolved: true, shape: "activeDispatches", body: { dispatches: systemRows } }), { status: 200 });
   }
-  const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string; dispatchId?: string; pointer?: { type?: string } };
+  const sent = JSON.parse(String(init?.body ?? "{}")) as { pointer?: Record<string, unknown> };
+  const body = (sent.pointer ?? sent) as { type?: string; dispatchId?: string; pointer?: { type?: string } };
   const type = body.type ?? body.pointer?.type ?? "";
   upstreamTypes.push(type);
   if (type === "vesselCapability") return new Response(JSON.stringify({ content: { vessels: [] } }), { status: 200 });

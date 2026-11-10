@@ -48,11 +48,13 @@ describe("joinGapThreads", () => {
 describe("/api/gap-threads", () => {
   const realFetch = globalThis.fetch;
   let calls = 0;
+  const LOCAL_LEDGER = [{ vesselId: "development-vessel", shapes: ["attemptLedger"], protocol: "http", origin: "local" }];
+  let ledgerRows: Record<string, unknown>[] = LOCAL_LEDGER;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    const body = JSON.parse(String(init?.body ?? "{}")) as { pointer?: { type?: string }; impulse?: { pointer?: { type?: string; kind?: string } } };
-    if (url.endsWith("/resolve") && body.pointer?.type === "vesselCapability") return new Response(JSON.stringify({ content: { vessels: [] } }), { status: 200 });
-    const p = body.impulse?.pointer;
+    const body = JSON.parse(String(init?.body ?? "{}")) as { pointer?: { type?: string; kind?: string } };
+    const p = url.endsWith("/resolve") ? body.pointer : undefined;
+    if (p?.type === "vesselRegistry") return new Response(JSON.stringify({ content: { vessels: ledgerRows } }), { status: 200 });
     calls++;
     if (p?.type === "substrateGap") return new Response(JSON.stringify({ body: { gaps } }), { status: 200 });
     if (p?.type === "attemptLedger") {
@@ -77,6 +79,16 @@ describe("/api/gap-threads", () => {
     expect(j.body.totals).toEqual({ attempts: 4, landed: 1, withRun: 1 });
     const before = calls;
     await app.request("/api/gap-threads");
+    expect(calls).toBe(before);
+  });
+
+  test("must-fail: with no ledger on this node, a peer's ledger is not read as this node's", async () => {
+    resetGapThreadsCacheForTest();
+    ledgerRows = [{ vesselId: "development-vessel@peer", shapes: ["attemptLedger"], protocol: "libp2p", origin: "peer" }];
+    const before = calls;
+    const res = await app.request("/api/gap-threads");
+    ledgerRows = LOCAL_LEDGER;
+    expect(res.status).toBe(502);
     expect(calls).toBe(before);
   });
 });

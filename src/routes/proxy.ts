@@ -20,9 +20,9 @@
  *     inbound `x-caller-vessel` (which, absent `parent_execution_id`, trips
  *     goal-host's D3 guard and 400s the call) and everything else a hostile
  *     page might try to smuggle.
- *   - goal-host is located THROUGH DISCOVERY by shape, cached briefly, with
- *     the env and the loopback literal as fallbacks only. A peer address is
- *     never the sole path to a peer.
+ *   - Every call to another vessel goes THROUGH DISCOVERY by shape
+ *     (`viaDiscovery`). The surface holds no producer's address and reads none
+ *     from the registry.
  */
 
 import { Hono, type Context, type MiddlewareHandler } from "hono";
@@ -35,10 +35,9 @@ import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-
 import { arrivedOverTls, closeSession, loginAllowed, loginAtIdentity, mintLabelToken, noteLoginFailure, openSession, sessionOf, signInAvailable, viewOf, type PersonSession } from "../person-session.ts";
 import { VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
-import { corpusVerdict, isGrade, isOwnSubstrate, parseWindow, type CalibrationWindow } from "../calibration.ts";
+import { corpusVerdict, isGrade, parseWindow, type CalibrationWindow } from "../calibration.ts";
 import {
   DISCOVERY_ENDPOINT,
-  GOAL_HOST_ENDPOINT,
   HOST,
   METABOB_API_KEY,
   PORT,
@@ -181,380 +180,61 @@ function upstreamHeaders(withJsonBody: boolean): Record<string, string> {
   return h;
 }
 
-// ─── goal-host location (discovery by shape, short TTL cache) ───────────────
+// ─── every call to another vessel goes through discovery ────────────────────
 
 /**
- * activity-api is a BOOTSTRAP peer here, not a discovery lookup, and that is
- * deliberate: `goal_verification_label_write` is defined and tested in
- * activity-api but is NOT currently advertised in the live registry, so
- * resolving it by shape returns nothing. Going direct is the honest option;
- * a shape lookup would fail closed and silently swallow every human verdict.
+ * THE ONE OUTBOUND PATH. Every call this vessel makes to another vessel is
+ * `POST <DISCOVERY_ENDPOINT>/resolve {pointer}` under its own key: discovery
+ * picks the producer of `pointer.type` from this node's registry by its own
+ * rule (a held-data holder, then a policy owner, then a direct row), asks its
+ * peers when this node has none, and forwards the call. The surface never reads an address out of a registry row and
+ * never holds one of its own, so where a producer runs can change without the
+ * surface knowing. The only other outbound calls are to identity (key and
+ * sign-in checks) and discovery's own register/deregister.
  */
-const ACTIVITY_API_ENDPOINT = (
-  process.env["ACTIVITY_API_ENDPOINT"] ??
-  process.env["ACTIVITY_API_URL"] ??
-  "http://127.0.0.1:8080"
-).replace(/\/+$/, "");
+const DISCOVERY_RESOLVE_TIMEOUT_MS = 10_000;
 
-/**
- * This substrate's own federation transport — the ingress that holds the relay
- * circuit and proxies a shape to the vessel that owns it on a peer substrate.
- *
- * It is how a `protocol: "libp2p"` discovery row is actually reached; see
- * `candidateEndpointsFor`. The transport serves the same
- * `/v2/impulses/resolve` contract as a local vessel, so nothing else in this
- * file needs to know whether a shape came from here or over HTTP.
- *
- * `??` alone is not enough: these env vars are GENERATED, and a generated file
- * routinely sets a key to the EMPTY STRING. `??` only replaces null/undefined,
- * so an empty value would sail through and every libp2p candidate would become
- * `""` — a fetch that throws instantly and silently drops the p2p path. Treat
- * blank as unset.
- */
-function envOr(name: string, fallback: string): string {
-  const raw = process.env[name];
-  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : fallback;
+async function viaDiscovery(
+  pointer: Record<string, unknown>,
+  opts: { timeoutMs?: number; authorization?: string } = {},
+): Promise<Response> {
+  const headers = upstreamHeaders(true);
+  if (opts.authorization) headers["Authorization"] = opts.authorization;
+  return fetch(`${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ pointer }),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? DISCOVERY_RESOLVE_TIMEOUT_MS),
+  });
 }
 
-const FEDERATION_INGRESS = envOr(
-  "FEDERATION_TRANSPORT_ENDPOINT",
-  `http://127.0.0.1:${envOr("FED_HEALTH_PORT", "8401")}`,
-).replace(/\/+$/, "");
-
-const GOAL_HOST_CACHE_TTL_MS = 30_000;
-/** Short on purpose: this runs per candidate, so a dead one must not stall the page. */
-const GOAL_HOST_PROBE_TIMEOUT_MS = 5_000;
-let cachedGoalHost: { endpoint: GoalHostCandidate; at: number } | null = null;
-
 /**
- * Never throws. Resolution order, and the order matters:
- *
- *   1. An EXPLICIT `GOAL_HOST_ENDPOINT` in the environment. An operator who
- *      names an address means it, and it must beat a registry guess.
- *   2. Discovery, by shape.
- *   3. The loopback literal.
- *
- * Why (1) outranks (2): vessels register their IN-CONTAINER address — goal-host
- * advertises `http://127.0.0.1:8210`. That is correct for a peer inside the same
- * container and unreachable for anyone else. A caller running outside it
- * resolves an address it cannot dial, and because the lookup SUCCEEDED the env
- * fallback never fires — a silent 502 with a healthy-looking registry.
- * obsidian-vessel's federation sidecar hits the same wall and solves it by
- * remapping loopback to the discovery host with the port offset; until this
- * vessel does the same, an explicit override is the escape hatch.
+ * Whether a vessel on this node serves `shape`, from the registry's own words
+ * (a local, non-overlay row). An existence test: no address is read from it.
  */
-
-const LOOPBACK = new Set(["127.0.0.1", "localhost", "0.0.0.0", "::1", "[::1]"]);
-
-/**
- * Rewrite a loopback address into one this process can actually dial.
- *
- * Every vessel registers its IN-CONTAINER address, and `public_endpoint` only
- * changes the PORT (8210 -> 18210), not the host — both are 127.0.0.1. That is
- * correct for a peer inside that container and dead for anyone else, and
- * because the lookup SUCCEEDS the caller gets an address it cannot reach rather
- * than an error it can handle.
- *
- * The derivation is obsidian-vessel's federation sidecar's, and it is sound for
- * the same reason: whatever host we reach DISCOVERY on is a host that publishes
- * this fleet's mapped ports, so the discovery host plus the already-offset
- * public port is reachable by construction. Nothing is hardcoded — if discovery
- * itself is on loopback we are inside the container and the address was right
- * all along.
- */
-function reachableFrom(raw: string | undefined, resolvedAt: string): string | undefined {
-  if (!raw) return undefined;
-  let target: URL;
-  let disc: URL;
+async function servedHere(shape: string): Promise<boolean> {
+  let body: Record<string, unknown> | null = null;
   try {
-    target = new URL(raw);
-    // The rewrite host is whichever registry ANSWERED. That is now always this
-    // vessel's own discovery, so on a spoke it is loopback and the guard below
-    // returns the record untouched — correct, because a row this registry hands
-    // back is either genuinely in-container or already a transport address.
-    disc = new URL(resolvedAt);
-  } catch {
-    return raw;
-  }
-  if (!LOOPBACK.has(target.hostname)) return raw;
-  if (LOOPBACK.has(disc.hostname)) return raw; // we are in-container; loopback is correct
-  target.hostname = disc.hostname;
-  return target.toString().replace(/\/+$/, "");
-}
-
-/**
- * Where goal shapes are RESOLVED: this vessel's own discovery, always.
- *
- * This vessel is configured the way every vessel is — a discovery endpoint and a
- * credential — and it resolves every shape through that discovery. Discovery is
- * the fixed point; reaching past it to a second registry is a second routing
- * policy compiled into a consumer, which is exactly what the registry exists to
- * make unnecessary.
- *
- * This used to prefer `HUB_DISCOVERY_URL` when set, on the reasoning that "the
- * spoke's own registry hands back federation-transport addresses, while the hub's
- * registry hands back the hub's own goal-host, which is the one a spoke can
- * actually reach over HTTP." The second half of that is false, and measurably so:
- * the hub serves goal-host over libp2p ONLY — `syzygy.host:18210` answers HTTP 000
- * from the host and from inside the container alike. So the preferred path
- * resolved a row that cannot be dialled, `reachableFrom` rewrote its host while
- * keeping the in-container port, and the browser got a 502 from an address that
- * never existed. The address the local registry hands back — the federation
- * transport's ingress, which holds the relay circuit — is the one that works:
- * verified 200, tagged "proxied to the owning vessel on the peer substrate over
- * libp2p", both through the transport directly and through local discovery.
- *
- * What the local registry hands back is NOT fixed, and both answers are correct.
- * On a UI-only spoke it is the federation transport's ingress (a libp2p row). On
- * a compute spoke it is that substrate's OWN goal-host, registered locally —
- * measured on substrate-live: `goal-host-vessel`, protocol null,
- * http://127.0.0.1:8210, healthy. Resolving through discovery is what makes both
- * cases work without the caller knowing which one it is in, which is the point.
- *
- * Registration was never the thing in question and is unchanged: it stays local,
- * because registering on the hub publishes this container's private :8310 as a
- * network-wide record nobody outside the container can dial — measured: doing it
- * put exactly that record second in line for every hub-side consumer of
- * `surfaceIntent`.
- */
-function goalShapeResolutionEndpoint(): string {
-  return DISCOVERY_ENDPOINT.replace(/\/+$/, "");
-}
-
-/**
- * Does this address actually serve goal shapes?
- *
- * The probe is a REAL resolve call and deliberately not `/health`. Measured on
- * a live spoke: the federation transport answers `/health` with 200 and answers
- * `/resolve` with 404, so a health check selects a candidate that then fails
- * every call the surface makes. A liveness probe that is not the thing you are
- * about to do is not evidence you can do it.
- *
- * `activeDispatches` is the cheapest shape goal-host serves and the one the
- * board already polls, so a passing probe means the exact call path works.
- */
-/**
- * One address the surface could talk to, with the paths that address serves.
- *
- * The path is carried WITH the address because it is not the same for every
- * producer, and assuming it was is what broke this surface. See the note on
- * `servesGoalShapes`.
- */
-interface GoalHostCandidate {
-  readonly base: string;
-  /** This row's advertised resolve path — `/resolve` for an ordinary vessel. */
-  readonly resolvePath: string;
-}
-
-/** The path an ordinary HTTP vessel serves when its row says nothing. */
-const DEFAULT_RESOLVE_PATH = "/resolve";
-
-function resolveUrl(cand: GoalHostCandidate): string {
-  return `${cand.base}${cand.resolvePath}`;
-}
-
-/**
- * Does this address actually serve goal shapes, at the path IT advertises?
- *
- * ★ THE PATH IS PART OF THE ADDRESS. This probe used to hardcode `/resolve`,
- * and against a federation ingress that is a 404 — the ingress serves
- * `/v2/impulses/resolve`, which is exactly what its own discovery row says in
- * `resolve_endpoint`. So the surface fetched a row carrying the right path,
- * ignored the field, asked for a path that does not exist, and rejected its one
- * working candidate: `1 vessel(s) advertise goal_execution; none answered a
- * resolve call`, then a 502 on every board read.
- *
- * ★ A 404 FROM A FEDERATION INGRESS IS INDISTINGUISHABLE FROM A DEAD RELAY.
- * At the moment of that 404 the transport journal was cycling
- * `reservation lost → phantom-reservation suspicion → circuit=(pending)` every
- * ten minutes, so "the relay is down" was the obvious reading and would have
- * sent anyone debugging this to the hub. It was wrong. Measured on the wire,
- * same port, same second: `/resolve` → 404, `/v2/impulses/resolve` → 200 in
- * about a second, carrying a real proxied answer tagged
- * `produced_by: goal-host-vessel@federation-transport-vessel@spoke-cfda39e7`.
- * The circuit was carrying traffic while the log said pending. A 404 is the
- * router declining a path, not the network failing to deliver — before blaming
- * transport for one, enumerate the paths that vessel actually serves.
- *
- * The probe is a REAL resolve call and deliberately not `/health`. Measured on
- * a live spoke: the federation transport answers `/health` with 200 and answers
- * `/resolve` with 404, so a health check selects a candidate that then fails
- * every call the surface makes. A liveness probe that is not the thing you are
- * about to do is not evidence you can do it.
- *
- * `activeDispatches` is the cheapest shape goal-host serves and the one the
- * board already polls, so a passing probe means the exact call path works.
- */
-async function servesGoalShapes(cand: GoalHostCandidate): Promise<boolean> {
-  try {
-    const res = await fetch(resolveUrl(cand), {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: JSON.stringify({ type: "activeDispatches" }),
-      signal: AbortSignal.timeout(GOAL_HOST_PROBE_TIMEOUT_MS),
-    });
-    return res.status === 200;
+    const res = await viaDiscovery({ type: "vesselRegistry", filters: { shapes: [shape] } }, { timeoutMs: 3_000 });
+    const j = (await res.json().catch(() => null)) as null | Record<string, unknown>;
+    body = (j?.["content"] ?? j?.["body"] ?? j) as Record<string, unknown> | null;
   } catch {
     return false;
   }
+  const rows = Array.isArray(body?.["vessels"]) ? (body["vessels"] as Record<string, unknown>[]) : [];
+  return rows.some((v) => v["origin"] === "local" && v["protocol"] !== "libp2p");
 }
 
-/**
- * Every address advertising `shape`, in registry order, rewritten to something
- * this process can dial.
- *
- * EVERY candidate, not `vessels[0]`. A shape has as many producers as the
- * network has vessels serving it: the hub advertises three for `goal_execution`
- * — its own goal-host, plus a re-exported record per federated peer. Taking the
- * first and trusting it meant one undialable record at the front of that list
- * took the whole surface down with a 502 while two working producers sat behind
- * it. Preferring `public_endpoint` is still right, because it carries the
- * host-mapped port; it is a preference per candidate now rather than a decision
- * made once for all of them.
- */
-async function candidateEndpointsFor(shape: string): Promise<readonly GoalHostCandidate[]> {
-  const resolvedAt = goalShapeResolutionEndpoint();
+/** The answer's `body`, or null when discovery or the producer did not answer. */
+async function readViaDiscovery(pointer: Record<string, unknown>, timeoutMs?: number): Promise<Record<string, unknown> | null> {
   try {
-    const res = await fetch(`${resolvedAt}/resolve`, {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: JSON.stringify({ pointer: { type: "vesselCapability", shape } }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) return [];
-    const j = (await res.json().catch(() => null)) as null | {
-      content?: {
-        vessels?: Array<{
-          endpoint?: unknown;
-          public_endpoint?: unknown;
-          protocol?: unknown;
-          /** The path this producer serves resolves on; see `pathOf` below. */
-          resolve_endpoint?: unknown;
-        }>;
-      };
-    };
-    const vessels = Array.isArray(j?.content?.vessels) ? j.content.vessels : [];
-    const p2p: GoalHostCandidate[] = [];
-    const http: GoalHostCandidate[] = [];
-    // A row's own advertised path, normalised. Absent, blank, or non-string all
-    // mean "the ordinary one" — an HTTP vessel that says nothing keeps working
-    // exactly as before, which is what makes reading the field safe to add.
-    const pathOf = (raw: unknown): string => {
-      if (typeof raw !== "string") return DEFAULT_RESOLVE_PATH;
-      const t = raw.trim();
-      if (t.length === 0) return DEFAULT_RESOLVE_PATH;
-      return t.startsWith("/") ? t.replace(/\/+$/, "") : `/${t.replace(/\/+$/, "")}`;
-    };
-    for (const v of vessels) {
-      // A libp2p row is NOT an HTTP address, and rewriting it into one invents
-      // an endpoint that cannot exist.
-      //
-      // `reachableFrom` rests on "whatever host answered discovery also
-      // publishes this fleet's mapped ports". That holds for an HTTP vessel and
-      // is false for a federation re-export: measured, `syzygy.host:18401` has
-      // no route while `:18100` on the same host answers 200. So the rewrite
-      // produced an address that HANGS for the caller's full timeout — and
-      // because the lookup "succeeded", the caller burned its whole budget on it
-      // and never reached its own error path. That is the failure this branch
-      // exists to prevent.
-      //
-      // The reachable form of a libp2p row is OUR OWN transport's ingress: it
-      // holds the relay circuit and proxies to the owning vessel on the peer
-      // substrate. Verified on the wire — the same ask that hung for 12s against
-      // the rewritten address returns 200 in ~1.5s here, tagged
-      // "proxied to the owning vessel on the peer substrate over libp2p".
-      //
-      // The ingress's path comes from the ROW, not from us. The transport
-      // registers `resolve_endpoint: "/v2/impulses/resolve"` precisely so a
-      // caller does not have to know; the default below is the same value and
-      // exists only for a row that omits the field.
-      if (v?.protocol === "libp2p") {
-        if (FEDERATION_INGRESS) {
-          p2p.push({
-            base: FEDERATION_INGRESS,
-            resolvePath: pathOf(
-              typeof v?.resolve_endpoint === "string" && v.resolve_endpoint.trim().length > 0
-                ? v.resolve_endpoint
-                : "/v2/impulses/resolve",
-            ),
-          });
-        }
-        continue;
-      }
-      const candidate = reachableFrom(
-        typeof v?.public_endpoint === "string" && v.public_endpoint.length > 0
-          ? v.public_endpoint
-          : typeof v?.endpoint === "string"
-            ? v.endpoint
-            : undefined,
-        resolvedAt,
-      );
-      if (typeof candidate === "string" && candidate.length > 0) {
-        http.push({
-          base: candidate.replace(/\/+$/, ""),
-          resolvePath: pathOf(v?.resolve_endpoint),
-        });
-      }
-    }
-    // p2p FIRST, http as the fallback. One ingress entry however many libp2p
-    // rows advertise the shape: they all reach the same local transport, so
-    // repeating it only multiplies the timeout when the circuit is down.
-    //
-    // Dedupe on base+path now that a candidate is a pair: the same address at
-    // two different paths is two different call sites, not a repeat.
-    const seen = new Set<string>();
-    const out: GoalHostCandidate[] = [];
-    for (const cand of [...p2p, ...http]) {
-      const key = resolveUrl(cand);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(cand);
-    }
-    return out;
-  } catch (err) {
-    console.warn(
-      `[human-surface] discovery lookup for ${shape} failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return [];
+    const res = await viaDiscovery(pointer, { timeoutMs });
+    if (!res.ok) return null;
+    const j = JSON.parse(unwrapFederated(await res.text())) as { body?: Record<string, unknown> };
+    return j?.body ?? null;
+  } catch {
+    return null;
   }
-}
-
-async function resolveGoalHostEndpoint(): Promise<GoalHostCandidate> {
-  const now = Date.now();
-  if (cachedGoalHost && now - cachedGoalHost.at < GOAL_HOST_CACHE_TTL_MS) {
-    return cachedGoalHost.endpoint;
-  }
-  if (process.env["GOAL_HOST_ENDPOINT"]) {
-    const pinned: GoalHostCandidate = {
-      base: process.env["GOAL_HOST_ENDPOINT"].replace(/\/+$/, ""),
-      resolvePath: DEFAULT_RESOLVE_PATH,
-    };
-    cachedGoalHost = { endpoint: pinned, at: now };
-    return pinned;
-  }
-  const candidates = await candidateEndpointsFor("goal_execution");
-  for (const cand of candidates) {
-    if (await servesGoalShapes(cand)) {
-      cachedGoalHost = { endpoint: cand, at: now };
-      return cand;
-    }
-  }
-  if (candidates.length > 0) {
-    console.warn(
-      `[human-surface] ${candidates.length} vessel(s) advertise goal_execution; none answered a resolve call`,
-    );
-  }
-  // NOT CACHED. A fallback is what happens when resolution FAILED, and caching
-  // it treats a failure like an answer: one transient registry miss — a vessel
-  // mid-re-registration, a restart, a dropped packet — became thirty seconds of
-  // hard 502 for every request, because each one returned the cached bad
-  // address instantly without ever retrying discovery. Measured: fourteen
-  // goals dispatched in about two seconds, all failing, from a single blip that
-  // had already cleared. Resolution is cheap and this path is rare; re-resolve.
-  return {
-    base: GOAL_HOST_ENDPOINT.replace(/\/+$/, ""),
-    resolvePath: DEFAULT_RESOLVE_PATH,
-  };
 }
 
 /**
@@ -729,25 +409,18 @@ proxyRouter.options("/api/*", (c) =>
 // ─── goal-host ──────────────────────────────────────────────────────────────
 
 /**
- * One resolve call, buffered so the federated envelope can be unwrapped.
- *
- * `passthrough` streams the upstream body, which is right everywhere else and
- * wrong here: the body is exactly what needs rewriting.
+ * One resolve call through discovery, buffered so a peer's envelope can be
+ * unwrapped: `passthrough` streams the upstream body, and here the body is
+ * exactly what needs rewriting.
  */
 async function resolveThrough(
-  cand: GoalHostCandidate,
-  rawBody: string,
+  pointer: Record<string, unknown>,
   origin: string | undefined,
   unwrap: (text: string) => string,
 ): Promise<Response> {
   let upstream: Response;
   try {
-    upstream = await fetch(resolveUrl(cand), {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: rawBody,
-      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
-    });
+    upstream = await viaDiscovery(pointer);
   } catch (err) {
     return new Response(
       JSON.stringify({
@@ -797,7 +470,6 @@ proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
   if (caller.kind === "browser" && !person) {
     return c.json({ error: "sign_in_required" }, 401, corsHeaders(c.req.header("Origin")));
   }
-  const cand = await resolveGoalHostEndpoint();
   const raw = await rawBodyOf(c);
   let req: Record<string, unknown>;
   try {
@@ -823,8 +495,7 @@ proxyRouter.post("/api/run-goal", requireCaller("/api/run-goal"), async (c) => {
   // Who asked is the session's, never the body's: a person claimed in the body is dropped, not forwarded.
   for (const k of ["person", "userId", "user_id", "personId", "person_id"]) delete req[k];
   const res = await resolveThrough(
-    cand,
-    JSON.stringify({ ...req, operator, tags, type: "goalDispatchAsync" }),
+    { ...req, operator, tags, type: "goalDispatchAsync" },
     c.req.header("Origin"),
     unwrapDispatch,
   );
@@ -906,15 +577,9 @@ async function backfillOwnDispatches(): Promise<void> {
   if (backfilling) return;
   backfilling = true;
   try {
-    const cand = await resolveGoalHostEndpoint();
     let offset: number | null = 0;
     for (let page = 0; page < BACKFILL_MAX_PAGES && offset !== null; page++) {
-      const res = await fetch(resolveUrl(cand), {
-        method: "POST",
-        headers: upstreamHeaders(true),
-        body: JSON.stringify({ type: "activeDispatches", limit: 50, offset }),
-        signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
-      });
+      const res = await viaDiscovery({ type: "activeDispatches", limit: 50, offset });
       if (!res.ok) break;
       const j = JSON.parse(unwrapFederated(await res.text())) as { body?: { dispatches?: Array<Record<string, unknown>>; nextOffset?: number | null } };
       const now = Date.now();
@@ -962,8 +627,7 @@ proxyRouter.get("/api/walk-output", async (c) => {
   const impulseId = c.req.query("impulse_id") ?? "";
   const ok = (v: string) => v.length > 0 && v.length <= 200 && /^[\w.:@-]+$/.test(v);
   if (!ok(dispatchId) || !ok(impulseId)) return c.json({ error: "dispatch_id and impulse_id are required" }, 400);
-  const cand = await resolveGoalHostEndpoint();
-  return resolveThrough(cand, JSON.stringify({ type: "goalWalkOutput", dispatchId, impulseId }), c.req.header("Origin"), unwrapFederated);
+  return resolveThrough({ type: "goalWalkOutput", dispatchId, impulseId }, c.req.header("Origin"), unwrapFederated);
 });
 
 proxyRouter.post("/api/resolve", async (c) => {
@@ -979,10 +643,8 @@ proxyRouter.post("/api/resolve", async (c) => {
   // Then a caller, by shape (inbound-auth.ts BROWSER_WRITE_ALLOWLIST names the browser's).
   const gate = await admitCaller(c, "/api/resolve", type);
   if (gate.refused) return gate.refused;
-  // The candidate's OWN path, and the answer unwrapped. This is the line that
-  // was `${base}/resolve` with a streamed body.
-  const cand = await resolveGoalHostEndpoint();
-  return resolveThrough(cand, raw, c.req.header("Origin"), unwrapFederated);
+  // The body is the pointer (resolveTypeOf has parsed it), and the answer is unwrapped.
+  return resolveThrough(JSON.parse(raw) as Record<string, unknown>, c.req.header("Origin"), unwrapFederated);
 });
 
 proxyRouter.get("/api/executions/:dispatchId", async (c) => {
@@ -991,10 +653,8 @@ proxyRouter.get("/api/executions/:dispatchId", async (c) => {
   // goal host, the shape exists everywhere the relay reaches. (The UI already
   // reads walk state this way through /api/resolve; this route is kept for
   // non-browser callers and now behaves identically.)
-  const cand = await resolveGoalHostEndpoint();
   return resolveThrough(
-    cand,
-    JSON.stringify({ type: "goalWalkState", dispatchId: c.req.param("dispatchId") }),
+    { type: "goalWalkState", dispatchId: c.req.param("dispatchId") },
     c.req.header("Origin"),
     unwrapFederated,
   );
@@ -1003,32 +663,12 @@ proxyRouter.get("/api/executions/:dispatchId", async (c) => {
 // ─── discovery ──────────────────────────────────────────────────────────────
 
 /**
- * THE SHAPE VOCABULARY IS THE UNION OF TWO REGISTRIES, AND HAS TO BE.
+ * The shape vocabulary, from this node's discovery. Discovery federates its
+ * registry with its peers, so the node's registry is the one to read; the
+ * surface does not reach past it to another node's.
  *
- * This route used to forward to the local registry alone, which quietly made
- * the surface's starter suggestions a list of its own plumbing. Measured on
- * this spoke: local advertises 16 shapes — `interactorEvent`, `llmQuotaState`,
- * `renderPolicy` and the like — while the hub advertises 156. The comment in
- * `ui/src/lib/starters.ts` says starters derive from the live vocabulary
- * precisely so a fixed list cannot go stale; deriving them from the wrong
- * registry defeats that just as thoroughly as hardcoding would, and less
- * visibly, because the list still moves.
- *
- * It is a UNION rather than a switch to the hub, and the reason is durability
- * rather than present necessity. Measured today: the local 16 are a strict
- * SUBSET of the hub's 156, so a hub-only read would lose nothing right now.
- * But the subset relation is a fact about the current fleet, not a guarantee —
- * this vessel registers locally by design, so its own shapes are present on the
- * hub only for as long as some hub-side peer keeps advertising them. A union
- * cannot regress when that stops being true, and it degrades the right way when
- * the hub is unreachable: local shapes still answer, and `registries` records
- * that the fleet leg went unread.
- *
- * Fail-soft per registry, and SAY WHICH ANSWERED. If the hub is unreachable the
- * reader still gets local shapes rather than an error, but `registries` records
- * that the fleet leg was not read — otherwise a 16-shape answer is
- * indistinguishable from a healthy one, which is the same trap as reading an
- * empty gap list as "no gaps".
+ * SAY WHETHER IT ANSWERED: `registries` records it, so an unread registry is
+ * never shown as an empty vocabulary.
  */
 const SHAPES_TIMEOUT_MS = 10_000;
 
@@ -1047,29 +687,10 @@ async function readShapesFrom(base: string): Promise<readonly string[] | null> {
   }
 }
 
-/** The union of the local and fleet registries' shapes, and which of them answered. */
+/** The registry's shapes, and whether it answered. */
 async function readShapeVocabulary(): Promise<{ union: Set<string>; registries: Array<{ registry: string; ok: boolean; count: number }> }> {
-  const local = DISCOVERY_ENDPOINT.replace(/\/+$/, "");
-  const fleet = goalShapeResolutionEndpoint();
-
-  // On an unfederated substrate both resolve to the same base; read it once.
-  const legs: Array<{ name: string; base: string }> =
-    fleet === local
-      ? [{ name: "local", base: local }]
-      : [
-          { name: "local", base: local },
-          { name: "fleet", base: fleet },
-        ];
-
-  const answers = await Promise.all(legs.map((leg) => readShapesFrom(leg.base)));
-
-  const union = new Set<string>();
-  const registries = legs.map((leg, i) => {
-    const shapes = answers[i];
-    if (shapes) for (const s of shapes) union.add(s);
-    return { registry: leg.name, ok: shapes !== null, count: shapes?.length ?? 0 };
-  });
-  return { union, registries };
+  const shapes = await readShapesFrom(DISCOVERY_ENDPOINT);
+  return { union: new Set(shapes ?? []), registries: [{ registry: "local", ok: shapes !== null, count: shapes?.length ?? 0 }] };
 }
 
 proxyRouter.get("/api/discovery/shapes", async (c) => {
@@ -1091,101 +712,12 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
 });
 
 /**
- * Capability lookups must ask the registry that ADVERTISED the shape.
- *
- * This is the other half of the union above, and skipping it would have made
- * the surface less honest rather than more useful. Chips are derived from the
- * union but verified here; pointed at the local registry alone, every
- * hub-derived chip resolves to zero producers, renders dashed, and claims in
- * its tooltip that "discovery confirmed no live producer" — a confident false
- * negative on essentially every chip on screen, laundered through the exact
- * three-state mechanism that exists to keep "unknown" from being reported as
- * "absent".
- *
- * ★ THE POINTER TYPE IS A SAFETY BOUNDARY, NOT A DETAIL. `POST /resolve` with
- * an ordinary shape EXECUTES that shape. A `vesselCapability` pointer asks who
- * could serve it and runs nothing. So the fan-out to the hub is allowed ONLY
- * for `vesselCapability`: anything else stays local, where this surface already
- * has a relationship, rather than becoming a way for a page to trigger work on
- * the hub through a route named "resolve".
+ * A lookup in the registry: this node's discovery, which asks its peers itself
+ * when it has no producer for a capability.
  */
-function isCapabilityPointer(rawBody: string): boolean {
-  try {
-    const parsed = JSON.parse(rawBody) as { pointer?: { type?: unknown } };
-    return parsed?.pointer?.type === "vesselCapability";
-  } catch {
-    return false;
-  }
-}
-
-/** A resolve attempt, buffered so the winning upstream's body can be replayed. */
-async function tryResolve(
-  base: string,
-  rawBody: string,
-): Promise<{ status: number; text: string; producers: number } | null> {
-  try {
-    const res = await fetch(`${base.replace(/\/+$/, "")}/resolve`, {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: rawBody,
-      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
-    });
-    const text = await res.text();
-    let producers = 0;
-    try {
-      const j = JSON.parse(text) as {
-        content?: { vessels?: unknown };
-        vessels?: unknown;
-        producers?: unknown;
-      };
-      const list = j?.content?.vessels ?? j?.vessels ?? j?.producers;
-      if (Array.isArray(list)) producers = list.length;
-    } catch {
-      /* non-JSON upstream — treat as zero producers, still replayable */
-    }
-    return { status: res.status, text, producers };
-  } catch {
-    return null;
-  }
-}
-
 proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve"), async (c) => {
   const rawBody = await rawBodyOf(c);
-  const origin = c.req.header("Origin");
-  const local = DISCOVERY_ENDPOINT.replace(/\/+$/, "");
-  const fleet = goalShapeResolutionEndpoint();
-
-  if (!isCapabilityPointer(rawBody) || fleet === local) {
-    return passthrough({ url: `${local}/resolve`, method: "POST", rawBody, origin });
-  }
-
-  // Local first: it answers fastest and owns this vessel's own shapes. Only a
-  // local answer with no producers is worth a second call.
-  const localAnswer = await tryResolve(local, rawBody);
-  if (localAnswer !== null && localAnswer.status === 200 && localAnswer.producers > 0) {
-    return new Response(localAnswer.text, {
-      status: localAnswer.status,
-      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
-    });
-  }
-
-  const fleetAnswer = await tryResolve(fleet, rawBody);
-  const winner =
-    fleetAnswer !== null && fleetAnswer.status === 200 && fleetAnswer.producers > 0
-      ? fleetAnswer
-      : (localAnswer ?? fleetAnswer);
-
-  if (winner === null) {
-    return new Response(JSON.stringify({ error: "upstream unreachable" }), {
-      status: 502,
-      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
-    });
-  }
-
-  return new Response(winner.text, {
-    status: winner.status,
-    headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
-  });
+  return passthrough({ url: `${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`, method: "POST", rawBody, origin: c.req.header("Origin") });
 });
 
 // ─── human verdicts ───────────────────────────────────
@@ -1430,63 +962,44 @@ proxyRouter.get("/api/page-frame/:id", (c) => {
  * The system's own work on its gaps, as threads: each gap with the attempts the
  * attempt ledger recorded for it, their runs, verdicts and commits.
  *
- * NODE-LOCAL by design: read from this node's development-vessel (a discovered
- * candidate that is not the federation relay, else the pinned local endpoint),
- * because the ledger is where this node's lane wrote. Joined here, once per minute,
+ * NODE-LOCAL by design: read only when a vessel on this node serves the ledger
+ * (with no row that outranks it, discovery answers from it), because the ledger is where this node's lane wrote. Joined here, once per minute,
  * never in the browser: the ledger is megabytes.
  */
 let gapThreadsCache: { at: number; body: unknown } | null = null;
 const GAP_THREADS_TTL_MS = 60_000;
 
-async function devVesselRead(base: string, pointer: Record<string, unknown>): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await fetch(`${base.replace(/\/+$/, "")}/v2/impulses/resolve`, {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: JSON.stringify({ impulse: { pointer } }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!res.ok) return null;
-    const j = (await res.json()) as { body?: Record<string, unknown> };
-    return j?.body ?? null;
-  } catch {
-    return null;
-  }
-}
-
 proxyRouter.get("/api/gap-threads", async (c) => {
   if (gapThreadsCache && Date.now() - gapThreadsCache.at < GAP_THREADS_TTL_MS) {
     return c.json(gapThreadsCache.body, 200, corsHeaders(c.req.header("Origin")));
   }
-  const local = (await candidateEndpointsFor("attemptLedger")).map((x) => x.base).filter((b) => b !== FEDERATION_INGRESS);
-  const pinned = process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090";
-  for (const base of [...new Set([...local, pinned])]) {
-    const gaps = await devVesselRead(base, { type: "substrateGap", limit: 500 });
-    if (!gaps || !Array.isArray(gaps["gaps"])) continue;
-    const kind = async (k: string): Promise<Record<string, unknown>[]> => {
-      const b = await devVesselRead(base, { type: "attemptLedger", kind: k });
-      const records = Array.isArray(b?.["records"]) ? (b["records"] as Array<{ record?: Record<string, unknown> }>) : [];
-      return records.map((r) => r.record ?? {});
-    };
-    const [intents, outcomes, settlements] = await Promise.all([kind("attemptIntent"), kind("attemptOutcome"), kind("attemptSettlement")]);
-    const threads: GapThread[] = joinGapThreads(gaps["gaps"] as Record<string, unknown>[], intents, outcomes, settlements);
-    const body = {
-      resolved: true,
-      shape: "attemptLedger",
-      body: {
-        scope: "this node",
-        threads,
-        totals: {
-          attempts: intents.length,
-          landed: outcomes.filter((o) => o["landed"] === true).length,
-          withRun: intents.filter((i) => typeof i["dispatch_id"] === "string" && i["dispatch_id"]).length,
-        },
-      },
-    };
-    gapThreadsCache = { at: Date.now(), body };
-    return c.json(body, 200, corsHeaders(c.req.header("Origin")));
+  // Sequential: 3 s + 8 s + 8 s, under the server's 30 s idle timeout, so the 502 below is reachable.
+  const gaps = (await servedHere("attemptLedger")) ? await readViaDiscovery({ type: "substrateGap", limit: 500 }, 8_000) : null;
+  if (!gaps || !Array.isArray(gaps["gaps"])) {
+    return c.json({ resolved: false, error: "no vessel serving substrateGap and attemptLedger answered" }, 502, corsHeaders(c.req.header("Origin")));
   }
-  return c.json({ resolved: false, error: "no local development-vessel answered substrateGap and attemptLedger" }, 502, corsHeaders(c.req.header("Origin")));
+  const kind = async (k: string): Promise<Record<string, unknown>[]> => {
+    const b = await readViaDiscovery({ type: "attemptLedger", kind: k }, 8_000);
+    const records = Array.isArray(b?.["records"]) ? (b["records"] as Array<{ record?: Record<string, unknown> }>) : [];
+    return records.map((r) => r.record ?? {});
+  };
+  const [intents, outcomes, settlements] = await Promise.all([kind("attemptIntent"), kind("attemptOutcome"), kind("attemptSettlement")]);
+  const threads: GapThread[] = joinGapThreads(gaps["gaps"] as Record<string, unknown>[], intents, outcomes, settlements);
+  const body = {
+    resolved: true,
+    shape: "attemptLedger",
+    body: {
+      scope: "this node",
+      threads,
+      totals: {
+        attempts: intents.length,
+        landed: outcomes.filter((o) => o["landed"] === true).length,
+        withRun: intents.filter((i) => typeof i["dispatch_id"] === "string" && i["dispatch_id"]).length,
+      },
+    },
+  };
+  gapThreadsCache = { at: Date.now(), body };
+  return c.json(body, 200, corsHeaders(c.req.header("Origin")));
 });
 
 /** For tests: drop the cached join. */
@@ -1526,65 +1039,9 @@ proxyRouter.get("/api/verdicts", (c) => {
  * both kinds of finding in one place — and can watch one close.
  */
 proxyRouter.get("/api/gaps", async (c) => {
-  const body = JSON.stringify({
-    impulse: { pointer: { type: "substrateGap", category: "ui_legibility", limit: 40 } },
-  });
-  const ask = async (base: string): Promise<unknown[] | null> => {
-    try {
-      const upstream = await fetch(`${base.replace(/\/+$/, "")}/v2/impulses/resolve`, {
-        method: "POST",
-        headers: upstreamHeaders(true),
-        body,
-        // 4s, not 12s, and the number is load-bearing. This route tries every
-        // candidate SEQUENTIALLY and then a pinned fallback, so its worst case is
-        // the sum of these — which at 12s each exceeded the server's own
-        // response tolerance. The connection was closed before the handler
-        // returned, so the honest 502 below was UNREACHABLE and a browser saw a
-        // network error instead of "no vessel serving substrateGap answered".
-        // An error path that cannot execute is not a fallback. Keep the total
-        // (candidates + pin) safely under `SERVER_IDLE_TIMEOUT_S`.
-        signal: AbortSignal.timeout(4_000),
-      });
-      if (!upstream.ok) return null;
-      const j = (await upstream.json()) as {
-        body?: { gaps?: unknown[] };
-        content?: { body?: { gaps?: unknown[] }; error?: unknown };
-      };
-      // The federation transport wraps the owning vessel's answer in `content`
-      // and reports a dead circuit as `content.error` with HTTP 200 — so
-      // `upstream.ok` says nothing about whether we got gaps. Unwrap both
-      // shapes; anything else is "this candidate did not answer".
-      const direct = j?.body?.gaps;
-      if (Array.isArray(direct)) return direct;
-      const proxied = j?.content?.body?.gaps;
-      return Array.isArray(proxied) ? proxied : null;
-    } catch {
-      return null;
-    }
-  };
-
-  // BY SHAPE, through discovery — the same path the goal shapes take.
-  //
-  // This used to read a single hardcoded loopback env, which is correct only
-  // where a gap store happens to run in this container. On a UI-only spoke
-  // nothing serves `substrateGap` locally, so the panel 502'd permanently and
-  // the surface could not show a person what is known to be wrong with it —
-  // on exactly the deployment whose whole job is to show a person things.
-  // The env stays as a last resort so a lone substrate with no registry still
-  // works.
-  // This route asks at `/v2/impulses/resolve` and is left that way ON PURPOSE:
-  // it is the impulse-resolve contract, which both development-vessel and the
-  // federation ingress serve, and it is measured working. The candidate's
-  // `resolvePath` describes the goal-shape `/resolve` contract, which is a
-  // different call — substituting it here would break a route that works today
-  // for the sake of symmetry.
-  for (const cand of await candidateEndpointsFor("substrateGap")) {
-    const gaps = await ask(cand.base);
-    if (gaps) return c.json({ gaps }, 200, corsHeaders(c.req.header("Origin")));
-  }
-  const pinned = process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090";
-  const gaps = await ask(pinned);
-  if (gaps) return c.json({ gaps }, 200, corsHeaders(c.req.header("Origin")));
+  // By shape, through discovery, which places the read wherever a gap store runs.
+  const answer = await readViaDiscovery({ type: "substrateGap", category: "ui_legibility", limit: 40 }, 8_000);
+  if (answer && Array.isArray(answer["gaps"])) return c.json({ gaps: answer["gaps"] }, 200, corsHeaders(c.req.header("Origin")));
 
   return c.json(
     { gaps: [], error: "no vessel serving substrateGap answered" },
@@ -1607,37 +1064,11 @@ proxyRouter.get("/api/gaps", async (c) => {
  * or null when no vessel serving it answered.
  */
 export async function readGapById(id: string): Promise<{ found: boolean; gap: unknown } | null> {
-  const body = JSON.stringify({ impulse: { pointer: { type: "substrateGap", id, limit: 1 } } });
-  const ask = async (base: string): Promise<{ found: boolean; gap: unknown } | null> => {
-    try {
-      const upstream = await fetch(`${base.replace(/\/+$/, "")}/v2/impulses/resolve`, {
-        method: "POST",
-        headers: upstreamHeaders(true),
-        body,
-        signal: AbortSignal.timeout(4_000),
-      });
-      if (!upstream.ok) return null;
-      const j = (await upstream.json()) as {
-        body?: { gaps?: unknown[] };
-        content?: { body?: { gaps?: unknown[] } };
-      };
-      const gaps = Array.isArray(j?.body?.gaps) ? j.body.gaps : Array.isArray(j?.content?.body?.gaps) ? j.content.body.gaps : null;
-      if (!gaps) return null;
-      const gap = gaps.find((g) => (g as { id?: unknown })?.id === id) ?? null;
-      return { found: gap !== null, gap };
-    } catch {
-      return null;
-    }
-  };
-  const bases = [
-    ...(await candidateEndpointsFor("substrateGap")).map((cand) => cand.base),
-    process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090",
-  ];
-  for (const base of bases) {
-    const answer = await ask(base);
-    if (answer) return answer;
-  }
-  return null;
+  const answer = await readViaDiscovery({ type: "substrateGap", id, limit: 1 }, 4_000);
+  const gaps = Array.isArray(answer?.["gaps"]) ? (answer["gaps"] as unknown[]) : null;
+  if (!gaps) return null;
+  const gap = gaps.find((g) => (g as { id?: unknown })?.id === id) ?? null;
+  return { found: gap !== null, gap };
 }
 
 /**
@@ -1954,33 +1385,26 @@ proxyRouter.get("/api/surface-intent/grammar", (c) =>
  * window that closes or is retired stops being gradable at once.
  */
 async function readCalibrationWindows(now = Date.now()): Promise<{ windows: CalibrationWindow[]; reason: string | null }> {
-  const body = JSON.stringify({ impulse: { pointer: { type: "poolImpulse", shape: "calibrationWindow", status: "open" } } });
-  const candidates = (await candidateEndpointsFor("poolImpulse")).filter((cand) => isOwnSubstrate(cand.base));
-  if (candidates.length === 0) return { windows: [], reason: "no producer" };
-  for (const cand of candidates) {
-    try {
-      const res = await fetch(resolveUrl(cand), {
-        method: "POST",
-        headers: upstreamHeaders(true),
-        body,
-        signal: AbortSignal.timeout(4_000),
-      });
-      if (!res.ok) continue;
-      const j = JSON.parse(unwrapFederated(await res.text())) as { body?: { impulses?: unknown[] } };
-      const rows = Array.isArray(j.body?.impulses) ? j.body.impulses : [];
-      const windows: CalibrationWindow[] = [];
-      let reason: string | null = rows.length === 0 ? "no window" : null;
-      for (const row of rows) {
-        const parsed = parseWindow(row, now);
-        if (parsed.ok) windows.push(parsed.window);
-        else reason ??= parsed.reason;
-      }
-      return { windows, reason: windows.length > 0 ? null : reason };
-    } catch {
-      /* next candidate */
+  // A peer's row would be attested by a peer's operator, whose authority here is nil, so
+  // the read is made only when this node itself serves the pool. With no row that outranks
+  // it by policy, discovery then answers the resolve below from that producer.
+  if (!(await servedHere("poolImpulse"))) return { windows: [], reason: "no producer" };
+  try {
+    const res = await viaDiscovery({ type: "poolImpulse", shape: "calibrationWindow", status: "open" }, { timeoutMs: 4_000 });
+    if (!res.ok) return { windows: [], reason: "unreadable" };
+    const j = JSON.parse(unwrapFederated(await res.text())) as { body?: { impulses?: unknown[] } };
+    const rows = Array.isArray(j.body?.impulses) ? j.body.impulses : [];
+    const windows: CalibrationWindow[] = [];
+    let reason: string | null = rows.length === 0 ? "no window" : null;
+    for (const row of rows) {
+      const parsed = parseWindow(row, now);
+      if (parsed.ok) windows.push(parsed.window);
+      else reason ??= parsed.reason;
     }
+    return { windows, reason: windows.length > 0 ? null : reason };
+  } catch {
+    return { windows: [], reason: "unreadable" };
   }
-  return { windows: [], reason: "unreadable" };
 }
 
 proxyRouter.get("/api/calibration/windows", async (c) => {
@@ -2066,13 +1490,7 @@ proxyRouter.post("/api/calibration/grade", requireCaller("/api/calibration/grade
  */
 export async function readWalkStateResult(dispatchId: string): Promise<{ kind: "state"; body: Record<string, unknown> } | { kind: "gone" } | { kind: "unreachable" }> {
   try {
-    const cand = await resolveGoalHostEndpoint();
-    const res = await fetch(resolveUrl(cand), {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: JSON.stringify({ type: "goalWalkState", dispatchId }),
-      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
-    });
+    const res = await viaDiscovery({ type: "goalWalkState", dispatchId });
     const j = JSON.parse(unwrapFederated(await res.text())) as { resolved?: boolean; body?: unknown; error?: unknown };
     if (j.resolved === true && j.body && typeof j.body === "object") return { kind: "state", body: j.body as Record<string, unknown> };
     if (typeof j.error === "string" && /dispatch not found/i.test(j.error)) return { kind: "gone" };
@@ -2084,13 +1502,7 @@ export async function readWalkStateResult(dispatchId: string): Promise<{ kind: "
 
 export async function readWalkState(dispatchId: string): Promise<Record<string, unknown> | null> {
   try {
-    const cand = await resolveGoalHostEndpoint();
-    const res = await fetch(resolveUrl(cand), {
-      method: "POST",
-      headers: upstreamHeaders(true),
-      body: JSON.stringify({ type: "goalWalkState", dispatchId }),
-      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
-    });
+    const res = await viaDiscovery({ type: "goalWalkState", dispatchId });
     if (!res.ok) return null;
     const j = JSON.parse(unwrapFederated(await res.text())) as { resolved?: boolean; body?: unknown };
     return j.resolved === true && j.body && typeof j.body === "object" ? (j.body as Record<string, unknown>) : null;
@@ -2099,5 +1511,5 @@ export async function readWalkState(dispatchId: string): Promise<Record<string, 
   }
 }
 
-export { corsHeaders, resolveGoalHostEndpoint };
+export { corsHeaders };
 export default proxyRouter;

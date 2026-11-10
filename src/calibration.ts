@@ -89,17 +89,3 @@ export function corpusVerdict(g: CalibrationGrade): "achieved" | "partial" | "no
 export function isGrade(v: unknown): v is CalibrationGrade {
   return v === "reached" || v === "partial" || v === "not_reached";
 }
-
-/**
- * Only this substrate's own pool may declare a window. A peer's row would be
- * attested by a peer's operator, whose authority here is nil; loopback is the
- * address of a vessel on this node.
- */
-export function isOwnSubstrate(base: string): boolean {
-  try {
-    const h = new URL(base).hostname;
-    return h === "127.0.0.1" || h === "localhost" || h === "::1" || h === "[::1]";
-  } catch {
-    return false;
-  }
-}

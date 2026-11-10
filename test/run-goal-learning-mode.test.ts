@@ -14,7 +14,8 @@ afterAll(() => {
   globalThis.fetch = nativeFetch;
 });
 globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-  const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown> & { pointer?: { type?: string } };
+  const sent = JSON.parse(String(init?.body ?? "{}")) as { pointer?: Record<string, unknown> };
+  const body = (sent.pointer ?? sent) as Record<string, unknown> & { pointer?: { type?: string } };
   const type = String(body["type"] ?? body.pointer?.type ?? "");
   if (type === "vesselCapability") return new Response(JSON.stringify({ content: { vessels: [] } }), { status: 200 });
   if (type === "goalDispatchAsync") {

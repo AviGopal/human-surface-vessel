@@ -31,13 +31,12 @@ const SCENARIO = `
     const body = await req.json().catch(() => ({}));
     const p = (body.impulse && body.impulse.pointer) || body.pointer || {};
     if (p.type === "vesselCapability") return Response.json({ content: { vessels: [] } });
-    if (url.pathname === "/v2/impulses/resolve" && p.type === "substrateGap" && p.id) {
+    if (url.pathname === "/resolve" && p.type === "substrateGap" && p.id) {
       reads.push(p.id);
       return Response.json({ body: { gaps: [{ id: p.id, status: closed.has(p.id) ? "closed" : "open" }] } });
     }
     return Response.json({}, { status: 404 });
   } });
-  process.env.DEV_VESSEL_ENDPOINT = "http://127.0.0.1:" + server.port;
   process.env.DISCOVERY_ENDPOINT = "http://127.0.0.1:" + server.port;
   process.env.DISCOVERY_VESSEL_ENDPOINT = "http://127.0.0.1:" + server.port;
 

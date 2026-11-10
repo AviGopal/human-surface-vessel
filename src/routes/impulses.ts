@@ -13,7 +13,7 @@
  */
 
 import { Hono } from "hono";
-import { DISCOVERY_SHAPES, METABOB_API_KEY, RESOLVE_PATH, type DiscoveryShape } from "../config.ts";
+import { DISCOVERY_ENDPOINT, DISCOVERY_SHAPES, METABOB_API_KEY, RESOLVE_PATH, type DiscoveryShape } from "../config.ts";
 import {
   acceptedClassification,
   asVisibility,
@@ -378,10 +378,6 @@ function visibleSliceSizePatch(
   return undefined;
 }
 
-const DEV_VESSEL_ENDPOINT = (
-  process.env["DEV_VESSEL_ENDPOINT"] ?? "http://127.0.0.1:8090"
-).replace(/\/+$/, "");
-
 /**
  * The gap id a complaint on `panelId` of `complaintKind` is filed under — the same
  * `ui-feedback-<region>-<kind>` keyspace the substrate's legibility detector uses.
@@ -411,29 +407,28 @@ async function fileFeedbackGap(entry: {
   value: unknown;
 }): Promise<void> {
   const text = typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value);
-  await fetch(`${DEV_VESSEL_ENDPOINT}/v2/impulses/resolve`, {
+  // Through discovery, which places the write wherever a gap store runs.
+  await fetch(`${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(METABOB_API_KEY ? { Authorization: `ApiKey ${METABOB_API_KEY}` } : {}),
     },
     body: JSON.stringify({
-      impulse: {
-        pointer: {
-          type: "substrateGap_write",
-          gap: {
-            id: feedbackGapId(entry.panelId, entry.complaintKind),
-            category: "ui_legibility",
-            source: "human_reported",
-            status: "open",
-            summary: `UI feedback (${entry.complaintKind}) on ${entry.panelId}: ${text}`,
-            detected_at: new Date().toISOString(),
-            classification_metadata: {
-              surface: "human-surface-vessel",
-              region: entry.panelId,
-              kind: entry.complaintKind,
-              interaction: entry.kind,
-            },
+      pointer: {
+        type: "substrateGap_write",
+        gap: {
+          id: feedbackGapId(entry.panelId, entry.complaintKind),
+          category: "ui_legibility",
+          source: "human_reported",
+          status: "open",
+          summary: `UI feedback (${entry.complaintKind}) on ${entry.panelId}: ${text}`,
+          detected_at: new Date().toISOString(),
+          classification_metadata: {
+            surface: "human-surface-vessel",
+            region: entry.panelId,
+            kind: entry.complaintKind,
+            interaction: entry.kind,
           },
         },
       },

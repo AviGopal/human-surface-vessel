@@ -8,7 +8,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { signedInCookie, testAuth } from "./setup.ts";
 import { resetLabelProducerCache } from "../src/person-session.ts";
 import { Hono } from "hono";
-import { corpusVerdict, isOwnSubstrate, parseWindow } from "../src/calibration.ts";
+import { corpusVerdict, parseWindow } from "../src/calibration.ts";
 import { proxyRouter } from "../src/routes/proxy.ts";
 
 const NOW = Date.parse("2026-10-03T20:00:00Z");
@@ -66,10 +66,6 @@ describe("parseWindow", () => {
     expect(corpusVerdict("not_reached")).toBe("not_achieved");
   });
 
-  test("only this substrate's own pool may declare a window", () => {
-    expect(isOwnSubstrate("http://127.0.0.1:8090")).toBe(true);
-    expect(isOwnSubstrate("https://peer.example:8090")).toBe(false);
-  });
 });
 
 // ── routes, against a stub fleet ─────────────────────────────────────────────
@@ -101,11 +97,11 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     parsed["pointer"] ??
     parsed) as Record<string, unknown>;
   // The label writer, as the registry names it on this node (the person's token is minted for it).
+  // The registry, by the shape asked for: the label writer and the pool's producers.
   if (pointer["type"] === "vesselRegistry") {
-    return new Response(JSON.stringify({ content: { vessels: [{ vesselId: "activity-api", shapes: ["goal_verification_label_write"], endpoint: "http://writer.local:8080", protocol: "http", origin: "local", metadata: { node: "node-a" } }] } }), { status: 200 });
-  }
-  if (pointer["type"] === "vesselCapability") {
-    return new Response(JSON.stringify({ content: { vessels } }), { status: 200 });
+    const shape = ((pointer["filters"] as { shapes?: string[] } | undefined)?.shapes ?? [])[0];
+    const writer = { vesselId: "activity-api", shapes: ["goal_verification_label_write"], endpoint: "http://writer.local:8080", protocol: "http", origin: "local", metadata: { node: "node-a" } };
+    return new Response(JSON.stringify({ content: { vessels: shape === "poolImpulse" ? vessels : [writer] } }), { status: 200 });
   }
   if (pointer["type"] === "poolImpulse") {
     poolReadsFrom.push(url);
@@ -132,7 +128,7 @@ beforeEach(() => {
   upstream.length = 0;
   resetLabelProducerCache();
   poolReadsFrom.length = 0;
-  vessels = [{ endpoint: "http://127.0.0.1:8090", resolve_endpoint: "/v2/impulses/resolve" }];
+  vessels = [{ vesselId: "development-vessel", shapes: ["poolImpulse"], protocol: "http", origin: "local" }];
   const now = Date.now();
   poolRows = [
     row({
@@ -176,7 +172,7 @@ describe("/api/calibration/windows", () => {
   });
 
   test("must-fail: a peer's pool is never read, so its windows never appear", async () => {
-    vessels = [{ endpoint: "https://peer.example", resolve_endpoint: "/v2/impulses/resolve" }];
+    vessels = [{ vesselId: "development-vessel@peer", shapes: ["poolImpulse"], protocol: "libp2p", origin: "peer" }];
     const j = (await (await app.request("/api/calibration/windows")).json()) as { windows: unknown[]; reason: string };
     expect(j.windows).toEqual([]);
     expect(j.reason).toBe("no producer");

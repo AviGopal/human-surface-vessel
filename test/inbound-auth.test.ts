@@ -48,6 +48,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.endsWith("/v1/auth/resolve")) return realFetch(input as never, init);
   let body: Record<string, unknown> = {};
   try { body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>; } catch { /* not JSON */ }
+  // A call through discovery carries its pointer; record what was asked for.
+  body = (body["pointer"] as Record<string, unknown> | undefined) ?? body;
   outbound.push({ url, body });
   const type = String(body["type"] ?? (body["pointer"] as { type?: unknown } | undefined)?.type ?? "");
   if (type === "vesselCapability") return new Response(JSON.stringify({ content: { vessels: [] } }), { status: 200 });

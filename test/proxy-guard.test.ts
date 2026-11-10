@@ -130,11 +130,11 @@ describe("/api/resolve forwards only the UI's shapes", () => {
     expect(upstream.length).toBe(0);
   });
 
-  test("an allowed shape is forwarded unchanged", async () => {
-    const body = JSON.stringify({ type: "goalWalkState", dispatchId: "d-1" });
-    const res = await post("/api/resolve", body, { "Content-Type": "application/json", ...testAuth() });
+  test("an allowed shape is forwarded unchanged, as the pointer of a discovery resolve", async () => {
+    const pointer = { type: "goalWalkState", dispatchId: "d-1" };
+    const res = await post("/api/resolve", JSON.stringify(pointer), { "Content-Type": "application/json", ...testAuth() });
     expect(res.status).toBe(200);
-    expect(upstream.some((u) => u.body === body)).toBe(true);
+    expect(upstream.some((u) => u.url.endsWith("/resolve") && u.body === JSON.stringify({ pointer }))).toBe(true);
   });
 
   test("resolveTypeOf reads the top-level type only", () => {

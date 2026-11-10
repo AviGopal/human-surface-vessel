@@ -38,15 +38,6 @@ export const DISCOVERY_ENDPOINT =
   "http://127.0.0.1:8100";
 
 /**
- * Last-resort fallback for goal-host. The proxy resolves goal-host THROUGH
- * discovery by shape first; this env (and the literal after it) exist only so
- * a discovery outage degrades instead of failing hard. A peer address is never
- * the only path to a peer.
- */
-export const GOAL_HOST_ENDPOINT =
-  process.env.GOAL_HOST_ENDPOINT ?? "http://127.0.0.1:8210";
-
-/**
  * identity-vessel, the fleet's single credential validator: a bootstrap
  * address only, never behaviour. Every write route asks it about a caller's
  * key through src/caller-credential.ts (whose pinned source bytes read the
@@ -118,7 +109,6 @@ export const config = Object.freeze({
   VESSEL_ID,
   VESSEL_NAME,
   DISCOVERY_ENDPOINT,
-  GOAL_HOST_ENDPOINT,
   SELF_ENDPOINT,
   RESOLVE_PATH,
   DISCOVERY_SHAPES,

@@ -19,6 +19,7 @@ globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
   let parsed: Record<string, unknown> = {};
   try {
     parsed = JSON.parse(body) as Record<string, unknown>;
+    parsed = (parsed["pointer"] as Record<string, unknown> | undefined) ?? parsed;
   } catch {
     /* not json */
   }
@@ -30,7 +31,6 @@ globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       status: w ? 200 : 404,
     });
   }
-  // Discovery and probes: answer as a goal host would, so the proxy picks a candidate.
   return new Response(JSON.stringify({ resolved: true, body: {} }), { status: 200 });
 }) as typeof fetch;
 
