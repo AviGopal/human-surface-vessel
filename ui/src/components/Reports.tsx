@@ -10,9 +10,10 @@
  * row offers a person's verdict, written as an outcome row citing it under their own key.
  */
 import { useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { formOfItem, writeOutcome, type ReportAnswer, type ReportForm, type ReportItem } from "../api/client";
 import { useReport } from "../api/queries";
-import { useSession } from "../api/session";
+import { SESSION_KEY, useSession } from "../api/session";
 
 /** How many plain values a report shows before "and N more". */
 const FIELDS_SHOWN = 8;
@@ -76,15 +77,23 @@ export function fieldText(v: unknown): string {
   return plain(v);
 }
 
-type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number | null } | { state: "refused"; reason: string };
+type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number | null } | { state: "refused"; reason: string } | { state: "signedOut" };
 
 function Judge({ rowId }: { rowId: string }): ReactNode {
   const session = useSession();
+  const client = useQueryClient();
   const [verdict, setVerdict] = useState<Verdict>({ state: "idle" });
   const signedIn = session.data?.signedIn === true;
   const give = async (r: 0 | 1): Promise<void> => {
     setVerdict({ state: "sending", r });
     const got = await writeOutcome(rowId, r);
+    if (!got.ok && got.signedOut) {
+      // The page still showed a sign-in the surface no longer holds (it restarted, or the
+      // sign-in ran out): read the session again so the page says so everywhere.
+      setVerdict({ state: "signedOut" });
+      void client.invalidateQueries({ queryKey: SESSION_KEY });
+      return;
+    }
     setVerdict(got.ok ? { state: "done", r, seq: got.seq } : { state: "refused", reason: got.reason });
   };
   return (
@@ -101,7 +110,13 @@ function Judge({ rowId }: { rowId: string }): ReactNode {
       <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} onClick={() => void give(0)}>
         Wrong
       </button>
-      {!signedIn ? <p className="sf-muted sf-row-note">Sign in with your key to give a verdict.</p> : null}
+      {verdict.state === "signedOut" ? (
+        <p className="sf-row-note" role="alert">
+          Your verdict was not recorded: you are no longer signed in (the surface may have restarted). Sign in with your key and judge again.
+        </p>
+      ) : !signedIn ? (
+        <p className="sf-muted sf-row-note">Sign in with your key to give a verdict.</p>
+      ) : null}
       {verdict.state === "refused" ? (
         <p className="sf-row-note" role="alert">
           Not recorded: {verdict.reason}

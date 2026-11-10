@@ -25,16 +25,23 @@ const ANSWER = {
 };
 
 let signedIn = true;
+/** The surface restarted: it no longer holds the sign-in the page last read. */
+let serverLost = false;
+let sessionReads = 0;
 let writeAnswer: Record<string, unknown> = { ok: true, seq: 205 };
 const sent: Record<string, unknown>[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
+  if (url.endsWith("/api/session")) {
+    sessionReads++;
+    if (serverLost) signedIn = false;
+  }
   if (url.endsWith("/api/session")) return Response.json({ available: false, keySignIn: true, signedIn, ...(signedIn ? { person: { userId: "key_person_1", name: null, email: null, expiresAt: Date.now() + 900_000 } } : {}) });
   if (url.includes("/api/discovery/resolve")) {
     const pointer = JSON.parse(String(init?.body)).pointer as Record<string, unknown>;
     sent.push(pointer);
     if (pointer["type"] === "record_read") return Response.json([ANSWER]);
-    if (pointer["type"] === "record_write") return signedIn ? Response.json(writeAnswer) : Response.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, { status: 401 });
+    if (pointer["type"] === "record_write") return signedIn && !serverLost ? Response.json(writeAnswer) : Response.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, { status: 401 });
   }
   return Response.json({});
 }) as typeof fetch;
@@ -53,6 +60,7 @@ afterAll(async () => {
 });
 beforeEach(() => {
   signedIn = true;
+  serverLost = false;
   writeAnswer = { ok: true, seq: 205 };
   sent.length = 0;
 });
@@ -108,6 +116,18 @@ describe("rows drawn in full, with a person's verdict", () => {
     await settle();
     expect(el.textContent).toContain("Not recorded: unauthorized: absent");
     expect(el.textContent).not.toContain("You judged");
+  });
+
+  test("must-fail: a sign-in lost to a restart says so plainly and the page reads the session again", async () => {
+    const el = await mount([ENTRY]);
+    serverLost = true;
+    const before = sessionReads;
+    await act(async () => button(el, "Right").click());
+    await settle();
+    expect(el.textContent).toContain("Your verdict was not recorded: you are no longer signed in");
+    expect(el.textContent).not.toContain("sign_in_required");
+    expect(sessionReads).toBeGreaterThan(before);
+    expect(button(el, "Right").disabled).toBe(true);
   });
 
   test("a bare pointer, or rows without judge, offers no verdict", async () => {

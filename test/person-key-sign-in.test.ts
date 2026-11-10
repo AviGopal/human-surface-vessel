@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { openSession, resetPersonSessions } from "../src/person-session.ts";
 import { __resetCredentialCacheForTests } from "../src/caller-credential.ts";
+import { recentObservations } from "../src/store.ts";
 
 const PERSON_KEY = "person-key-abc123";
 const NODE_KEY = process.env.METABOB_API_KEY!;
@@ -90,6 +91,13 @@ describe("the page's discovery path: reads under the node's key, writes under th
     const res = await post("/api/discovery/resolve", { pointer: OUTCOME });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: "sign_in_required" });
+    expect(toDiscovery()).toEqual([]);
+  });
+
+  test("must-fail: a refused write keeps what the person tried to say", async () => {
+    await post("/api/discovery/resolve", { pointer: OUTCOME });
+    const kept = recentObservations(5).find((o) => o.type === "person_write");
+    expect(kept?.body).toEqual({ recorded: false, reason: "sign_in_required", pointer: OUTCOME });
     expect(toDiscovery()).toEqual([]);
   });
 

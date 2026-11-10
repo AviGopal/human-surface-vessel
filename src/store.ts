@@ -172,7 +172,9 @@ export type ObservationType =
    */
   | "verdict_delivery"
   /** A person signed in or out on this surface: the user id only, never a credential. */
-  | "person_session";
+  | "person_session"
+  /** A person's write the surface did not send (no sign-in it holds), kept as they wrote it. */
+  | "person_write";
 
 /**
  * The four states a SHOWN solicitation can end in, kept distinct here because

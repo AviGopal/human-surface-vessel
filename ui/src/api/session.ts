@@ -24,7 +24,7 @@ export interface SessionState {
   readonly person?: SessionPerson;
 }
 
-const SESSION_KEY = ["personSession"] as const;
+export const SESSION_KEY = ["personSession"] as const;
 
 export async function fetchSession(): Promise<SessionState> {
   const res = await fetch("/api/session", { credentials: "same-origin" });

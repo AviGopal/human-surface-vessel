@@ -726,15 +726,21 @@ proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve
   const rawBody = await rawBodyOf(c);
   const url = `${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`;
   let type = "";
+  let pointer: unknown = null;
   try {
-    const pointer = (JSON.parse(rawBody) as { pointer?: { type?: unknown } }).pointer;
-    type = typeof pointer?.type === "string" ? pointer.type : "";
+    pointer = (JSON.parse(rawBody) as { pointer?: unknown }).pointer ?? null;
+    const t = (pointer as { type?: unknown } | null)?.type;
+    type = typeof t === "string" ? t : "";
   } catch {
     /* not JSON: forwarded as a read, and discovery answers it */
   }
   if (!isWritePointerType(type)) return passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin") });
   const person = sessionOf(c.req.header("Cookie"));
   if (!person?.apiKey) {
+    // What the person tried to write is kept even though it was not sent: a refusal must not
+    // lose what the person said (user ruling 10-17). Most often the surface restarted and the
+    // in-memory sign-in went with it.
+    recordObservation({ type: "person_write", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { recorded: false, reason: "sign_in_required", pointer } });
     return c.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, 401, corsHeaders(c.req.header("Origin")));
   }
   return passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin"), authorization: `ApiKey ${person.apiKey}` });

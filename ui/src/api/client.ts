@@ -492,7 +492,7 @@ export function formOfItem(item: ReportItem): ReportForm {
  * surface sends it under the signed-in person's own key and refuses it signed out
  * (routes/proxy.ts), so the row names the person as its writer.
  */
-export async function writeOutcome(rowId: string, r: 0 | 1): Promise<{ ok: true; seq: number | null } | { ok: false; reason: string }> {
+export async function writeOutcome(rowId: string, r: 0 | 1): Promise<{ ok: true; seq: number | null } | { ok: false; reason: string; signedOut?: true }> {
   let res: Response;
   try {
     res = await fetch("/api/discovery/resolve", {
@@ -507,6 +507,7 @@ export async function writeOutcome(rowId: string, r: 0 | 1): Promise<{ ok: true;
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const inner = (body["body"] ?? body["content"] ?? body) as Record<string, unknown>;
   const said = [body["error"], body["reason"], body["detail"], inner?.["error"], inner?.["detail"]].filter((x): x is string => typeof x === "string" && x.length > 0);
+  if (res.status === 401 && body["error"] === "sign_in_required") return { ok: false, reason: "you are no longer signed in", signedOut: true };
   if (!res.ok || said.length > 0 || body["success"] === false) return { ok: false, reason: [...new Set(said)].join(": ") || `not recorded (${res.status})` };
   return { ok: true, seq: typeof inner?.["seq"] === "number" ? (inner["seq"] as number) : null };
 }
