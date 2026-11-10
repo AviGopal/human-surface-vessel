@@ -150,6 +150,8 @@ export interface RegionView {
   revision: number;
   blocks: readonly string[];
   limits: Readonly<Record<string, number>>;
+  /** What the reports block reads, in draw order. */
+  reports: readonly Readonly<Record<string, unknown>>[];
   written_by: string | null;
   /** The run the write named: dispatch, execution and template ids, as the writer claimed them. */
   run: { dispatch_id: string | null; execution_id: string | null; template_id: string | null } | null;
@@ -161,7 +163,7 @@ function buildViews(): Record<string, RegionView> {
   const out: Record<string, RegionView> = {};
   for (const region of Object.keys(VIEW_REGIONS) as ViewRegion[]) {
     const v = currentView(region);
-    out[region] = { id: v.id, revision: v.revision, blocks: v.blocks, limits: v.limits, written_by: v.writtenBy, run: v.run ? { dispatch_id: v.run.dispatchId, execution_id: v.run.executionId, template_id: v.run.templateId } : null, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf };
+    out[region] = { id: v.id, revision: v.revision, blocks: v.blocks, limits: v.limits, reports: v.reports, written_by: v.writtenBy, run: v.run ? { dispatch_id: v.run.dispatchId, execution_id: v.run.executionId, template_id: v.run.templateId } : null, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf };
   }
   return out;
 }

@@ -22,7 +22,7 @@ import { dirname, join } from "node:path";
 
 /** Each region and the blocks it can draw. */
 export const VIEW_REGIONS = {
-  landing: ["needs_you", "changed", "health", "latest_run"],
+  landing: ["needs_you", "changed", "health", "latest_run", "reports"],
 } as const;
 
 export type ViewRegion = keyof typeof VIEW_REGIONS;
@@ -33,16 +33,40 @@ const VIEW_LIMITS: Record<ViewRegion, Record<string, { min: number; max: number 
   landing: { needs_you: { min: 1, max: 20 } },
 };
 
-/** What a region draws with no view written: today's landing, the newest own run. */
-export const DEFAULT_VIEWS: Record<ViewRegion, { blocks: readonly string[]; limits: Record<string, number> }> = {
-  landing: { blocks: ["latest_run"], limits: {} },
+/**
+ * A report the `reports` block reads: a pointer resolved through discovery, with the
+ * shape in `type` and any arguments as plain values. Whatever serves the shape answers;
+ * the surface draws the answer and does not interpret it.
+ */
+export type ReportPointer = Readonly<Record<string, string | number | boolean>> & { readonly type: string };
+
+/** How many reports one view may name. */
+const MAX_REPORTS = 8;
+const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_:.-]{0,79}$/;
+
+/**
+ * What a region draws with no view written. The landing's default reads reports that
+ * only read (they file and change nothing), so drawing the screen never acts on the
+ * system; a view written by the system replaces this list.
+ */
+export const DEFAULT_VIEWS: Record<ViewRegion, { blocks: readonly string[]; limits: Record<string, number>; reports: readonly ReportPointer[] }> = {
+  landing: {
+    blocks: ["needs_you", "reports"],
+    limits: {},
+    reports: [
+      { type: "trace_failure_pattern_report" },
+      { type: "failure_count_report" },
+      { type: "execution_trace", limit: 10 },
+      { type: "system_load_report" },
+    ],
+  },
 };
 
 /** The contract a region's views are checked against: blocks, limits and default per region. */
 export interface ViewContract {
   readonly regions: Readonly<Record<string, readonly string[]>>;
   readonly limits: Readonly<Record<string, Readonly<Record<string, { min: number; max: number }>>>>;
-  readonly defaults: Readonly<Record<string, { blocks: readonly string[] }>>;
+  readonly defaults: Readonly<Record<string, { blocks: readonly string[]; reports?: readonly ReportPointer[] }>>;
 }
 
 const CONTRACT: ViewContract = { regions: VIEW_REGIONS, limits: VIEW_LIMITS, defaults: DEFAULT_VIEWS };
@@ -56,7 +80,9 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
   const regions = Object.entries(contract.regions).map(([region, blocks]) => {
     const limits = Object.entries(contract.limits[region] ?? {}).map(([k, r]) => `${k} lists ${r.min} to ${r.max} items`);
     const fallback = contract.defaults[region]?.blocks ?? [];
-    return `region ${region}: blocks ${blocks.join(", ")}${limits.length ? `; ${limits.join(", ")}` : ""}; default ${fallback.join(", ") || "none"}`;
+    const reports = contract.defaults[region]?.reports ?? [];
+    return `region ${region}: blocks ${blocks.join(", ")}${limits.length ? `; ${limits.join(", ")}` : ""}; default ${fallback.join(", ") || "none"}` +
+      (blocks.includes("reports") ? `; the reports block draws the answer to each pointer in reports (1 to ${MAX_REPORTS}, each {type, ...plain arguments}, never a _write shape)${reports.length ? `, by default ${reports.map((r) => r.type).join(", ")}` : ""}` : "");
   });
   const names = Object.keys(contract.regions).join(", ");
   return {
@@ -79,6 +105,7 @@ export type ViewRefusal =
   | "empty_blocks"
   | "unknown_limit"
   | "limit_out_of_range"
+  | "bad_report"
   | "nothing_to_undo";
 
 export interface UiView {
@@ -89,6 +116,8 @@ export interface UiView {
   readonly id: string;
   readonly blocks: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
+  /** What the reports block reads, in draw order; empty when the view draws no reports. */
+  readonly reports: readonly ReportPointer[];
   readonly note: string | null;
   /** The caller label the write door admitted; never a key. */
   readonly writtenBy: string | null;
@@ -159,14 +188,31 @@ function load(): void {
     }
     // A line that would be refused today is not replayed: the file never widens the vocabulary.
     if (!isRegion(v?.region) || !Number.isInteger(v.revision) || v.revision < 1) continue;
-    if (validate(v.region, v.blocks, v.limits).refusal) continue;
+    // A line written before views named reports carries none.
+    v = { ...v, reports: v.reports ?? [] };
+    if (validate(v.region, v.blocks, v.limits, v.reports).refusal) continue;
     const list = history.get(v.region) ?? [];
     list.push(v);
     history.set(v.region, list);
   }
 }
 
-function validate(region: unknown, blocks: unknown, limits: unknown): { refusal: ViewRefusal | null; detail: string } {
+/** A report pointer as written, or why it is not one. */
+function reportOf(r: unknown): { pointer: ReportPointer } | { detail: string } {
+  if (typeof r !== "object" || r === null || Array.isArray(r)) return { detail: "each report is a pointer object with a type" };
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(r as Record<string, unknown>)) {
+    if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return { detail: `${k}: arguments are plain values` };
+    out[k] = v;
+  }
+  const type = out["type"];
+  if (typeof type !== "string" || !SHAPE_NAME.test(type)) return { detail: `type: a shape name` };
+  // Drawing the screen must not write anything, and a _write shape is a write by name.
+  if (type.endsWith("_write")) return { detail: `${type}: a write is not a report` };
+  return { pointer: out as ReportPointer };
+}
+
+function validate(region: unknown, blocks: unknown, limits: unknown, reports: unknown = []): { refusal: ViewRefusal | null; detail: string } {
   if (!isRegion(region)) return { refusal: "unknown_region", detail: `regions: ${Object.keys(VIEW_REGIONS).join(", ")}` };
   const allowed: readonly string[] = VIEW_REGIONS[region];
   if (!Array.isArray(blocks) || blocks.length === 0) return { refusal: "empty_blocks", detail: `blocks: ${allowed.join(", ")}` };
@@ -187,6 +233,19 @@ function validate(region: unknown, blocks: unknown, limits: unknown): { refusal:
       }
     }
   }
+  const named = reports ?? [];
+  if (!Array.isArray(named)) return { refusal: "bad_report", detail: "reports is a list of pointers" };
+  if (named.length > MAX_REPORTS) return { refusal: "bad_report", detail: `at most ${MAX_REPORTS} reports` };
+  if (seen.has("reports") && named.length === 0) return { refusal: "bad_report", detail: "the reports block names at least one report" };
+  if (!seen.has("reports") && named.length > 0) return { refusal: "bad_report", detail: "reports are drawn only by the reports block" };
+  const keys = new Set<string>();
+  for (const r of named) {
+    const got = reportOf(r);
+    if ("detail" in got) return { refusal: "bad_report", detail: got.detail };
+    const key = JSON.stringify(Object.entries(got.pointer).sort(([a], [b]) => a.localeCompare(b)));
+    if (keys.has(key)) return { refusal: "bad_report", detail: `${got.pointer.type} is named twice` };
+    keys.add(key);
+  }
   return { refusal: null, detail: "" };
 }
 
@@ -205,12 +264,13 @@ export function currentView(region: ViewRegion): UiView {
   const latest = history.get(region)?.at(-1);
   if (latest) return latest;
   const d = DEFAULT_VIEWS[region];
-  return { region, revision: 0, id: `${region}@0`, blocks: d.blocks, limits: d.limits, note: null, writtenBy: null, run: null, writtenAt: 0, undoOf: null };
+  return { region, revision: 0, id: `${region}@0`, blocks: d.blocks, limits: d.limits, reports: d.reports, note: null, writtenBy: null, run: null, writtenAt: 0, undoOf: null };
 }
 
-/** Same blocks in the same order, and the same limits. The note is not drawn, so it does not make a view different. */
-function sameView(v: UiView, blocks: readonly string[], limits: Readonly<Record<string, number>>): boolean {
+/** Same blocks in the same order, the same limits and the same reports. The note is not drawn, so it does not make a view different. */
+function sameView(v: UiView, blocks: readonly string[], limits: Readonly<Record<string, number>>, reports: readonly ReportPointer[]): boolean {
   if (v.blocks.length !== blocks.length || v.blocks.some((b, i) => b !== blocks[i])) return false;
+  if (JSON.stringify(v.reports) !== JSON.stringify(reports)) return false;
   const a = Object.entries(v.limits).sort(([x], [y]) => x.localeCompare(y));
   const b = Object.entries(limits).sort(([x], [y]) => x.localeCompare(y));
   return a.length === b.length && a.every(([k, n], i) => b[i]![0] === k && b[i]![1] === n);
@@ -218,21 +278,22 @@ function sameView(v: UiView, blocks: readonly string[], limits: Readonly<Record<
 
 /** Write a view for a region; refused writes store nothing. */
 export function writeView(
-  input: { region: unknown; blocks: unknown; limits?: unknown; note?: unknown },
+  input: { region: unknown; blocks: unknown; limits?: unknown; reports?: unknown; note?: unknown },
   writtenBy: string | null,
   now: number = Date.now(),
   run: ViewRun | null = null,
 ): ViewWrite {
   load();
-  const { refusal, detail } = validate(input.region, input.blocks, input.limits);
+  const { refusal, detail } = validate(input.region, input.blocks, input.limits, input.reports ?? []);
   if (refusal) return { ok: false, refusal, detail };
   const region = input.region as ViewRegion;
+  const reports = ((input.reports as unknown[] | undefined) ?? []).map((r) => (reportOf(r) as { pointer: ReportPointer }).pointer);
   // A view identical to the one in force changes nothing on screen, so it is not a revision:
   // one run's retried step wrote the same view three times in a row (revisions 4 to 6 on one
   // node), and each read as a change to anything reading the log. The write still succeeds,
   // since what it asked for is in force, so a walk reads it as done, not as a failure.
   const current = currentView(region);
-  if (sameView(current, input.blocks as string[], (input.limits as Record<string, number> | undefined) ?? {})) {
+  if (sameView(current, input.blocks as string[], (input.limits as Record<string, number> | undefined) ?? {}, reports)) {
     return { ok: true, view: current, unchanged: true };
   }
   const revision = currentView(region).revision + 1;
@@ -242,6 +303,7 @@ export function writeView(
     id: `${region}@${revision}`,
     blocks: [...(input.blocks as string[])],
     limits: { ...((input.limits as Record<string, number> | undefined) ?? {}) },
+    reports,
     note: typeof input.note === "string" && input.note.trim() ? input.note.trim().slice(0, 500) : null,
     writtenBy,
     run,
@@ -266,7 +328,7 @@ export function undoView(region: unknown, writtenBy: string | null, now: number 
   // Undoing an undo therefore restores what that undo replaced.
   const before = list.at(-2) ?? null;
   const restoredRevision = before?.revision ?? 0;
-  const base = before ?? { blocks: DEFAULT_VIEWS[region].blocks, limits: DEFAULT_VIEWS[region].limits, note: null };
+  const base = before ?? { blocks: DEFAULT_VIEWS[region].blocks, limits: DEFAULT_VIEWS[region].limits, reports: DEFAULT_VIEWS[region].reports, note: null };
   const revision = current.revision + 1;
   const view: UiView = {
     region,
@@ -274,6 +336,7 @@ export function undoView(region: unknown, writtenBy: string | null, now: number 
     id: `${region}@${revision}`,
     blocks: [...base.blocks],
     limits: { ...base.limits },
+    reports: [...base.reports],
     note: base.note,
     writtenBy,
     run,

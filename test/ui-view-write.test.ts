@@ -34,10 +34,11 @@ beforeEach(forgetViews);
 afterAll(forgetViews);
 
 describe("uiView_write", () => {
-  test("with nothing written, the landing draws its default: the newest own run", async () => {
+  test("with nothing written, the landing draws its default: open questions and the read-only reports", async () => {
     const r = await read("landing");
     expect(r.status).toBe(200);
-    expect(r.json).toMatchObject({ region: "landing", revision: 0, id: "landing@0", blocks: ["latest_run"] });
+    expect(r.json).toMatchObject({ region: "landing", revision: 0, id: "landing@0", blocks: ["needs_you", "reports"] });
+    expect(r.json.reports.map((p: { type: string }) => p.type)).toEqual(["trace_failure_pattern_report", "failure_count_report", "execution_trace", "system_load_report"]);
   });
 
   test("must-fail: a valid view is stored, advances the revision, names its writer, and the page reads it", async () => {
@@ -84,7 +85,8 @@ describe("uiView_write", () => {
     await forgetViews();
     await write({ region: "landing", blocks: ["health"] });
     const u3 = await write({ region: "landing", undo: true });
-    expect(u3.json.body.view).toMatchObject({ revision: 2, blocks: ["latest_run"], undoOf: 0 });
+    expect(u3.json.body.view).toMatchObject({ revision: 2, blocks: ["needs_you", "reports"], undoOf: 0 });
+    expect(u3.json.body.view.reports.length).toBe(4);
   });
 
   test("must-fail: an identical view is unchanged, whatever its limits' order or note, and writes no revision", async () => {
@@ -100,7 +102,7 @@ describe("uiView_write", () => {
     // undo still restores, and the default counts as a view in force
     expect((await write({ region: "landing", undo: true })).json.body.view).toMatchObject({ revision: 4, blocks: ["needs_you", "health"], limits: { needs_you: 3 } });
     await forgetViews();
-    expect((await write({ region: "landing", blocks: ["latest_run"] })).json.body).toMatchObject({ unchanged: true, revision: 0 });
+    expect((await write({ region: "landing", blocks: ["needs_you", "reports"], reports: currentView("landing").reports })).json.body).toMatchObject({ unchanged: true, revision: 0 });
   });
 
   test("must-fail: views survive a restart, and a stored line outside the vocabulary is not replayed", async () => {
@@ -109,6 +111,38 @@ describe("uiView_write", () => {
     appendFileSync(file, JSON.stringify({ region: "landing", revision: 2, id: "landing@2", blocks: ["weather"], limits: {} }) + "\n");
     resetViewsForTest();
     expect(currentView("landing")).toMatchObject({ revision: 1, blocks: ["health", "needs_you"] });
+  });
+
+  test("must-fail: a view names the reports its reports block reads, and they are read back as written", async () => {
+    const w = await write({ region: "landing", blocks: ["reports"], reports: [{ type: "substrateGap", status: "open", limit: 5 }, { type: "system_load_report" }] });
+    expect(w.status).toBe(200);
+    expect((await read("landing")).json).toMatchObject({ revision: 1, blocks: ["reports"], reports: [{ type: "substrateGap", status: "open", limit: 5 }, { type: "system_load_report" }] });
+    // Other reports are a different view, so a revision.
+    expect((await write({ region: "landing", blocks: ["reports"], reports: [{ type: "system_load_report" }] })).json.body.revision).toBe(2);
+  });
+
+  test("must-fail: a report that is a write, or not a pointer, is refused and stores nothing", async () => {
+    const cases: [Record<string, unknown>, string][] = [
+      [{ blocks: ["reports"], reports: [{ type: "substrateGap_write" }] }, "a write is not a report"],
+      [{ blocks: ["reports"], reports: ["system_load_report"] }, "pointer object"],
+      [{ blocks: ["reports"], reports: [{ limit: 3 }] }, "type"],
+      [{ blocks: ["reports"], reports: [{ type: "x", where: { a: 1 } }] }, "plain values"],
+      [{ blocks: ["reports"], reports: [] }, "at least one report"],
+      [{ blocks: ["needs_you"], reports: [{ type: "system_load_report" }] }, "only by the reports block"],
+      [{ blocks: ["reports"], reports: [{ type: "a" }, { type: "a" }] }, "named twice"],
+      [{ blocks: ["reports"], reports: Array.from({ length: 9 }, (_, i) => ({ type: `r${i}` })) }, "at most 8"],
+    ];
+    for (const [pointer, why] of cases) {
+      const w = await write({ region: "landing", ...pointer });
+      expect(w.status).toBe(422);
+      expect(w.json.refusal).toBe("bad_report");
+      expect(w.json.error).toContain(why);
+    }
+    expect((await read("landing")).json.revision).toBe(0);
+  });
+
+  test("must-fail: the default view's reports only read: none is a write, a tick or a scan", () => {
+    for (const p of currentView("landing").reports) expect(p.type).not.toMatch(/_write$|tick|scan|observer/);
   });
 
   test("must-fail: the surface advertises uiView_write and never uiView", () => {
@@ -129,7 +163,8 @@ describe("human_surface:ui_view names the view each region draws", () => {
   }
 
   test("with nothing written, the report names the default", async () => {
-    expect((await report()).views.landing).toMatchObject({ id: "landing@0", revision: 0, blocks: ["latest_run"], written_by: null, written_at: null });
+    expect((await report()).views.landing).toMatchObject({ id: "landing@0", revision: 0, blocks: ["needs_you", "reports"], written_by: null, written_at: null });
+    expect((await report()).views.landing.reports.length).toBe(4);
   });
 
   test("must-fail: after a write and an undo, the report names each revision, its blocks, limits and writer", async () => {
@@ -138,6 +173,6 @@ describe("human_surface:ui_view names the view each region draws", () => {
     expect(after).toMatchObject({ id: "landing@1", revision: 1, blocks: ["needs_you", "health"], limits: { needs_you: 3 }, undo_of: null });
     expect(after.written_by).toBeTruthy();
     await write({ region: "landing", undo: true });
-    expect((await report()).views.landing).toMatchObject({ id: "landing@2", revision: 2, blocks: ["latest_run"], undo_of: 0 });
+    expect((await report()).views.landing).toMatchObject({ id: "landing@2", revision: 2, blocks: ["needs_you", "reports"], undo_of: 0 });
   });
 });

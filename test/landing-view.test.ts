@@ -1,11 +1,12 @@
 /**
  * The landing draws the blocks its view names, in the view's order, and leaves out a
  * block with nothing to show. With no view, or one naming a block this build cannot
- * draw, it draws its default: the newest own run. Its rows select what to look at and
+ * draw, it draws its default: open questions. Its rows select what to look at and
  * send nothing.
  *
  * Shapes: one node 10-26: five open decisions, the person's own runs all "record gone",
- * the trace store gap at 875 attempts with none landed.
+ * the trace store gap at 875 attempts with none landed. Reports: answers as two nodes
+ * gave them 11-10 (a load report; a forward that timed out; a peer refusing a keyless read).
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -14,8 +15,18 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
 
 const posts: string[] = [];
+const reportPointers: unknown[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
+  if (url.includes("/api/discovery/resolve")) {
+    const pointer = JSON.parse(String(init?.body)).pointer as { type: string };
+    reportPointers.push(pointer);
+    if (pointer.type === "system_load_report") {
+      return Response.json({ success: true, shape: "systemLoadReport", body: { load_avg_1m: 2.61, load_avg_5m: 2.11, cpu_cores: 16, anomalies: [] } });
+    }
+    if (pointer.type === "reach_rate_scan") return Response.json({ error: "forward_failed", shape: "reach_rate_scan", detail: "The operation timed out." }, { status: 502 });
+    return Response.json({ content: { error: "unauthorized", shape: pointer.type, reason: "absent" }, metadata: {} });
+  }
   if (init?.method === "POST") posts.push(url);
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [] } });
   if (url.includes("/api/resolve")) {
@@ -85,11 +96,24 @@ async function mount(props: Record<string, unknown>, calls: string[] = []): Prom
 const blocksDrawn = (el: HTMLElement): string[] => [...el.querySelectorAll("[data-block]")].map((b) => b.getAttribute("data-block")!);
 
 describe("the landing drawn from its view", () => {
-  test("with no view, the landing draws its default: the newest own run", async () => {
+  test("with no view read, the landing draws what the page holds itself: open questions", async () => {
     const el = await mount({});
-    expect(blocksDrawn(el)).toEqual(["latest_run"]);
+    expect(blocksDrawn(el)).toEqual(["needs_you"]);
     expect(el.querySelector(".sf-landing")?.getAttribute("data-view-id")).toBe("landing@0");
-    expect(el.textContent).toContain("What time is it?");
+  });
+
+  test("must-fail: the reports block draws each named report's answer, and says why one has none", async () => {
+    const el = await mount({ view: { ...view(["reports"]), reports: [{ type: "system_load_report" }, { type: "reach_rate_scan" }, { type: "substrateGap", limit: 2 }] } });
+    expect(blocksDrawn(el)).toEqual(["reports"]);
+    const load = el.querySelector("[data-report=system_load_report]")!;
+    expect(load.textContent).toContain("system load report");
+    expect(load.textContent).toContain("load avg 1m");
+    expect(load.textContent).toContain("2.61");
+    expect(el.querySelector("[data-report=reach_rate_scan]")!.textContent).toContain("no answer: forward_failed: The operation timed out.");
+    const gaps = el.querySelector("[data-report=substrateGap]")!;
+    expect(gaps.textContent).toContain("no answer: unauthorized: absent");
+    // Reading a report is a read: nothing on this screen sends a write.
+    expect(reportPointers).toEqual([{ type: "system_load_report" }, { type: "reach_rate_scan" }, { type: "substrateGap", limit: 2 }]);
   });
 
   test("must-fail: a view's blocks are drawn in its order, and the landing names the view it drew", async () => {
@@ -116,7 +140,7 @@ describe("the landing drawn from its view", () => {
 
   test("must-fail: a view naming a block this build cannot draw falls back to the default", async () => {
     const el = await mount({ view: view(["health", "weather"]) });
-    expect(blocksDrawn(el)).toEqual(["latest_run"]);
+    expect(blocksDrawn(el)).toEqual(["needs_you"]);
     expect(el.querySelector(".sf-landing")?.getAttribute("data-view-default")).toBe("true");
     expect(landingBlocks(view(["health", "weather"]) as never).fromView).toBe(false);
   });

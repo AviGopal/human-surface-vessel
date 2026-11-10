@@ -9,13 +9,14 @@ import {
   fetchGap,
   fetchGapThreads,
   fetchRenderPolicy,
+  fetchReport,
   fetchUiView,
   fetchVerdicts,
   fetchWalkState,
   injectContext,
   submitGrade,
 } from "./client";
-import type { GapRecord, RenderPolicy, UiViewState } from "./client";
+import type { GapRecord, RenderPolicy, ReportAnswer, ReportPointer, UiViewState } from "./client";
 import type { ActiveDispatch, GoalWalkState } from "./types";
 
 export const queryKeys = {
@@ -146,6 +147,17 @@ export function useDispatchGoal() {
 }
 
 /** A region's view, on the live cadence; a failed read keeps the last view drawn. */
+/** One report the landing names; on a slow cadence, since a report is a summary, not a feed. */
+export function useReport(pointer: ReportPointer, opts: { enabled: boolean }): UseQueryResult<ReportAnswer> {
+  return useQuery({
+    queryKey: ["report", JSON.stringify(pointer)],
+    queryFn: () => fetchReport(pointer),
+    enabled: opts.enabled,
+    refetchInterval: opts.enabled ? 60_000 : false,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useUiView(region: string, opts: { enabled: boolean; intervalMs: number }): UseQueryResult<UiViewState> {
   return useQuery({
     queryKey: ["uiView", region],

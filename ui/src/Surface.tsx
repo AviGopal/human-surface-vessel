@@ -197,6 +197,7 @@ function Workbench(): ReactNode {
             board={board.data}
             gapThreads={gapThreads.data}
             latest={latest}
+            live={!paused}
             onOpenRun={openRun}
             onOpenQuestion={openQuestion}
             onOpenSystem={() => {

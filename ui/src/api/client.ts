@@ -474,6 +474,48 @@ export interface UiViewState {
   readonly id: string;
   readonly blocks: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
+  /** What the reports block reads: pointers, each with its shape in `type`. Absent from a server that predates them. */
+  readonly reports?: readonly ReportPointer[];
+}
+
+export type ReportPointer = Readonly<Record<string, string | number | boolean>> & { readonly type: string };
+
+/** A report's answer, or why there is none. `answer` is what the producer returned, uninterpreted. */
+export type ReportAnswer = { readonly ok: true; readonly shape: string; readonly answer: unknown } | { readonly ok: false; readonly reason: string };
+
+/**
+ * One report, resolved by shape through discovery (the surface's own passthrough), so
+ * whichever vessel serves it answers. Every way a read comes back empty is a reason,
+ * never an exception: a producer that refused, timed out or answered an error.
+ */
+export async function fetchReport(pointer: ReportPointer): Promise<ReportAnswer> {
+  let res: Response;
+  try {
+    res = await fetch("/api/discovery/resolve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ pointer }),
+    });
+  } catch {
+    return { ok: false, reason: "the surface did not answer" };
+  }
+  const body = await readJson(res).catch(() => ({}) as Record<string, unknown>);
+  const said = (o: unknown): string | null => {
+    if (typeof o !== "object" || o === null) return typeof o === "string" && o ? o : null;
+    const r = o as Record<string, unknown>;
+    const parts = [r["error"], r["reason"], r["detail"], r["note"]].filter((x): x is string => typeof x === "string" && x.length > 0);
+    return parts.length ? [...new Set(parts)].join(": ") : null;
+  };
+  if (!res.ok) return { ok: false, reason: said(body) ?? `no answer (${res.status})` };
+  const content = body["content"];
+  if (typeof content === "object" && content !== null && "error" in content) return { ok: false, reason: said(content) ?? "refused" };
+  if (body["success"] === false || body["resolved"] === false) return { ok: false, reason: said(body["body"]) ?? said(body) ?? "refused" };
+  const answer = body["body"] ?? content ?? body;
+  if (typeof answer === "object" && answer !== null && !Array.isArray(answer) && "error" in answer) {
+    return { ok: false, reason: said(answer) ?? "refused" };
+  }
+  return { ok: true, shape: typeof body["shape"] === "string" ? body["shape"] : pointer.type, answer };
 }
 
 /** A region's view, read on the live cadence like the render policy: a view the system writes shows without a reload. */

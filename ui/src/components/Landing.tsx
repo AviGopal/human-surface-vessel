@@ -2,7 +2,8 @@
  * The first screen: the blocks the landing's view names, in its order (src/ui-views.ts).
  * The view is read at use time, so a view the system writes redraws the landing with no
  * rebuild. A block with nothing to show is left out. With no view, or one naming blocks
- * this build cannot draw, the landing draws its default: the newest own run.
+ * this build cannot draw, the landing draws its default: open questions. The server's
+ * own default view (src/ui-views.ts) adds the reports it names.
  *
  * Rows here select what to look at; nothing on this screen sends anything.
  */
@@ -15,12 +16,14 @@ import { classifyQuestion } from "../lib/questionClass";
 import { deriveRunState } from "../lib/runState";
 import { questionRowSubject } from "../state/questions";
 import { isMine } from "./RunsList";
+import { Reports } from "./Reports";
 import { RunView } from "./RunView";
 import { StateBadge } from "./StateBadge";
 
-export const LANDING_BLOCKS = ["needs_you", "changed", "health", "latest_run"] as const;
+export const LANDING_BLOCKS = ["needs_you", "changed", "health", "latest_run", "reports"] as const;
 export type LandingBlock = (typeof LANDING_BLOCKS)[number];
-export const DEFAULT_LANDING: { blocks: readonly LandingBlock[]; limits: Record<string, number> } = { blocks: ["latest_run"], limits: {} };
+/** With no view read, nothing names a report, so the default is what the page holds itself. */
+export const DEFAULT_LANDING: { blocks: readonly LandingBlock[]; limits: Record<string, number> } = { blocks: ["needs_you"], limits: {} };
 
 /** How many decisions "Needs you" lists when the view sets no limit. */
 const NEEDS_YOU_DEFAULT = 5;
@@ -75,6 +78,7 @@ export function Landing({
   onOpenRun,
   onOpenQuestion,
   onOpenSystem,
+  live = true,
 }: {
   view: UiViewState | undefined;
   ordered: readonly Question[];
@@ -84,6 +88,8 @@ export function Landing({
   onOpenRun: (dispatchId: string) => void;
   onOpenQuestion: (id: string) => void;
   onOpenSystem: () => void;
+  /** False while the page is paused: reports are not re-read. */
+  live?: boolean;
 }): ReactNode {
   const { blocks, limits, fromView } = landingBlocks(view);
   const drawn: ReactNode[] = [];
@@ -138,6 +144,15 @@ export function Landing({
           </button>
         </section>,
       );
+    } else if (block === "reports") {
+      const pointers = fromView && view ? (view.reports ?? []) : [];
+      if (pointers.length === 0) continue;
+      drawn.push(
+        <section key={block} className="sf-landing-block" data-block={block} aria-labelledby="sf-landing-reports">
+          <h2 id="sf-landing-reports" className="sf-landing-head">The system</h2>
+          <Reports pointers={pointers} enabled={live} />
+        </section>,
+      );
     } else if (block === "latest_run") {
       if (!latest) continue;
       drawn.push(
@@ -149,7 +164,7 @@ export function Landing({
   }
   return (
     <div className="sf-landing" data-view-id={fromView && view ? view.id : `landing@0`} data-view-revision={fromView && view ? view.revision : 0} data-view-default={fromView ? undefined : "true"}>
-      {drawn.length > 0 ? drawn : <p className="sf-main-empty">Select a run or a question</p>}
+      {drawn.length > 0 ? drawn : <p className="sf-main-empty">Nothing to show yet</p>}
     </div>
   );
 }
