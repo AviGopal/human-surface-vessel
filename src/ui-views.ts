@@ -66,7 +66,9 @@ const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 
 /**
  * What a region draws with no view written, in the order the person needs it: what waits on
- * them, then what changed, then how the system is doing. Every pointer only reads, so
+ * them, then what changed. How the system is doing has no answer a bare pointer can read yet
+ * (the walk's posterior needs a list of cells, which a view argument cannot carry), so it is
+ * not named until something serves it. Every pointer only reads, so
  * drawing the screen never acts on the system; a view the system writes replaces the list.
  */
 export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }> = {
@@ -77,7 +79,6 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
       { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, judge: "outcome", title: "What the walk answered" },
       { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, title: "What failed" },
       { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, title: "Verdicts and outcomes" },
-      { pointer: { type: "posterior" }, form: "fields", title: "What the walk believes" },
     ],
   },
 };
