@@ -93,6 +93,8 @@ describe("a row reads as words, its record folded", () => {
     const failure = row(el, "failure");
     expect(failure.querySelector(".sf-row-words")!.textContent).toBe("failure");
     expect(failure.querySelector(".sf-row-time")).not.toBeNull();
+    // The time names its zone, so a person can line it up with times written in UTC elsewhere.
+    expect(failure.querySelector(".sf-row-time")!.textContent).toMatch(/(\d:\d\d|[AP]M) (UTC|GMT([+-]\d{1,2}(:\d\d)?)?|[A-Z]{3,5})$/);
     expect(inView(failure)).not.toContain("cannot run");
   });
 

@@ -151,10 +151,13 @@ export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show" 
 }
 
 /** A row's time as the person's clock reads it; the producer's text when it is not a time. */
+/** A row time in the reader's own zone, named, so it lines up with times written elsewhere in UTC. */
+const WHEN: Intl.DateTimeFormatOptions = { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" };
+
 function when(t: unknown): string | null {
   if (typeof t !== "string") return null;
   const d = new Date(t);
-  return Number.isNaN(d.getTime()) ? t : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return Number.isNaN(d.getTime()) ? t : d.toLocaleString(undefined, WHEN);
 }
 
 /** One declared field as words: text as written; any other value with its field's name. */
