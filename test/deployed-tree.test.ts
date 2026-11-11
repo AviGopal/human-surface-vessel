@@ -12,6 +12,7 @@ import { Glob } from "bun";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { DIGEST_FILE, sourceDigest } from "../ui/source-digest.ts";
 
 const root = new URL("..", import.meta.url).pathname;
 
@@ -35,6 +36,14 @@ const ui = join(root, "ui");
 const viteBin = join(ui, "node_modules/.bin/vite");
 
 describe("the page's bundle", () => {
+  // Needs no toolchain, so it runs at a node's install gate too: the build wrote this digest of
+  // its inputs, and a change to any input since then reads as a bundle not shipped.
+  test("must-fail: the tracked ui/dist was built from the tracked ui sources", () => {
+    const digestPath = join(ui, "dist", DIGEST_FILE);
+    expect(existsSync(digestPath)).toBe(true);
+    expect(readFileSync(digestPath, "utf8").trim()).toBe(sourceDigest(ui));
+  });
+
   // Skips only where the ui toolchain is not installed; a checkout that can build must compare.
   test.skipIf(!existsSync(viteBin))("must-fail: the tracked ui/dist is the build of ui/src as committed", () => {
     const out = mkdtempSync(join(tmpdir(), "human-surface-dist-"));

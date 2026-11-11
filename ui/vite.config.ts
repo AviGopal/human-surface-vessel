@@ -2,6 +2,10 @@ import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type { Plugin } from "vite";
+import { DIGEST_FILE, sourceDigest } from "./source-digest";
 
 /**
  * The design tokens are vendored at `src/design-tokens/` so this repo builds,
@@ -16,8 +20,23 @@ const DESIGN_TOKENS = fileURLToPath(
   new URL("./src/design-tokens/index.ts", import.meta.url),
 );
 
+/** Writes the digest of the build's inputs beside the bundle (ui/source-digest.ts). */
+function sourceDigestFile(): Plugin {
+  let outDir = "";
+  return {
+    name: "source-digest",
+    apply: "build",
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      writeFileSync(join(outDir, DIGEST_FILE), `${sourceDigest(fileURLToPath(new URL(".", import.meta.url)))}\n`);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), sourceDigestFile()],
   resolve: {
     // Source wins over legacy checked-in JS siblings.
     extensions: [".tsx", ".ts", ".mjs", ".js", ".jsx", ".json"],
