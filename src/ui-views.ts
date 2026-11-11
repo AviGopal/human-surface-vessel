@@ -21,8 +21,13 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/** The regions a view can be written for. */
-export const VIEW_REGIONS = ["landing"] as const;
+/**
+ * The regions a view can be written for. `ask` is what follows a person's ask under the box:
+ * there a pointer argument written as ASK_BINDING stands for the id of the ask just written,
+ * the one value the surface knows and a view's writer cannot.
+ */
+export const VIEW_REGIONS = ["landing", "ask"] as const;
+export const ASK_BINDING = "$ask";
 
 export type ViewRegion = (typeof VIEW_REGIONS)[number];
 
@@ -83,6 +88,9 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
       { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, title: "Verdicts and outcomes" },
     ],
   },
+  ask: {
+    entries: [{ pointer: { type: "record_read", refs_to: ASK_BINDING }, form: "rows", title: "What cites your ask", empty: "No row cites your ask yet." }],
+  },
 };
 
 /** The contract a region's views are checked against, and what discovery is told about it. */
@@ -104,7 +112,8 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
-    `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows`;
+    `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows. ` +
+    `region ask is drawn under the box after a person's ask; there a pointer argument "${ASK_BINDING}" is replaced by the id of that ask's row`;
   const defaults = contract.regions
     .map((r) => `default ${r}: ${(contract.defaults[r]?.entries ?? []).map((e) => e.title ?? e.pointer.type).join(", ")}`)
     .join(". ");

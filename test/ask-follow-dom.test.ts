@@ -1,22 +1,26 @@
 /**
- * After an ask is written, the box follows it: the rows that cite it, read from records by the
- * ask's own id, drawn as any view entry is. Before anything cites it, the page says so in plain
- * words, so a quiet page is never read as work under way.
+ * After an ask is written, the box draws the `ask` region's view under it, with the ask's own
+ * row id bound where the view says "$ask". By default that is the rows citing the ask, and
+ * before anything cites it the page says so in plain words. A view written for the region
+ * replaces what follows an ask; the surface supplies only the id.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
+import { DEFAULT_VIEWS } from "../src/ui-views.ts";
 
 const ASK_ID = "row-ask-2434";
 let citing: Record<string, unknown>[] = [];
+let askView: { entries: readonly unknown[] } = DEFAULT_VIEWS.ask;
 const reads: Record<string, unknown>[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
   const person = { userId: "user:person-a", name: "Person A", expiresAt: Date.now() + 900_000 };
   if (url.endsWith("/api/session")) return Response.json({ keySignIn: true, signedIn: true, person });
+  if (url.includes("/api/ui-view?region=ask")) return Response.json({ region: "ask", revision: 1, id: "ask@1", ...askView });
   if (url.endsWith("/api/surface-intent")) return new Response("{}", { status: 422 });
   if (url.endsWith("/api/discovery/resolve")) {
     const pointer = body["pointer"] as Record<string, unknown>;
@@ -44,6 +48,7 @@ afterAll(async () => {
 });
 beforeEach(() => {
   citing = [];
+  askView = DEFAULT_VIEWS.ask;
   reads.length = 0;
 });
 
@@ -76,13 +81,22 @@ describe("the box follows an ask", () => {
     const { el } = await askHello();
     expect(el.textContent).toContain("Asked (record #2434).");
     expect(reads).toContainEqual({ type: "record_read", refs_to: ASK_ID });
-    expect(el.querySelector("[aria-label='What cites #2434']")?.textContent).toContain("No row cites #2434 yet.");
+    expect(el.querySelector("[aria-label='What cites your ask']")?.textContent).toContain("No row cites your ask yet.");
+  });
+
+  test("must-fail: a view written for the ask region replaces what follows an ask", async () => {
+    askView = { entries: [{ pointer: { type: "record_read", shape: "answer", refs_to: "$ask" }, form: "rows", title: "Answers to it", empty: "Not answered yet." }] };
+    const { el } = await askHello();
+    expect(reads).toContainEqual({ type: "record_read", shape: "answer", refs_to: ASK_ID });
+    expect(reads).not.toContainEqual({ type: "record_read", refs_to: ASK_ID });
+    expect(el.querySelector("[aria-label='Answers to it']")?.textContent).toContain("Not answered yet.");
+    expect(el.textContent).not.toContain("What cites your ask");
   });
 
   test("must-fail: a row citing the ask is drawn under it", async () => {
     citing = [{ shape: "answer", id: "row-answer-1", text: "It is 08:10 in Lisbon.", input_refs: [ASK_ID] }];
     const { el } = await askHello();
-    const follow = el.querySelector("[aria-label='What cites #2434']")!;
+    const follow = el.querySelector("[aria-label='What cites your ask']")!;
     expect(follow.textContent).toContain("It is 08:10 in Lisbon.");
     expect(follow.textContent).not.toContain("No row cites");
   });

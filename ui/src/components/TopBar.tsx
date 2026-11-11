@@ -10,7 +10,8 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { trySurfaceIntent, writeAsk, writeComplaint, type RowWrite } from "../api/client";
+import { bindAsk, trySurfaceIntent, writeAsk, writeComplaint, type RowWrite } from "../api/client";
+import { useUiView } from "../api/queries";
 import { sendContribution } from "../api/participation";
 import { onScreenReport, useOnScreen } from "../state/onScreen";
 import type { DispatchOutcome } from "../api/types";
@@ -112,7 +113,7 @@ export function TopBar({
   const onScreen = useOnScreen();
   const [echo, setEcho] = useState<string | null>(null);
   // The ask just written, followed under its echo by the rows that cite it, while that echo stands.
-  const [asked, setAsked] = useState<{ id: string; seq: number | null; echo: string } | null>(null);
+  const [asked, setAsked] = useState<{ id: string; echo: string } | null>(null);
   const [reshaped, setReshaped] = useState<DispatchOutcome | null>(null);
   const answer = useMutation({
     retry: false,
@@ -272,7 +273,7 @@ export function TopBar({
         if (got.ok) {
           const said = `Asked${got.seq !== null ? ` (record #${got.seq})` : ""}. What the system does with it appears below.`;
           setEcho(said);
-          setAsked(got.id ? { id: got.id, seq: got.seq, echo: said } : null);
+          setAsked(got.id ? { id: got.id, echo: said } : null);
           cleared();
           return;
         }
@@ -412,18 +413,12 @@ export function TopBar({
 }
 
 /**
- * What the system has done with an ask: the rows that cite it, read from records as any
- * entry is. Before anything cites it, the read says so in plain words, so a silent page is
- * never mistaken for work under way.
+ * What follows an ask: the `ask` region's view, drawn as any region is, with the ask's own
+ * row id bound where the view names it. What is read and how it is drawn is the view's.
  */
-function AskFollow({ asked, enabled, intervalMs }: { asked: { id: string; seq: number | null }; enabled: boolean; intervalMs: number }): ReactNode {
-  const name = asked.seq !== null ? `#${asked.seq}` : "your ask";
-  return (
-    <Entries
-      entries={[{ pointer: { type: "record_read", refs_to: asked.id }, form: "rows", title: `What cites ${name}`, empty: `No row cites ${name} yet.` }]}
-      enabled={enabled}
-      intervalMs={intervalMs}
-      onOpenQuestion={() => undefined}
-    />
-  );
+function AskFollow({ asked, enabled, intervalMs }: { asked: { id: string }; enabled: boolean; intervalMs: number }): ReactNode {
+  const view = useUiView("ask", { enabled, intervalMs });
+  if (!view.data) return null;
+  const entries = view.data.entries.map((e) => ({ ...e, pointer: bindAsk(e.pointer, asked.id) }));
+  return <Entries entries={entries} enabled={enabled} intervalMs={intervalMs} onOpenQuestion={() => undefined} />;
 }

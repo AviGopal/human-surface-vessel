@@ -176,6 +176,14 @@ export interface UiViewState {
 }
 
 export type ReportPointer = Readonly<Record<string, string | number | boolean>> & { readonly type: string };
+/** In the `ask` region, a pointer argument with this value stands for the ask's row id (src/ui-views.ts ASK_BINDING). */
+export const ASK_BINDING = "$ask";
+
+/** A pointer with each ASK_BINDING argument replaced by the ask's row id. */
+export function bindAsk(pointer: ReportPointer, askId: string): ReportPointer {
+  return Object.fromEntries(Object.entries(pointer).map(([k, v]) => [k, v === ASK_BINDING ? askId : v])) as ReportPointer;
+}
+
 /** One thing a view draws (src/ui-views.ts ViewEntry): a pointer and its form. Only the pointer is sent. */
 export type ViewEntry = {
   readonly pointer: ReportPointer;

@@ -163,6 +163,14 @@ describe("uiView_write", () => {
     expect(w.json.body.view.entries).toEqual([entry, load]);
   });
 
+  test("must-fail: the ask region is written and read back like any region; its default reads what cites the ask", async () => {
+    expect((await read("ask")).json).toMatchObject({ revision: 0, entries: [{ pointer: { type: "record_read", refs_to: "$ask" }, empty: "No row cites your ask yet." }] });
+    const entry = { pointer: { type: "record_read", shape: "answer", refs_to: "$ask" }, form: "rows", title: "Answers to it", empty: "Not answered yet." };
+    expect((await write({ region: "ask", entries: [entry] })).status).toBe(200);
+    expect((await read("ask")).json).toMatchObject({ revision: 1, entries: [entry] });
+    expect((await read("landing")).json.revision).toBe(0);
+  });
+
   test("must-fail: the default view's pointers only read: none is a write, a tick or a scan", () => {
     for (const e of currentView("landing").entries) expect(e.pointer.type).not.toMatch(/_write$|tick|scan|observer/);
   });
