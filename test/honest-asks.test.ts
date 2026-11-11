@@ -133,7 +133,7 @@ describe("the shared classification", () => {
     expect(classifyQuestion(q("needs-human-x", "gap_needs_human", null))).toBe("ask");
     // A verification ask about a closed gap reads as settled, not as "no reader".
     expect(classifyQuestion(q("pending-verify-x", "gap_pending_verification", "closed"))).toBe("settled");
-    expect(FOLDED.map((f) => f.label)).toEqual(["For your information", "Its gap is no longer open", "No reader listed for your answer", "Empty or unfilled: nothing to answer"]);
+    expect(FOLDED.map((f) => f.label)).toEqual(["For your information", "About something already closed", "Nothing would read your answer", "Left blank or unfinished: nothing to answer"]);
   });
 
   test("a panel's gap is read off the prefix its writer uses", () => {

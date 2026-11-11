@@ -86,9 +86,9 @@ export function classifyQuestion(question: ClassifiableQuestion): QuestionClass 
 export const FOLDED: readonly { cls: Exclude<QuestionClass, "ask">; label: string }[] = [
   // Each label says no more than its predicate in classifyQuestion tests.
   { cls: "notice", label: "For your information" },
-  { cls: "settled", label: "Its gap is no longer open" },
-  { cls: "unread", label: "No reader listed for your answer" },
-  { cls: "malformed", label: "Empty or unfilled: nothing to answer" },
+  { cls: "settled", label: "About something already closed" },
+  { cls: "unread", label: "Nothing would read your answer" },
+  { cls: "malformed", label: "Left blank or unfinished: nothing to answer" },
 ];
 
 /** The part of a gap question's body before its truncated `Summary:` clause. */

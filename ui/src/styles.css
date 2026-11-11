@@ -2136,7 +2136,7 @@ body { overflow: hidden; }
 /* A row with a thread under it carries its time and details at the end of its words' line; what opens, and the thread, take the full width. */
 .sf-row-parent { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sf-space-3); align-items: baseline; }
 .sf-row-parent > .sf-row-meta { grid-column: 2; grid-row: 1; justify-content: flex-end; }
-.sf-row-parent > .sf-row-meta:has(> .sf-row-details[open]) { grid-column: 1 / -1; grid-row: auto; }
+.sf-row-parent > .sf-row-meta:has(> .sf-row-details[open]) { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
 .sf-row-parent > .sf-row-words, .sf-row-parent > .sf-thread { grid-column: 1 / -1; }
 .sf-row-parent > .sf-row-words:first-child { grid-column: 1; }
 .sf-earlier > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
@@ -2164,4 +2164,4 @@ body { overflow: hidden; }
 .sf-strip-bar { display: block; width: 4px; background: var(--sf-ink-3); border-radius: 1px 1px 0 0; }
 /* One width for every caption, so the strips of every folded read line up whatever their numbers. */
 .sf-strip-caption { font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); white-space: nowrap; min-width: 13em; font-variant-numeric: tabular-nums; }
-@media (max-width: 480px) { .sf-strip-bar { width: 3px; } }
+@media (max-width: 480px) { .sf-strip-bar { width: 3px; } .sf-strip-wrap { margin-left: 0; } }

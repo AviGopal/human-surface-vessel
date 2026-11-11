@@ -69,7 +69,7 @@ beforeEach(() => {
 describe("the rail in plain words, its split drawn", () => {
   test("must-fail: the heads are plain words with their counts", async () => {
     const el = await list();
-    expect(heads(el).map((h) => h.textContent)).toEqual(["Needs your decision1", "For your information73", "No reader listed for your answer191", "Empty or unfilled: nothing to answer17"]);
+    expect(heads(el).map((h) => h.textContent)).toEqual(["Needs your decision1", "For your information73", "Nothing would read your answer191", "Left blank or unfinished: nothing to answer17"]);
     expect(el.textContent).not.toMatch(/No reader\d|Malformed|Notices|lower-ranked/);
   });
 
@@ -83,7 +83,7 @@ describe("the rail in plain words, its split drawn", () => {
     expect(parts(el).reduce((n, p) => n + Number(p.style.flexGrow), 0)).toBe(counts.reduce((a, b) => a + b, 0));
     const bar = el.querySelector(".sf-qsplit")!;
     expect(bar.getAttribute("role")).toBe("img");
-    expect(bar.getAttribute("aria-label")).toBe("Questions: 1 needs your decision, 73 for your information, 191 no reader listed for your answer, 17 empty or unfilled: nothing to answer.");
+    expect(bar.getAttribute("aria-label")).toBe("Questions: 1 needs your decision, 73 for your information, 191 nothing would read your answer, 17 left blank or unfinished: nothing to answer.");
   });
 
   test("must-fail: a group of 1 beside 191 still has its segment", async () => {

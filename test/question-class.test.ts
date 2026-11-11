@@ -62,8 +62,8 @@ describe("the rail", () => {
     ]);
     expect(groups.filter((g) => g.folded).map((g) => [g.label, g.questions.length])).toEqual([
       ["For your information", 1],
-      ["No reader listed for your answer", 2],
-      ["Empty or unfilled: nothing to answer", 3],
+      ["Nothing would read your answer", 2],
+      ["Left blank or unfinished: nothing to answer", 3],
     ]);
   });
 
@@ -76,8 +76,8 @@ describe("the rail", () => {
     const settled = { ...escalation, id: "needs-human-closed-gap", gapStatus: "closed" };
     expect(waitingCount([...all, settled])).toBe(3);
     const groups = groupQuestions([...all, settled]);
-    expect(groups.find((g) => g.label === "Its gap is no longer open")?.questions.map((x) => x.id)).toEqual(["needs-human-closed-gap"]);
-    expect(groups.find((g) => g.label === "Its gap is no longer open")?.folded).toBe(true);
+    expect(groups.find((g) => g.label === "About something already closed")?.questions.map((x) => x.id)).toEqual(["needs-human-closed-gap"]);
+    expect(groups.find((g) => g.label === "About something already closed")?.folded).toBe(true);
   });
 
   test("a gap first read as open is not a change to offer; a gap that closed is", () => {
