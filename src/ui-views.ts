@@ -105,16 +105,21 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
-        show: 10,
+        show: 5,
+        newest: true,
         title: "What people asked",
         words: ["what"],
         // Under each ask, its answers: a read records filters by shape, not a choice the page makes.
         // Dropping `shape` draws the whole thread of rows citing the ask.
-        thread: { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 3, words: ["text"], judge: "outcome", empty: "Not answered yet." },
+        thread: { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 3, newest: true, words: ["text"], judge: "outcome", empty: "Not answered yet." },
       },
-      { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, judge: "outcome", title: "What the walk answered", words: ["text"] },
-      { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, title: "What failed" },
-      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, title: "Verdicts and outcomes", words: ["r"] },
+      // One line of health, which a composer answers (Phase 5). Nothing writes `health` yet, and
+      // the line says so rather than assembling one from the raw reads.
+      { pointer: { type: "record_read", shape: "health" }, form: "rows", show: 1, title: "How the system is doing", empty: "Nothing reports health yet." },
+      // The raw reads stay, folded and counted under the line, until the composer answers.
+      { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, newest: true, judge: "outcome", title: "What the walk answered", words: ["text"], folded: true },
+      { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, newest: true, title: "What failed", folded: true },
+      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "Verdicts and outcomes", words: ["r"], folded: true },
     ],
   },
   ask: {

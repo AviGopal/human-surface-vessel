@@ -307,6 +307,7 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
         <summary className="sf-report-title">
           {title}
           {count !== null ? <span className="sf-report-count" data-count={count}>{count}</span> : null}
+          {a && !a.ok ? <span className="sf-report-count" data-no-answer="">no answer</span> : null}
         </summary>
         {inner}
       </details>

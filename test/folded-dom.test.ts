@@ -83,10 +83,10 @@ describe("a folded entry is closed and counted", () => {
     expect(inView(el)).toContain("the last 3 of 12");
   });
 
-  test("a folded read with no answer says so under its title, with no count", async () => {
+  test("must-fail: a folded read with no answer says so on its title while closed, with no count", async () => {
     const el = await mount([{ pointer: { type: "nothing_serves_this" }, form: "rows", title: "Elsewhere", folded: true }]);
     const fold = el.querySelector("details.sf-report-folded")!;
-    expect(fold.querySelector(".sf-report-count")).toBeNull();
-    expect(fold.querySelector("summary")!.textContent).toBe("Elsewhere");
+    expect(fold.querySelector("[data-count]")).toBeNull();
+    expect(fold.querySelector("summary")!.textContent).toBe("Elsewhereno answer");
   });
 });

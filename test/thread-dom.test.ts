@@ -85,12 +85,12 @@ describe("a person's ask is a thread", () => {
       { type: "record_read", refs_to: ASK_B.id, shape: "answer" },
     ]));
     expect(sent.some((p) => Object.values(p).includes("$row"))).toBe(false);
-    expect([...threadOf(el, ASK_A.id).querySelectorAll(".sf-row-words")].map((p) => p.textContent)).toEqual(["Answer 2.", "Answer 3.", "Answer 4."]);
+    expect([...threadOf(el, ASK_A.id).querySelectorAll(".sf-row-words")].map((p) => p.textContent)).toEqual(["Answer 4.", "Answer 3.", "Answer 2."]);
   });
 
   test("must-fail: the thread's own show bounds it and the cut is a count; an ask with none says so", async () => {
     const el = await mount([asked]);
-    expect(threadOf(el, ASK_A.id).textContent).toContain("the last 3 of 4");
+    expect(threadOf(el, ASK_A.id).textContent).toContain("the newest 3 of 4");
     expect(threadOf(el, ASK_B.id).textContent).toContain("Not answered yet.");
   });
 

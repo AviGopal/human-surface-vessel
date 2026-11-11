@@ -1771,13 +1771,14 @@ body { overflow: hidden; }
 @media (max-width: 760px) {
   .sf-app {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 38%) minmax(0, 1fr);
+    /* The rail is a band its content sizes, capped, so the main pane holds the rest. */
+    grid-template-rows: auto auto minmax(0, 1fr);
     grid-template-areas:
       "top"
       "rail"
       "main";
   }
-  .sf-rail { border-right: none; border-bottom: 1px solid var(--sf-rule); }
+  .sf-rail { border-right: none; border-bottom: 1px solid var(--sf-rule); max-height: 30dvh; }
   .sf-main > article { padding: var(--sf-space-4); }
   .sf-landing-block { padding: var(--sf-space-4) var(--sf-space-4) 0; }
   .sf-issues { width: 100%; }
@@ -2074,6 +2075,8 @@ body { overflow: hidden; }
 .sf-brief-evidence-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .sf-brief-source { opacity: 0.7; font-size: var(--sf-text-xs); }
 .sf-brief-options { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0; }
+/* The landing reads as one column, in the order its view names. */
+.sf-landing .sf-reports { grid-template-columns: minmax(0, 1fr); max-width: 48rem; padding: 0 var(--sf-space-4) var(--sf-space-6); }
 .sf-reports { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sf-space-3); }
 .sf-report { display: flex; flex-direction: column; gap: var(--sf-space-2); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); min-width: 0; }
 .sf-report-title { margin: 0; font-size: var(--sf-text-sm); font-weight: 600; color: var(--sf-ink); }
