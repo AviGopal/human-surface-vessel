@@ -71,9 +71,20 @@ describe("counts and empty reasons come from the read", () => {
   });
 
   test("must-fail: an entry that drew no rows gives the producer's reason, not a stock phrase", async () => {
-    const waiting = DEFAULT_VIEWS.landing.entries[0]!;
-    const el = await draw(React.createElement(Entries, { entries: [waiting], enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }));
+    const { pointer, form, field, title } = DEFAULT_VIEWS.landing.entries[0]!;
+    const el = await draw(React.createElement(Entries, { entries: [{ pointer, form, field, title }], enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }));
     expect(el.textContent).toContain(EMPTY);
     expect(el.textContent).not.toContain("answered with no rows");
+  });
+
+  test("must-fail: a view's own empty words come first in plain words, the producer's reason folded under why", async () => {
+    const waiting = DEFAULT_VIEWS.landing.entries[0]!;
+    const el = await draw(React.createElement(Entries, { entries: [waiting], enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }));
+    const note = el.querySelector("[data-report] > .sf-report-note")!;
+    expect(note.textContent).toBe("Nothing is waiting on you.");
+    const why = el.querySelector("details[data-empty-reason]")!;
+    expect(why.hasAttribute("open")).toBe(false);
+    expect(why.querySelector("summary")!.textContent).toBe("why");
+    expect(why.textContent).toContain(EMPTY);
   });
 });

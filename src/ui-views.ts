@@ -101,7 +101,7 @@ const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_:.-]{0,79}$/;
 export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }> = {
   landing: {
     entries: [
-      { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you" },
+      { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you", empty: "Nothing is waiting on you." },
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
@@ -146,7 +146,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, newest?: true, folded?: true}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
-    `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows; ` +
+    `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; ` +
     `words names the fields drawn as a row's words when its shape's shape_description row (records, written by the owner) names none in its own words field; ` +
     `a row with neither is drawn as its shape and time, every other field folded under details; ` +
     `newest: true (rows only) draws the rows show kept newest first, the reverse of the producer's order, which also decides which rows are kept; ` +

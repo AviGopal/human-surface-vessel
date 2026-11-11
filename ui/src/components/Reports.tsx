@@ -283,12 +283,32 @@ function emptyReasonOf(answer: unknown): string | null {
   return typeof why === "string" && why.trim() ? why.trim().slice(0, 300) : null;
 }
 
+/**
+ * An entry with no rows: the view's own words first, when it declares them, with the producer's
+ * reason folded under "why"; else the producer's reason; else a plain note. The reason is never
+ * dropped, only placed behind the plain sentence.
+ */
+function Empty({ said, why }: { said: string | undefined; why: string | null }): ReactNode {
+  if (said === undefined) return <p className="sf-muted sf-report-note">{why ?? "answered with no rows"}</p>;
+  return (
+    <>
+      <p className="sf-muted sf-report-note">{said}</p>
+      {why !== null && why !== said ? (
+        <details className="sf-row-details" data-empty-reason="">
+          <summary>why</summary>
+          <p className="sf-muted sf-report-note">{why}</p>
+        </details>
+      ) : null}
+    </>
+  );
+}
+
 /** The answer drawn in the entry's form, or what was found instead of rows. */
 function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; reading: Reading }): ReactNode {
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
-  if (got.rows.length === 0) return <p className="sf-muted sf-report-note">{emptyReasonOf(answer) ?? entry.empty ?? "answered with no rows"}</p>;
+  if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} />;
   return (
     <>
       {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the {entry.newest ? "newest" : "last"} {got.rows.length} of {got.total}</p> : null}
