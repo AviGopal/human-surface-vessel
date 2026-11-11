@@ -11,7 +11,8 @@ import { impulsesRouter } from "../src/routes/impulses.ts";
 import { upsertPanel } from "../src/store.ts";
 import { buildAsksView } from "../src/ui-view.ts";
 
-upsertPanel({ id: "needs-human-g1", title: "Gap needs a human decision", body: "Gap g1 (x) failed. Summary: s", kind: "uiv_escalation", importance: "high" });
+upsertPanel({ id: "needs-human-g1", title: "Gap needs a human decision", body: "Gap g1 (x) failed. Summary: s", kind: "uiv_escalation", importance: "high", reader: "uiv_reader" });
+upsertPanel({ id: "needs-human-g4", title: "Gap needs a human decision", body: "Gap g4 (x) failed. Summary: s", kind: "uiv_gone", importance: "high", reader: "uiv_gone_reader" });
 upsertPanel({ id: "pending-verify-g2", title: "Did it fix it?", body: "Gap g2 (x) landed. Summary: s", kind: "uiv_verify", importance: "medium" });
 upsertPanel({ id: "pending-verify-g3", title: "Did it fix it?", body: "Gap g3 (x) landed. Summary: s", kind: "uiv_verify", importance: "medium" });
 upsertPanel({ id: "uiv-panel-empty", title: "Remove 'continue' statement", body: "", kind: "uiv_change", importance: "high", asks: [] });
@@ -19,12 +20,13 @@ upsertPanel({ id: "{{goal.id}}", title: "{{goal.title}}", body: "How are you?", 
 
 describe("buildAsksView", () => {
   // Every malformed write, not the newest five: other test files share this store.
-  const view = buildAsksView(Number.POSITIVE_INFINITY);
+  const view = buildAsksView(new Set(["uiv_reader"]), Number.POSITIVE_INFINITY);
   const kind = (k: string) => view.by_kind.find((r) => r.kind === k);
 
-  test("counts each kind as the rail presents it, with its answer reader", () => {
-    expect(kind("uiv_verify")).toMatchObject({ count: 2, open: 2, presented_as: { unread: 2 }, answer_readers: { pending_verification: 2 } });
-    expect(kind("uiv_escalation")).toMatchObject({ count: 1, presented_as: { ask: 1 }, answer_readers: { escalation: 1 } });
+  test("counts each kind as the rail presents it, with the reader it declared", () => {
+    expect(kind("uiv_verify")).toMatchObject({ count: 2, open: 2, presented_as: { unread: 2 }, answer_readers: { none: 2 } });
+    expect(kind("uiv_escalation")).toMatchObject({ count: 1, presented_as: { ask: 1 }, answer_readers: { uiv_reader: 1 } });
+    expect(kind("uiv_gone")).toMatchObject({ count: 1, presented_as: { unread: 1 }, answer_readers: { "uiv_gone_reader (not listed)": 1 } });
   });
 
   test("must-fail: malformed writes are named with their reason and are not open asks", () => {

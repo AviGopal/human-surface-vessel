@@ -23,7 +23,7 @@ import { emptyRefusals } from "./write-refusals.ts";
 import { aggregateByKind, readExposureCorpus } from "./importance-learn.ts";
 import { isSolicitation } from "./solicitation.ts";
 import { listPanels, questionView } from "./store.ts";
-import { answerReaderFor, classifyQuestion, malformedReason, type ClassifiableQuestion, type QuestionClass } from "./question-class.ts";
+import { classifyQuestion, malformedReason, type ClassifiableQuestion, type QuestionClass } from "./question-class.ts";
 
 /** One kind of question, as a person meets it here, and what people have done with it. */
 export interface AskKindView {
@@ -33,7 +33,7 @@ export interface AskKindView {
   readonly open: number;
   /** How the rail presents them (ui/src/lib/questionClass): `ask` leads; the rest are folded. */
   readonly presented_as: Partial<Record<QuestionClass, number>>;
-  /** Which reader takes the answers (ui/src/lib/disposition), by panel count. `unknown`: none this surface knows of. */
+  /** The reader each question declared, by panel count: `none` when it declared none, marked when discovery did not list it. */
   readonly answer_readers: Record<string, number>;
   /** From the exposure corpus (importance-learn aggregateByKind): distinct panels. Null when no outcome is recorded. */
   readonly outcomes: { answered: number; declined: number; ignored: number; complained: number } | null;
@@ -52,8 +52,11 @@ export interface AsksView {
  * What the questions rail holds right now and how people have responded, per
  * kind: the part of this report a question WRITER can read before it writes.
  */
-export function buildAsksView(malformedLimit = 5): AsksView {
-  const panels = listPanels().filter((pn) => isSolicitation(pn)).map(questionView) as unknown as (ClassifiableQuestion & { kind?: string; answered: boolean; declined: boolean; createdAt: number })[];
+export function buildAsksView(listed: ReadonlySet<string> | null, malformedLimit = 5): AsksView {
+  const panels = listPanels()
+    .filter((pn) => isSolicitation(pn))
+    .map(questionView)
+    .map((q) => ({ ...q, readerListed: q.reader !== undefined && listed !== null && listed.has(q.reader) })) as unknown as (ClassifiableQuestion & { kind?: string; answered: boolean; declined: boolean; createdAt: number })[];
   const evidence = new Map(aggregateByKind(readExposureCorpus()).evidence.map((e) => [e.kind, e] as const));
   const byKind = new Map<string, { count: number; open: number; presented_as: Partial<Record<QuestionClass, number>>; answer_readers: Record<string, number> }>();
   let openAsks = 0;
@@ -66,7 +69,7 @@ export function buildAsksView(malformedLimit = 5): AsksView {
     row.count += 1;
     if (open) row.open += 1;
     row.presented_as[cls] = (row.presented_as[cls] ?? 0) + 1;
-    const reader = answerReaderFor(q.id);
+    const reader = q.reader === undefined ? "none" : q.readerListed ? q.reader : `${q.reader} (not listed)`;
     row.answer_readers[reader] = (row.answer_readers[reader] ?? 0) + 1;
     byKind.set(kind, row);
     if (open && cls === "ask") openAsks += 1;
@@ -174,7 +177,7 @@ function buildViews(): Record<string, RegionView> {
  * right now — not the values it shipped with. An effect-reading validator that
  * reads compile-time defaults is reading a stale surface.
  */
-export function buildUiView(overrides: Record<string, string> = {}): UiViewReport {
+export function buildUiView(overrides: Record<string, string>, listed: ReadonlySet<string> | null): UiViewReport {
   const effective_tokens: Record<string, string> = {};
   for (const [k, v] of Object.entries(FONT_SCALE_PX)) {
     effective_tokens[k] = `${v}px`;
@@ -207,7 +210,7 @@ export function buildUiView(overrides: Record<string, string> = {}): UiViewRepor
     },
     surface: "human-surface-vessel",
     content_forms: buildFormCensus(),
-    asks: buildAsksView(),
+    asks: buildAsksView(listed),
     views: buildViews(),
     refused_empty_writes: emptyRefusals(),
   };

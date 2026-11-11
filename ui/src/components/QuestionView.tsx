@@ -14,8 +14,6 @@ import { contributionContent, questionForAsk } from "../lib/interaction";
 import { ChoiceInput, InteractionFooter, TextInput, stateOf } from "./Interaction";
 import { fromPanel, fromResponse, fromText } from "../lib/content";
 import { ComplaintChips } from "./ComplainButton";
-import { answerReaderFor, gapIdForPanel } from "../lib/disposition";
-import { EscalationForm, EscalationOutcome, LocalizationForm, UnreadNote, VerificationForm } from "./ResponseForms";
 import { Rendered } from "./Rendered";
 import { useGap } from "../api/queries";
 import { bodyLead } from "../lib/questionClass";
@@ -110,19 +108,6 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
   }
 
   const state = stateOf(mutation);
-  const reader = answerReaderFor(question.id);
-  const escalatedGap = gapIdForPanel(question.id);
-  // The answer the reader will act on: the newest non-decline, whether just sent or from an earlier visit.
-  const latestAnswer =
-    [...incoming.responses, ...(mutation.data ? [mutation.data] : [])]
-      .filter((r) => r.kind === "answer")
-      .sort((a, b) => b.receivedAt - a.receivedAt)[0] ?? null;
-  const formProps = {
-    send: (kind: "answer" | "dismiss", value: unknown) => send(kind, null, value),
-    state: lastAsk === null ? state : ("idle" as const),
-    error: lastAsk === null && mutation.isError ? `Not delivered: ${mutation.error.message}. Retry sends the same response.` : null,
-    revised,
-  };
 
   return (
     <article className="sf-question" aria-labelledby={`${id}-title`}>
@@ -211,16 +196,7 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
         </section>
       ) : null}
 
-      {reader === "escalation" && escalatedGap ? (
-        <>
-          <EscalationForm {...formProps} />
-          <EscalationOutcome gapId={escalatedGap} response={latestAnswer} />
-        </>
-      ) : reader === "pending_verification" ? (
-        <VerificationForm {...formProps} />
-      ) : reader === "localization" ? (
-        <LocalizationForm {...formProps} />
-      ) : question.run ? (
+      {question.run ? (
         // A walk step's question (human_input) is answered in the one box above; there is no
         // second input here (16f-2).
         question.answered || question.declined ? null : <p className="sf-view-section sf-note sf-muted">Answer in the box above, or type “not now” or “need more”.</p>
@@ -264,7 +240,6 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
             }
           />
         </form>
-          {reader === "docs_decision" ? <UnreadNote /> : null}
         </>
       )}
 

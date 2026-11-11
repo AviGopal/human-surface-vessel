@@ -48,6 +48,11 @@ export interface Panel {
   /** Set when a run asked this question (`human_input`); see routes/impulses.ts. */
   run?: RunLink;
   /**
+   * The shape that takes the answer, as the writer declared it. A question offered as waiting
+   * on a person needs one that discovery lists (src/question-class.ts). Kept on update.
+   */
+  reader?: string;
+  /**
    * The creator's provenance stamp, from the caller the write route admitted
    * (inbound-auth.ts): `origin` is the key's class, `producer` its validated label.
    * Never the pointer's claim. Top level, not under `body`, because a panel's body
@@ -361,7 +366,7 @@ export function upsertPanel(
     createdAt: existing?.createdAt ?? p.createdAt ?? now,
     updatedAt: now,
   };
-  if (existing && ["title", "body", "kind", "importance", "asks", "visibility", "run", "origin", "producer"].every(key =>
+  if (existing && ["title", "body", "kind", "importance", "asks", "visibility", "run", "reader", "origin", "producer"].every(key =>
     JSON.stringify(existing[key as keyof Panel]) === JSON.stringify(stored[key as keyof Panel]))) return existing;
   appendParticipation("uiPanel_write", stored);
   panels.set(p.id, stored);

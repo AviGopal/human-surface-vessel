@@ -100,7 +100,7 @@ describe("the form_decision observation channel", () => {
   });
 
   test("the census rides on the self-report the substrate's own detector reads", async () => {
-    const view = buildUiView();
+    const view = buildUiView({}, null);
     expect(view.content_forms.observed).toBe(true);
     expect(view.content_forms.decisions_total).toBeGreaterThan(0);
     // The standing count for the misroute class. Every decision posted above is

@@ -40,7 +40,7 @@ import {
 } from "../store.ts";
 import { explainRanking, rankPanels, type ImportanceWeights } from "../importance.ts";
 import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.ts";
-import { knownGapStatus, refreshGapStatuses } from "./proxy.ts";
+import { knownGapStatus, listedShapes, refreshGapStatuses } from "./proxy.ts";
 import { classifyQuestion, gapIdForPanel } from "../question-class.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
@@ -100,7 +100,13 @@ function optPosition(p: Pointer): { x: number; y: number } | undefined {
  * whether a write over an existing panel carries any content at all, and (field
  * by field) to decide default-vs-preserve. Keep the two in step.
  */
-const PANEL_CONTENT_KEYS = ["title", "body", "kind", "importance", "asks", "visibility"] as const;
+const PANEL_CONTENT_KEYS = ["title", "body", "kind", "importance", "asks", "visibility", "reader"] as const;
+
+/** The declared reader: a shape name, or undefined when the pointer names none or names it badly. */
+function readerOf(pointer: Record<string, unknown>): string | undefined {
+  const v = pointer["reader"];
+  return typeof v === "string" && /^[A-Za-z0-9_:.-]{1,120}$/.test(v) ? v : undefined;
+}
 
 function hasQuestionContent(pointer: Record<string, unknown>): boolean {
   const filled = (v: unknown): boolean =>
@@ -471,6 +477,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       // `body: ""` must still clear the body, while an omitted body on an
       // existing panel must keep what is stored. `??` collapses the two.
       // Literal defaults apply ONLY when there is no existing panel.
+      const reader = Object.hasOwn(pointer, "reader") ? readerOf(pointer) : existing?.reader;
       const panel = upsertPanel({
         id,
         title: Object.hasOwn(pointer, "title")
@@ -489,6 +496,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         visibility: Object.hasOwn(pointer, "visibility")
           ? asVisibility(pointer["visibility"], existing?.visibility ?? "public")
           : (existing?.visibility ?? "public"),
+        ...(reader ? { reader } : {}),
         // The writer's stamp, as the exposure reporter's is kept on observations:
         // what the learner reads to tell a live panel from a test's.
         ...panelStamp(existing, caller),
@@ -520,6 +528,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         kind: "question",
         importance: "high",
         run: { dispatchId, solicitationId, deadlineAt, linked },
+        ...(readerOf(pointer) ? { reader: readerOf(pointer) } : {}),
         ...panelStamp(getPanel(`solicitation-${solicitationId}`), caller),
       });
       return c.json({ resolved: true, success: true, shape: type, body: { panelId: panel.id, linked } });
@@ -527,7 +536,8 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
 
     case "uiQuestion": {
       const wanted = optStr(pointer, "id") ?? optStr(pointer, "panel_id");
-      const questions = listPanels()
+      const listed = await listedShapes();
+      const matched = listPanels()
         // Everything that ASKS a human something, not only kind==="question".
         // The escalation kinds gap-to-feature.ts emits (gap_needs_human, …) were
         // written to this surface and then filtered back out of the only read
@@ -539,6 +549,12 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         // answer it.
         .filter(pn => isSolicitation(pn) && (!wanted || pn.id === wanted))
         .map(questionView)
+        // A declared reader counts only while discovery lists it; unknown is not listed.
+        .map((view) => ({ ...view, readerListed: view.reader !== undefined && listed !== null && listed.has(view.reader) }));
+      // Open questions not offered as waiting because no reader of theirs is listed, counted before
+      // `open: true` drops them, so a read that shows none says why.
+      const unlisted = matched.filter((q) => !q.answered && !q.declined && !q.readerListed).length;
+      const questions = matched
         // `open: true`: only what waits on a person (an ask not answered or set aside).
         .filter((q) => pointer["open"] !== true || (!q.answered && !q.declined && classifyQuestion(q) === "ask"))
         // The status of the gap each one asks about, as last read. Unknown stays
@@ -614,6 +630,12 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           // Also over the whole matched set, never the slice: how many questions
           // are waiting on a human is not a fact about what fitted in a payload.
           unanswered: questions.filter((q) => !q.answered && !q.declined).length,
+          // Why open questions are not offered as waiting: none of these names a reader discovery
+          // lists. When discovery did not answer, no reader could be confirmed.
+          readers: {
+            discovery: listed === null ? "unreachable" : "answered",
+            unlisted,
+          },
           /**
            * The honest summary. Truncation is stated, not implied: a caller
            * seeing `not_shown_count > 0` knows there is more and knows how much.
@@ -953,7 +975,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       // typography, the forms content was drawn in, and the questions rail
       // (how each kind is presented, who reads its answers, what people did).
       // A question writer reads this by shape before it asks.
-      return c.json({ resolved: true, success: true, shape: type, body: buildUiView(getRenderPolicy().tokenOverrides) });
+      return c.json({ resolved: true, success: true, shape: type, body: buildUiView(getRenderPolicy().tokenOverrides, await listedShapes()) });
     }
 
     case "renderPolicy": {

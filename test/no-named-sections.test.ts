@@ -53,11 +53,19 @@ describe("uiQuestion {open: true} is what waits on a person", () => {
   const ids = (j: any): string[] => (j.body.questions as { id: string }[]).map((q) => q.id).filter((id) => id.startsWith("nns-"));
 
   test("must-fail: a notice is left out with open, and kept without it", async () => {
-    expect((await resolve({ type: "uiQuestion_write", id: "nns-ask", title: "Which branch ships?", kind: "question", asks: [{ id: "a1", prompt: "Which branch?", type: "text" }] })).status).toBe(200);
-    expect((await resolve({ type: "uiQuestion_write", id: "nns-notice", title: "The nightly run finished", kind: "notice", body: "Nothing to decide." })).status).toBe(200);
-    const all = await resolve({ type: "uiQuestion", visible_slice_size: null });
-    expect(ids(all.json).sort()).toEqual(["nns-ask", "nns-notice"]);
-    const open = await resolve({ type: "uiQuestion", open: true, visible_slice_size: null });
-    expect(ids(open.json)).toEqual(["nns-ask"]);
+    // Discovery lists the ask's declared reader (test/declared-reader.test.ts covers one it does not).
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith("/registry/shapes") ? Response.json({ shapes: ["nns_reader"] }) : realFetch(input, init)) as typeof fetch;
+    try {
+      expect((await resolve({ type: "uiQuestion_write", id: "nns-ask", title: "Which branch ships?", kind: "question", reader: "nns_reader", asks: [{ id: "a1", prompt: "Which branch?", type: "text" }] })).status).toBe(200);
+      expect((await resolve({ type: "uiQuestion_write", id: "nns-notice", title: "The nightly run finished", kind: "notice", reader: "nns_reader", body: "Nothing to decide." })).status).toBe(200);
+      const all = await resolve({ type: "uiQuestion", visible_slice_size: null });
+      expect(ids(all.json).sort()).toEqual(["nns-ask", "nns-notice"]);
+      const open = await resolve({ type: "uiQuestion", open: true, visible_slice_size: null });
+      expect(ids(open.json)).toEqual(["nns-ask"]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

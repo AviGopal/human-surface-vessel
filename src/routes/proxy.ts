@@ -342,6 +342,15 @@ async function readShapesFrom(base: string): Promise<readonly string[] | null> {
   }
 }
 
+/**
+ * The shapes this node's discovery lists right now, or null when it did not answer. A question's
+ * declared reader counts only while it is listed here (src/question-class.ts).
+ */
+export async function listedShapes(): Promise<ReadonlySet<string> | null> {
+  const { union, registries } = await readShapeVocabulary();
+  return registries.every((r) => r.ok) ? union : null;
+}
+
 /** The registry's shapes, and whether it answered. */
 async function readShapeVocabulary(): Promise<{ union: Set<string>; registries: Array<{ registry: string; ok: boolean; count: number }> }> {
   const shapes = await readShapesFrom(DISCOVERY_ENDPOINT);

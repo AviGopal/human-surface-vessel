@@ -40,6 +40,10 @@ export interface Question {
   kind?: string;
   /** The status of the gap it asks about, as the server last read it; absent when not known. */
   gapStatus?: string;
+  /** The shape that takes the answer, as the writer declared it. */
+  reader?: string;
+  /** Whether discovery listed `reader` when the question was read. */
+  readerListed?: boolean;
   /** Set when a run asked this question; `linked` only after the server read the run back. */
   run?: {
     dispatchId: string | null;

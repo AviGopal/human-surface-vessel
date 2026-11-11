@@ -1,7 +1,8 @@
 /**
- * Only asks lead the rail and count as waiting. Shapes are the ones 18310
+ * Only asks lead the rail and count as waiting. Shapes are the ones the surface
  * served on 2026-10-10: templated gap asks, scope notices, empty code_change
  * and "Untitled" panels, and a panel whose writer never rendered its template.
+ * An ask's reader is the one its writer declared, listed by discovery when read.
  */
 import { describe, expect, test } from "bun:test";
 import type { Question } from "../ui/src/api/participation";
@@ -12,27 +13,34 @@ function q(id: string, kind: string, body: unknown, extra: Partial<Question> = {
   return { id, revision: 1, title: "t", body, createdAt: 0, updatedAt: 0, responses: [], answered: false, declined: false, kind, ...extra };
 }
 
-const escalation = q("needs-human-reach-gap-docs-align-tick", "gap_needs_human", "Gap reach-gap-docs-align-tick (unreachable_producer) has failed auto-repair 8+ times. Summary: Reachability gap: shape");
-const reland = q("reland-needs-human-route-edit-03902f38", "gap_reland_needs_human", "Gap route-edit-03902f38 (edit_intent_route) has had multiple landings. Summary: In repos/x");
+const READ = { reader: "escalation_disposition", readerListed: true };
+const escalation = q("needs-human-reach-gap-docs-align-tick", "gap_needs_human", "Gap reach-gap-docs-align-tick (unreachable_producer) has failed auto-repair 8+ times. Summary: Reachability gap: shape", READ);
+const reland = q("reland-needs-human-route-edit-03902f38", "gap_reland_needs_human", "Gap route-edit-03902f38 (edit_intent_route) has had multiple landings. Summary: In repos/x", READ);
 const verify = q("pending-verify-route-edit-e8797240", "gap_pending_verification", "Gap route-edit-e8797240 (edit_intent_route) had a single landing. Please confirm. Summary: In repos/development-vessel/src/resolvers/feature-compose.ts, add a FABRICATE");
 const localize = q("needs-localization-db_performance_slow_queries_2026-10-01T06", "gap_needs_localization", "Localization failed for gap db_performance_slow_queries_2026-10-01T06: name the file. Summary: Slow queries");
 const notice = q("scope-change-13e454928d59f1b7", "notice", "tighten of repos/goal-host-vessel/src/goal-target-inference.ts by scope_earn_in_apply");
 const emptyChange = q("panel-1790780120573", "code_change", "", { title: "Remove 'continue' statement in pickMostLandable", asks: [] });
 const untitled = q("panel-1790780094241", "question", "", { title: "Untitled" });
 const template = q("{{goal.id}}", "{{goal.kind}}", "How are you?", { title: "{{goal.title}}" });
-const withAsks = q("93b051b4-4364-4a9e-b970-4b5b4e7a9c38", "question", "", { title: "Revised", asks: [{ id: "cause", prompt: "Cause?", type: "text" }] });
+const withAsks = q("93b051b4-4364-4a9e-b970-4b5b4e7a9c38", "question", "", { title: "Revised", asks: [{ id: "cause", prompt: "Cause?", type: "text" }], ...READ });
 
 describe("classifyQuestion", () => {
-  test("gap escalations, which a reader applies, are asks", () => {
+  test("a question whose declared reader discovery lists is an ask", () => {
     expect(classifyQuestion(escalation)).toBe("ask");
     expect(classifyQuestion(reland)).toBe("ask");
+  });
+
+  test("must-fail: no declared reader, or one discovery does not list, is not an ask, whatever the id or kind", () => {
+    expect(classifyQuestion({ ...escalation, reader: undefined, readerListed: undefined })).toBe("unread");
+    expect(classifyQuestion({ ...escalation, readerListed: false })).toBe("unread");
+    expect(classifyQuestion({ ...escalation, readerListed: undefined })).toBe("unread");
   });
 
   test("a question with parts to answer is an ask even with an empty body", () => {
     expect(classifyQuestion(withAsks)).toBe("ask");
   });
 
-  test("must-fail: kinds no reader takes, notices, and malformed panels are not asks", () => {
+  test("must-fail: questions that declare no reader, notices, and malformed panels are not asks", () => {
     expect(classifyQuestion(verify)).toBe("unread");
     expect(classifyQuestion(localize)).toBe("unread");
     expect(classifyQuestion(notice)).toBe("notice");

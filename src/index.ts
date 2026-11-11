@@ -34,7 +34,7 @@ import {
 import { impulsesRouter } from "./routes/impulses.ts";
 import { inboundAuthCounts } from "./inbound-auth.ts";
 import { participationRouter } from "./routes/participation.ts";
-import { corsHeaders, proxyRouter, refuseForeignOriginWrites } from "./routes/proxy.ts";
+import { corsHeaders, listedShapes, proxyRouter, refuseForeignOriginWrites } from "./routes/proxy.ts";
 import {
   counts,
   listPanels,
@@ -297,7 +297,7 @@ app.post("/resolve", async (c) => {
   // `human_surface:ui_view` is the name ui_legibility_scan asks for first; same report.
   if (type === "obsidian:ui_view" || type === "human_surface:ui_view") {
     // `.content` as a JSON STRING is the detector's expected envelope.
-    return c.json({ content: JSON.stringify(buildUiView(getRenderPolicy().tokenOverrides)), metadata: { shape: type } });
+    return c.json({ content: JSON.stringify(buildUiView(getRenderPolicy().tokenOverrides, await listedShapes())), metadata: { shape: type } });
   }
   if (type === "obsidian:note") {
     // No theme-override note on this surface: tokens are the single source and

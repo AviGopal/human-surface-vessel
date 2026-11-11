@@ -31,6 +31,7 @@ const SCENARIO = `
     const body = await req.json().catch(() => ({}));
     const p = (body.impulse && body.impulse.pointer) || body.pointer || {};
     if (p.type === "vesselCapability") return Response.json({ content: { vessels: [] } });
+    if (url.pathname === "/registry/shapes") return Response.json({ shapes: ["gap_decision"] });
     if (url.pathname === "/resolve" && p.type === "substrateGap" && p.id) {
       reads.push(p.id);
       return Response.json({ body: { gaps: [{ id: p.id, status: closed.has(p.id) ? "closed" : "open" }] } });
@@ -47,10 +48,10 @@ const SCENARIO = `
   // Old, unread verification asks that age and the unanswered boost push to the top,
   // two fresh escalations about open gaps, and two about closed gaps.
   for (let i = 0; i < 6; i++) store.upsertPanel({ id: "pending-verify-gap-old-" + i, title: "Gap landed but is unverified", body: "Gap gap-old-" + i + " had a single landing.", kind: "gap_pending_verification", importance: "medium", createdAt: now - (40 + i) * DAY });
-  store.upsertPanel({ id: "needs-human-gap-open-a", title: "Gap needs a human decision", body: "Gap gap-open-a failed.", kind: "gap_needs_human", importance: "high", createdAt: now - 1 * DAY });
-  store.upsertPanel({ id: "reland-needs-human-gap-open-b", title: "Gap re-lands", body: "Gap gap-open-b re-lands.", kind: "gap_reland_needs_human", importance: "high", createdAt: now - 2 * DAY });
-  store.upsertPanel({ id: "needs-human-gap-closed-a", title: "Gap needs a human decision", body: "Gap gap-closed-a failed.", kind: "gap_needs_human", importance: "high", createdAt: now - 30 * DAY });
-  store.upsertPanel({ id: "reland-needs-human-gap-closed-b", title: "Gap re-lands", body: "Gap gap-closed-b re-lands.", kind: "gap_reland_needs_human", importance: "high", createdAt: now - 30 * DAY });
+  store.upsertPanel({ id: "needs-human-gap-open-a", title: "Gap needs a human decision", body: "Gap gap-open-a failed.", kind: "gap_needs_human", importance: "high", createdAt: now - 1 * DAY, reader: "gap_decision" });
+  store.upsertPanel({ id: "reland-needs-human-gap-open-b", title: "Gap re-lands", body: "Gap gap-open-b re-lands.", kind: "gap_reland_needs_human", importance: "high", createdAt: now - 2 * DAY, reader: "gap_decision" });
+  store.upsertPanel({ id: "needs-human-gap-closed-a", title: "Gap needs a human decision", body: "Gap gap-closed-a failed.", kind: "gap_needs_human", importance: "high", createdAt: now - 30 * DAY, reader: "gap_decision" });
+  store.upsertPanel({ id: "reland-needs-human-gap-closed-b", title: "Gap re-lands", body: "Gap gap-closed-b re-lands.", kind: "gap_reland_needs_human", importance: "high", createdAt: now - 30 * DAY, reader: "gap_decision" });
 
   async function read(pointer) {
     const res = await impulsesRouter.request("/v2/impulses/resolve", {
@@ -123,7 +124,7 @@ describe("the questions read is honest about what a person can act on", () => {
 });
 
 describe("the shared classification", () => {
-  const q = (id: string, kind: string, gapStatus?: string | null) => ({ id, title: "t", kind, body: "b", ...(gapStatus !== undefined ? { gapStatus } : {}) });
+  const q = (id: string, kind: string, gapStatus?: string | null) => ({ id, title: "t", kind, body: "b", reader: "gap_decision", readerListed: true, ...(gapStatus !== undefined ? { gapStatus } : {}) });
 
   test("must-fail: a closed gap's question is folded as settled; an open or unknown one stays an ask", () => {
     expect(classifyQuestion(q("needs-human-x", "gap_needs_human", "closed"))).toBe("settled");
