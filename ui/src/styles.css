@@ -2076,6 +2076,7 @@ body { overflow: hidden; }
 .sf-brief-source { opacity: 0.7; font-size: var(--sf-text-xs); }
 .sf-brief-options { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0; }
 /* The landing reads as one column, in the order its view names. */
+.sf-landing .sf-sign-in-to-judge { padding: 0 var(--sf-space-4) var(--sf-space-2); }
 .sf-landing .sf-reports { grid-template-columns: minmax(0, 1fr); max-width: 48rem; padding: 0 var(--sf-space-4) var(--sf-space-6); }
 .sf-reports { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sf-space-3); }
 .sf-report { display: flex; flex-direction: column; gap: var(--sf-space-2); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); min-width: 0; }

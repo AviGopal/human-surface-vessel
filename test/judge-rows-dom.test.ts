@@ -111,6 +111,18 @@ describe("rows drawn in full, with a person's verdict", () => {
     expect(el.textContent).toContain("Sign in with your key to give a verdict.");
   });
 
+  test("must-fail: signed out, the page says how to sign in once, not under every row", async () => {
+    signedIn = false;
+    const el = await mount([ENTRY, { ...ENTRY, title: "Again" }]);
+    expect(el.querySelectorAll(".sf-row-judge").length).toBeGreaterThan(1);
+    expect(el.textContent!.split("Sign in with your key to give a verdict.").length - 1).toBe(1);
+  });
+
+  test("signed in, no sign-in line is drawn", async () => {
+    const el = await mount([ENTRY]);
+    expect(el.textContent).not.toContain("Sign in with your key");
+  });
+
   test("a refused write says why, and nothing claims it was recorded", async () => {
     writeAnswer = { error: "unauthorized", reason: "absent" };
     const el = await mount([ENTRY]);

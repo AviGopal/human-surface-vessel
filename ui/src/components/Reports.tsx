@@ -89,6 +89,13 @@ export function fieldText(v: unknown): string {
 
 type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number | null } | { state: "refused"; reason: string } | { state: "signedOut" };
 
+const SIGN_IN_TO_JUDGE = "Sign in with your key to give a verdict.";
+
+/** Whether any entry, or its thread, offers a verdict: the page says how to sign in once, not under every row. */
+function offersVerdicts(entries: readonly ViewEntry[]): boolean {
+  return entries.some((e) => e.judge === "outcome" || e.thread?.judge === "outcome");
+}
+
 function Judge({ rowId }: { rowId: string }): ReactNode {
   const session = useSession();
   const client = useQueryClient();
@@ -114,18 +121,16 @@ function Judge({ rowId }: { rowId: string }): ReactNode {
           {verdict.seq !== null ? ` (record #${verdict.seq})` : ""}. Judging again replaces it.
         </p>
       ) : null}
-      <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} onClick={() => void give(1)}>
+      <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(1)}>
         Right
       </button>
-      <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} onClick={() => void give(0)}>
+      <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(0)}>
         Wrong
       </button>
       {verdict.state === "signedOut" ? (
         <p className="sf-row-note" role="alert">
           Your verdict was not recorded: you are no longer signed in (the surface may have restarted). Sign in with your key and judge again.
         </p>
-      ) : !signedIn ? (
-        <p className="sf-muted sf-row-note">Sign in with your key to give a verdict.</p>
       ) : null}
       {verdict.state === "refused" ? (
         <p className="sf-row-note" role="alert">
@@ -339,11 +344,16 @@ export function Entries({
   const declarations = useReport(DECLARATIONS, { enabled, intervalMs }).data;
   const declared = declarations?.ok ? declaredWords(declarations.answer) : new Map<string, readonly string[]>();
   const reading: Reading = { declared, enabled, intervalMs, onOpenQuestion };
+  const session = useSession();
+  const signedOut = session.data !== undefined && session.data.signedIn !== true;
   return (
-    <div className="sf-reports">
-      {entries.map((e) => (
-        <Entry key={JSON.stringify(e.pointer)} entry={e} reading={reading} />
-      ))}
-    </div>
+    <>
+      {signedOut && offersVerdicts(entries) ? <p className="sf-muted sf-report-note sf-sign-in-to-judge" data-sign-in-to-judge="">{SIGN_IN_TO_JUDGE}</p> : null}
+      <div className="sf-reports">
+        {entries.map((e) => (
+          <Entry key={JSON.stringify(e.pointer)} entry={e} reading={reading} />
+        ))}
+      </div>
+    </>
   );
 }
