@@ -91,7 +91,6 @@ const server = Bun.serve({
     if (path === "/api/questions") return participationRouter.fetch(request);
     if (path === "/api/participation") return participationRouter.fetch(request);
     if (path === "/api/observations") return Response.json({ ok: true });
-    if (path === "/api/feedback") return Response.json({ ok: true });
     if (path === "/api/render-policy") {
       return Response.json({
         tokenOverrides: {}, formByShape: {}, presentation: "onepage",

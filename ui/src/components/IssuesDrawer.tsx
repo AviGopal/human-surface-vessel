@@ -5,7 +5,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useLiveControls } from "../state/liveControls";
 import { streamAwareInterval, useStreamConnected } from "../state/stream";
 import { fromText } from "../lib/content";
@@ -82,12 +82,12 @@ function splitLead(summary: string): { lead: string; rest: string } {
   return { lead: `${text.slice(0, 240).trimEnd()}…`, rest: text };
 }
 
-function GapCard({ gap, highlighted }: { gap: InterfaceGap; highlighted?: boolean }): ReactNode {
+function GapCard({ gap }: { gap: InterfaceGap }): ReactNode {
   const closed = gap.status === "closed";
   const closedBy = typeof gap.classification_metadata?.["closed_by"] === "string" ? (gap.classification_metadata["closed_by"] as string) : null;
   const { lead, rest } = splitLead(gap.summary);
   return (
-    <li className="sf-issue" data-status={closed ? "closed" : "open"} data-gap-id={gap.id} data-highlight={highlighted ? "true" : undefined}>
+    <li className="sf-issue" data-status={closed ? "closed" : "open"} data-gap-id={gap.id}>
       <p className="sf-issue-facts">
         <span className="sf-gap-state" data-status={closed ? "closed" : "open"}>
           {closed ? "closed" : "open"}
@@ -110,16 +110,9 @@ function GapCard({ gap, highlighted }: { gap: InterfaceGap; highlighted?: boolea
   );
 }
 
-export function IssuesDrawer({ onClose, highlightId }: { onClose: () => void; highlightId?: string | null }): ReactNode {
+export function IssuesDrawer({ onClose }: { onClose: () => void }): ReactNode {
   const q = useInterfaceGaps();
   const gaps = q.data ?? [];
-  const highlightListed = highlightId ? gaps.some((g) => g.id === highlightId) : false;
-  const listRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!highlightId || !highlightListed) return;
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-gap-id="${CSS.escape(highlightId)}"]`);
-    el?.scrollIntoView({ block: "center" });
-  }, [highlightId, highlightListed]);
   const open = gaps.filter((g) => g.status !== "closed");
   const closed = gaps.filter((g) => g.status === "closed");
 
@@ -132,7 +125,7 @@ export function IssuesDrawer({ onClose, highlightId }: { onClose: () => void; hi
   }, [onClose]);
 
   return (
-    <aside id="sf-issues" className="sf-issues" aria-labelledby="sf-issues-title" ref={listRef}>
+    <aside id="sf-issues" className="sf-issues" aria-labelledby="sf-issues-title">
       <header className="sf-issues-head">
         <h2 id="sf-issues-title" className="sf-view-title">
           Issues with this interface
@@ -145,15 +138,10 @@ export function IssuesDrawer({ onClose, highlightId }: { onClose: () => void; hi
         <ComplaintChips />
       </div>
       {q.isError ? <p className="sf-error">Issue list unavailable</p> : null}
-      {highlightId && q.data && !highlightListed ? (
-        <p className="sf-outcome-strip" data-outcome="waiting">
-          … Your report <span className="sf-mono">{highlightId}</span> is not listed yet — the list refreshes when it lands.
-        </p>
-      ) : null}
       {!q.isError && q.data && gaps.length === 0 ? <p className="sf-main-empty">None recorded</p> : null}
       <ul className="sf-issue-list">
         {open.map((g) => (
-          <GapCard key={g.id} gap={g} highlighted={g.id === highlightId} />
+          <GapCard key={g.id} gap={g} />
         ))}
       </ul>
       {closed.length > 0 ? (
@@ -161,7 +149,7 @@ export function IssuesDrawer({ onClose, highlightId }: { onClose: () => void; hi
           <summary>{closed.length} closed</summary>
           <ul className="sf-issue-list">
             {closed.map((g) => (
-              <GapCard key={g.id} gap={g} highlighted={g.id === highlightId} />
+              <GapCard key={g.id} gap={g} />
             ))}
           </ul>
         </details>

@@ -15,15 +15,13 @@
  * operator-verdict corpus and manufactured a false reach class
  * (development-vessel/src/resolvers/interactor-passthrough.ts:72-90). Every
  * record sent from here is machine-origin by construction, so it may not go
- * there. Nothing in this file posts to /api/feedback.
+ * there.
  *
  * ENDPOINT CONTRACT (server side owned by another agent this phase):
  *   POST /api/observations  — body is the pointer object, including
- *   `type: "interactorObservation"`. Expected to self-post the shape through
- *   RESOLVE_PATH exactly as POST /api/feedback does for `uiFeedback`
- *   (src/routes/proxy.ts:1009-1034). Until it exists the browser's POST 404s,
- *   which is why every send here is fire-and-forget: a missing recorder must
- *   degrade the record, never the person's session.
+ *   `type: "interactorObservation"`, self-posted through RESOLVE_PATH. Every
+ *   send here is fire-and-forget: a missing recorder must degrade the record,
+ *   never the person's session.
  *
  * WHAT THE SERVER SIDE STILL HAS TO ACCEPT (contract, not a suggestion):
  *

@@ -8,11 +8,6 @@
 import type { ReactNode } from "react";
 import { COMPLAINT_PREFIXES, fillBox } from "../lib/box";
 
-/** Ask the surface to open the Issues drawer on one issue. Surface listens for this. */
-export function showIssue(gapId: string): void {
-  window.dispatchEvent(new CustomEvent("sf:show-issue", { detail: gapId }));
-}
-
 /** The complaint kinds, as chips that start a complaint in the box. */
 export function ComplaintChips(): ReactNode {
   return (

@@ -16,8 +16,7 @@
  * is served BY THIS PROBE, because the server side of that contract belongs to
  * the agent who owns src/routes/*.ts this phase. The probe captures exactly the
  * pointer the browser sends; the shape name, obs_type values and pointer fields
- * are the contract. `POST /api/feedback` is likewise stubbed 200 so the
- * complaint path's success state can be reached without the gap store.
+ * are the contract.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import assert from "node:assert/strict";
@@ -72,7 +71,6 @@ const server = Bun.serve({
       records.push((await request.json()) as Record_);
       return Response.json({ ok: true });
     }
-    if (path === "/api/feedback") return Response.json({ ok: true });
     if (path === "/api/questions") {
       const response = await participationRouter.fetch(request);
       if (!injectRanking) return response;

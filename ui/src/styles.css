@@ -1891,11 +1891,6 @@ body { overflow: hidden; }
   text-decoration: underline;
   cursor: pointer;
 }
-.sf-issue[data-highlight="true"] {
-  outline: 2px solid var(--sf-accent);
-  outline-offset: 4px;
-  border-radius: var(--sf-radius-sm);
-}
 
 /* ── what the walk is missing ── */
 .sf-walk-needs { border-left: 3px solid var(--sf-running); padding-left: var(--sf-space-4); margin-top: var(--sf-space-4); }

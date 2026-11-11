@@ -43,22 +43,7 @@ function Workbench(): ReactNode {
   const params = useParams({ strict: false }) as { questionId?: string };
   const questionId = params.questionId ?? null;
   const [issuesOpen, setIssuesOpen] = useState(false);
-  const [highlightIssue, setHighlightIssue] = useState<string | null>(null);
-  const closeIssues = useCallback(() => {
-    setIssuesOpen(false);
-    setHighlightIssue(null);
-  }, []);
-  // A filed report asks to be shown: open the drawer on it (see ComplainButton showIssue).
-  useEffect(() => {
-    const onShow = (e: Event): void => {
-      const id = (e as CustomEvent<unknown>).detail;
-      if (typeof id !== "string") return;
-      setHighlightIssue(id);
-      setIssuesOpen(true);
-    };
-    window.addEventListener("sf:show-issue", onShow);
-    return () => window.removeEventListener("sf:show-issue", onShow);
-  }, []);
+  const closeIssues = useCallback(() => setIssuesOpen(false), []);
 
   const questions = useQuestions();
   const gaps = useInterfaceGaps();
@@ -110,7 +95,7 @@ function Workbench(): ReactNode {
           />
         )}
       </main>
-      {issuesOpen ? <IssuesDrawer onClose={closeIssues} highlightId={highlightIssue} /> : null}
+      {issuesOpen ? <IssuesDrawer onClose={closeIssues} /> : null}
     </div>
   );
 }

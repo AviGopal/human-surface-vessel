@@ -122,9 +122,7 @@ const server = Bun.serve({
         note: "probe",
       });
     }
-    if (path === "/api/feedback") return Response.json({ ok: true });
     if (path === "/api/discovery/shapes") return Response.json({ shapes: [] });
-    if (path === "/api/resolve") return Response.json({ resolved: true, body: { dispatches: [] } });
     if (path.startsWith("/api/")) return Response.json({ gaps: [] });
     const file = Bun.file(root + "/ui/dist" + (path === "/" ? "/index.html" : path));
     if (!(await file.exists())) return new Response("not found", { status: 404 });
