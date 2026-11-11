@@ -69,7 +69,7 @@ async function mount(): Promise<HTMLElement> {
   const outcome = { dispatchId: "d-done", executionId: "e-done", goal: "Where is it raining?", judgeReached: true };
   await act(async () => {
     createRoot(el).render(
-      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { onDispatched: () => {}, openIssues: null, onToggleIssues: () => {}, issuesOpen: false, context: boxContext(null, null, null, null, outcome) })))),
+      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false, context: boxContext(null, null, null, null, outcome) })))),
     );
   });
   await settle();
@@ -99,12 +99,8 @@ describe("signing in on the surface", () => {
     expect(el.querySelector(".sf-signin")).toBeNull();
   });
 
-  test("must-fail: a verdict given signed out is recorded as the person's once they sign in", async () => {
+  test("must-fail: email-and-password sign-in still signs a person in, and says who", async () => {
     const el = await mount();
-    await typeInBox(el, "wrong answer");
-    expect(calls.filter((c) => c.url.includes("/api/grade")).length).toBe(1);
-    expect(el.textContent).toContain("not reached · kept on the run; sign in to record it as yours");
-
     await act(async () => button(el, "Sign in")!.click());
     const form = el.querySelector("form[aria-label='Sign in']") as HTMLFormElement;
     const [email, password] = [form.querySelector("input[type=email]") as HTMLInputElement, form.querySelector("input[type=password]") as HTMLInputElement];
@@ -112,21 +108,8 @@ describe("signing in on the surface", () => {
     await act(async () => { setValue(email, "alex@example.test"); setValue(password, "correct horse"); });
     await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
     await settle();
-
     expect(calls.find((c) => c.url.endsWith("/api/session/login"))?.body).toEqual({ email: "alex@example.test", password: "correct horse" });
-    const grades = calls.filter((c) => c.url.includes("/api/grade"));
-    expect(grades.length).toBe(2);
-    expect(grades[1]?.body).toMatchObject({ execution_id: "e-done", dispatch_id: "d-done", verdict: "not_achieved", notes: "wrong answer" });
-    expect(el.textContent).toContain("Your verdict on that run: not reached · recorded as yours");
     expect(el.querySelector(".sf-signin-who")?.textContent).toMatch(/^Alex · until /);
     expect(el.querySelector("form[aria-label='Sign in']")).toBeNull();
-  });
-
-  test("signed in, a verdict in the box is recorded as theirs at once", async () => {
-    signedIn = true;
-    const el = await mount();
-    await typeInBox(el, "that worked");
-    expect(calls.filter((c) => c.url.includes("/api/grade")).length).toBe(1);
-    expect(el.textContent).toContain("Read as your verdict on this run: reached · recorded as yours");
   });
 });

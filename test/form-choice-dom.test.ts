@@ -25,9 +25,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     }
   })();
   if (url.includes("/api/observations") && init?.method === "POST") posted.push(body);
-  if (url.includes("/api/run-goal")) {
+  if (url.includes("/api/discovery/resolve")) {
     goals.push(body);
-    return new Response(JSON.stringify({ accepted: true, dispatchId: "d-new" }), { status: 202 });
+    return Response.json({ ok: true, seq: 303 });
   }
   if (url.includes("/api/surface-intent")) {
     intents.push(body);
@@ -97,7 +97,7 @@ async function render(node: unknown): Promise<HTMLElement> {
 async function boxOverAnswer(): Promise<HTMLElement> {
   return render(
     React.createElement(React.Fragment, null,
-      React.createElement(TopBar, { onDispatched: () => {}, openIssues: null, onToggleIssues: () => {}, issuesOpen: false }),
+      React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false }),
       React.createElement("section", { "aria-label": "Answer" }, React.createElement(Rendered, { content: fromText("webSearchResult", record), density: "full", header: false, region: "run_answer", lead: true })),
     ),
   );
@@ -145,7 +145,7 @@ describe("the box carries Show as", () => {
     expect(el.querySelector("textarea")!.value).toBe("");
   });
 
-  test("F3, F1: anything else is a goal, sent once, and records no choice", async () => {
+  test("F3, F1: anything else is an ask, written once, and records no choice", async () => {
     for (const text of ["what time is it", "Render apnews.com as a webpage."]) {
       goals.length = 0;
       posted.length = 0;
@@ -153,8 +153,7 @@ describe("the box carries Show as", () => {
       const before = lead(el)?.getAttribute("data-form");
       await type(el, text);
       expect(goals.length).toBe(1);
-      expect(goals[0]).toMatchObject({ goal: text });
-      expect(goals[0]).not.toHaveProperty("onScreen");
+      expect(goals[0]).toEqual({ pointer: { type: "record_write", row: { shape: "world_changed", what: text, input_refs: [] } } });
       expect(posted.filter((p) => p["obs_type"] === "form_choice")).toEqual([]);
       expect(lead(el)?.getAttribute("data-form")).toBe(before);
     }

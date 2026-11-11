@@ -131,7 +131,6 @@ function Workbench(): ReactNode {
     <div className="sf-app">
       <h1 className="sf-visually-hidden">Substrate surface</h1>
       <TopBar
-        onDispatched={openRun}
         context={context}
         complaintRegion={tab === "questions" && questionId ? questionId : null}
         onSetAside={() => setSetAside(waiting?.id ?? null)}

@@ -31,7 +31,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
   if (url.includes("/api/grade")) return new Response(JSON.stringify({ error: "scope verdict:human required" }), { status: 403 });
-  if (url.includes("/api/run-goal")) return new Response(JSON.stringify({ accepted: true, dispatchId: "d-new" }), { status: 202 });
+  if (url.includes("/api/discovery/resolve")) return Response.json({ ok: true, seq: 300 });
   return new Response(JSON.stringify({ resolved: true, success: true, body: {} }), { status: 200 });
 }) as typeof fetch;
 
@@ -48,6 +48,10 @@ const { boxContext, boxWords, NEW_ASK, readVerdictPhrase } = await import("../ui
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: { unmount: () => void }[] = [];
+/** Whether the box wrote `text` as the person's ask: one world_changed row through discovery. */
+const asked = (text: string) =>
+  calls.some((c) => c.url.includes("/api/discovery/resolve") && JSON.stringify(c.body["pointer"]) === JSON.stringify({ type: "record_write", row: { shape: "world_changed", what: text, input_refs: [] } }));
+const wroteAnything = () => calls.some((c) => c.url.includes("/api/discovery/resolve"));
 afterAll(async () => {
   await teardownDom();
 });
@@ -76,7 +80,7 @@ async function mount(props: Record<string, unknown>): Promise<HTMLElement> {
   roots.push(root);
   await act(async () => {
     root.render(
-      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { onDispatched: () => {}, openIssues: null, onToggleIssues: () => {}, issuesOpen: false, ...props })))),
+      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false, ...props })))),
     );
   });
   return el;
@@ -112,7 +116,7 @@ describe("one box", () => {
     expect(answer?.body).toMatchObject({ solicitationId: "s-1" });
     expect(JSON.stringify(answer?.body)).toContain("Seattle");
     expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(true);
-    expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(false);
+    expect(wroteAnything()).toBe(false);
     expect(el.querySelector(".sf-outcome-line")?.textContent).toBe("Answer×");
     expect(el.querySelector("textarea")?.value).toBe("");
   });
@@ -121,7 +125,7 @@ describe("one box", () => {
     const el = await mount({});
     expect(el.querySelector(".sf-box-chip")?.textContent).toBe("New ask");
     await type(el, "What time is it?");
-    expect(calls.some((c) => c.url.includes("/api/run-goal") && c.body["goal"] === "What time is it?")).toBe(true);
+    expect(asked("What time is it?")).toBe(true);
     expect(calls.some((c) => c.body["type"] === "solicitationResponse_write")).toBe(false);
   });
 
@@ -137,7 +141,7 @@ describe("one box", () => {
       expect(answer?.body).toMatchObject({ solicitationId: "s-1", outcome });
       const kept = calls.find((c) => c.url.includes("/api/participation"));
       expect(kept?.body).toMatchObject({ kind, value: outcome, classified_by: "box-phrase", classified_phrase: text.toLowerCase().replace(/[.]$/, "") });
-      expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(false);
+      expect(wroteAnything()).toBe(false);
       expect(el.querySelector(".sf-outcome-line")?.textContent).toBe(echo);
     }
   });
@@ -190,7 +194,7 @@ describe("one box", () => {
     await type(el, "Seattle");
     const added = calls.find((c) => c.body["type"] === "poolImpulse_write");
     expect(added?.body).toMatchObject({ dispatchId: "d-run", shape: "human_input", content: "Seattle" });
-    expect(calls.some((c) => c.url.includes("/api/run-goal") || c.body["type"] === "solicitationResponse_write")).toBe(false);
+    expect(calls.some((c) => wroteAnything() || c.body["type"] === "solicitationResponse_write")).toBe(false);
     expect(el.textContent).toContain("Read as human_input for this run · added to the run");
   });
 
@@ -209,49 +213,12 @@ describe("one box", () => {
 
   const outcome = { dispatchId: "d-done", executionId: "e-done", goal: "Where is it raining?", judgeReached: true };
 
-  test("must-fail: with a finished run on screen, a verdict phrase is kept as a verdict, even when the corpus refuses it", async () => {
-    const el = await mount({ context: boxContext(null, null, null, null, outcome) });
-    await type(el, "wrong answer");
-    const g = calls.find((c) => c.url.includes("/api/grade"));
-    expect(g?.body).toMatchObject({ execution_id: "e-done", dispatch_id: "d-done", verdict: "not_achieved", judge_reached: true, notes: "wrong answer" });
-    expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(false);
-    expect(el.textContent).toContain("Read as your verdict on this run: not reached · kept on the run; the learning corpus didn't take it yet");
-  });
-
-  test("must-fail: the grade form's reasons and a note after a colon are verdicts in the box", async () => {
-    for (const [text, verdict, notes] of [
-      ["Failed for a different reason: it timed out", "not_achieved", "Failed for a different reason — it timed out"],
-      ["it actually worked", "achieved", "It actually worked"],
-      ["shouldn't have been tried", "not_achieved", "Shouldn't have been tried"],
-      ["wrong answer: Barcelona isn't in Italy", "not_achieved", "wrong answer — Barcelona isn't in Italy"],
-    ] as const) {
-      calls.length = 0;
-      const el = await mount({ context: boxContext(null, null, null, null, outcome) });
-      await type(el, text);
-      const g = calls.find((c) => c.url.includes("/api/grade"));
-      expect([text, g?.body["verdict"], g?.body["notes"]]).toEqual([text, verdict, notes]);
-      expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(false);
-    }
-    // A verdict carries the result it judged, as the run page hands it to the box.
-    calls.length = 0;
-    const about = { pool_id: "p1", shape: "webSearchResult", produced_by: "satisfier:webSearchResult" };
-    const withAbout = await mount({ context: boxContext(null, null, null, null, { ...outcome, about }) });
-    await type(withAbout, "wrong answer");
-    expect(calls.find((c) => c.url.includes("/api/grade"))?.body["about"]).toEqual(about);
-    // "wrong:" is still a complaint about the interface, never a verdict.
-    calls.length = 0;
-    const el = await mount({ context: boxContext(null, null, null, null, outcome) });
-    await type(el, "wrong: the grey text is unreadable");
-    expect(calls.some((c) => c.url.includes("/api/grade"))).toBe(false);
-    expect(calls.some((c) => c.url.includes("/api/feedback"))).toBe(true);
-  });
-
   test("must-fail: a complaint prefix with nothing after it is not sent; it stays in the box", async () => {
     for (const text of ["hard to understand:", "Hard to see:  ", "wrong:"]) {
       calls.length = 0;
       const el = await mount({ context: boxContext(null, null, null, null, outcome) });
       await type(el, text);
-      expect(calls.some((c) => c.url.includes("/api/run-goal") || c.url.includes("/api/feedback") || c.url.includes("/api/grade"))).toBe(false);
+      expect(wroteAnything() || calls.some((c) => c.url.includes("/api/feedback") || c.url.includes("/api/grade"))).toBe(false);
       expect(el.querySelector("textarea")!.value).toBe(text);
       expect(el.querySelector(".sf-outcome-line")?.textContent).toMatch(/^Say what's (hard to understand|hard to see|wrong)×$/);
     }
@@ -260,7 +227,14 @@ describe("one box", () => {
   test("with a finished run on screen, anything else is still a new ask", async () => {
     const el = await mount({ context: boxContext(null, null, null, null, outcome) });
     await type(el, "What time is it in Bergen?");
-    expect(calls.some((c) => c.url.includes("/api/run-goal") && c.body["goal"] === "What time is it in Bergen?")).toBe(true);
+    expect(asked("What time is it in Bergen?")).toBe(true);
     expect(calls.some((c) => c.url.includes("/api/grade"))).toBe(false);
+  });
+
+  test("must-fail: a verdict phrase on a finished run is not a verdict any more: it is asked like anything else", async () => {
+    const el = await mount({ context: boxContext(null, null, null, null, outcome) });
+    await type(el, "wrong answer");
+    expect(calls.some((c) => c.url.includes("/api/grade"))).toBe(false);
+    expect(asked("wrong answer")).toBe(true);
   });
 });

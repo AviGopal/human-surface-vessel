@@ -1,30 +1,28 @@
 /**
  * The top bar: one box to ask in, and the page-wide controls.
  *
- * A human sends goals in natural language; nothing here asks them to name a
- * shape. An accepted send opens its run in the main pane — the run IS the
- * outcome, so there is no separate note about it. Only an outcome with no run
- * to open (refused, draining, rejected, or a change to this interface) speaks
- * here, in one line.
+ * A person asks in their own words; nothing here asks them to name a shape. An ask is written
+ * as one row (`world_changed`) under the person's own key, and the walk takes it up from its
+ * pool: nothing is dispatched and nothing is polled. What the walk does with it arrives as rows
+ * the view names. A change to this interface, or an ask that was not recorded, speaks here in
+ * one line.
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { injectContext, trySurfaceIntent } from "../api/client";
+import { injectContext, trySurfaceIntent, writeAsk, type RowWrite } from "../api/client";
 import { useBoxTarget } from "../state/boxTarget";
 import { onScreenReport, useOnScreen } from "../state/onScreen";
 import { injectPayload } from "../lib/interaction";
-import { useDispatchGoal, useSubmitGrade } from "../api/queries";
 import type { DispatchOutcome } from "../api/types";
 import { complaintPayload } from "../lib/interaction";
 import { reportExposureAct } from "../lib/exposure-reporter";
-import { barePrefix, boxWords, presentationScope, readAs, readComplaint, readReplyPhrase, readVerdict, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
+import { barePrefix, boxWords, presentationScope, readAs, readComplaint, readReplyPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { answerRunQuestion } from "./RunQuestion";
-import { StarterChips } from "./StarterChips";
 import { SignIn } from "./SignIn";
-import { useSession } from "../api/session";
+import { SESSION_KEY } from "../api/session";
 
 const MAX_BOX_LINES = 8;
 
@@ -53,11 +51,6 @@ function OutcomeLine({
       tone = "warn";
       body = <>{outcome.reason}</>;
       break;
-    case "accepted":
-      if (!outcome.coalesced) return null;
-      tone = "warn";
-      body = <>Joined a run already in flight for the same goal</>;
-      break;
     case "reshaped":
       tone = "ok";
       body = (
@@ -82,16 +75,8 @@ function OutcomeLine({
         </>
       );
       break;
-    case "refused":
-      body = <>Refused: {outcome.reason ?? "no reason given"}</>;
-      break;
-    case "draining":
-      tone = "warn";
-      body = <>Dispatcher restarting — not sent, retry shortly</>;
-      break;
-    case "rejected":
     default:
-      body = <>Not sent: {outcome.message}</>;
+      return null;
   }
   return (
     <div className="sf-outcome-line" data-tone={tone} role="status">
@@ -104,7 +89,6 @@ function OutcomeLine({
 }
 
 export function TopBar({
-  onDispatched,
   openIssues,
   onToggleIssues,
   issuesOpen,
@@ -113,7 +97,6 @@ export function TopBar({
   context = NEW_ASK,
   onSetAside,
 }: {
-  onDispatched: (dispatchId: string) => void;
   /** What the next message will be read as; the chip shows it. */
   context?: BoxContext;
   /** × on the chip: read the next message as a new ask instead. */
@@ -127,9 +110,7 @@ export function TopBar({
   complaintRegion?: string | null;
 }): ReactNode {
   const [goal, setGoal] = useState("");
-  const [focused, setFocused] = useState(false);
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
-  const dispatch = useDispatchGoal();
   const { paused, setPaused } = useLiveControls();
   const { recordReceipt } = useQuestions();
   const onScreen = useOnScreen();
@@ -156,11 +137,7 @@ export function TopBar({
     mutationFn: (args: { dispatchId: string; shape: string; text: string }) =>
       injectContext(injectPayload({ dispatchId: args.dispatchId, shape: args.shape, content: args.text })),
   });
-  const grade = useSubmitGrade();
-  const session = useSession().data;
-  // A verdict given while signed out, where sign-in is offered: recorded as the person's once they sign in.
-  const [pendingVerdict, setPendingVerdict] = useState<Parameters<typeof grade.mutate>[0] | null>(null);
-  // An ask sent signed out: nothing was dispatched, sign-in opens, and the ask goes once signed in.
+  // An ask sent signed out: nothing was written, sign-in opens, and the ask goes once signed in.
   const [pendingAsk, setPendingAsk] = useState<string | null>(null);
   const [signInSignal, setSignInSignal] = useState(0);
   const queryClient = useQueryClient();
@@ -177,8 +154,18 @@ export function TopBar({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
     },
   });
+  // An ask: a presentation phrase changes this interface; anything else is written as the
+  // person's ask. Signed out, nothing is written.
+  const asking = useMutation({
+    retry: false,
+    mutationFn: async (text: string): Promise<{ kind: "reshaped"; change: DispatchOutcome } | { kind: "written"; got: RowWrite }> => {
+      const change = await trySurfaceIntent(text, onScreenReport(onScreen));
+      if (change) return { kind: "reshaped", change };
+      return { kind: "written", got: await writeAsk(text) };
+    },
+  });
   const words = boxWords(context);
-  const pending = dispatch.isPending || answer.isPending || supply.isPending || grade.isPending || complain.isPending;
+  const pending = asking.isPending || answer.isPending || supply.isPending || complain.isPending;
 
   // The box carries what "Show as" did: the answer on screen redraws, and the
   // choice is recorded from the box, as a click on it was.
@@ -234,7 +221,7 @@ export function TopBar({
     const complaint = readComplaint(text);
     if (complaint) {
       const region = complaintRegion ?? "the surface";
-      dispatch.reset();
+      asking.reset();
       setReshaped(null);
       complain.mutate(
         { kind: complaint, region },
@@ -251,7 +238,7 @@ export function TopBar({
     }
     if (context.kind === "supply") {
       const ctx = context;
-      dispatch.reset();
+      asking.reset();
       setReshaped(null);
       supply.mutate(
         { dispatchId: ctx.dispatchId, shape: ctx.shape, text },
@@ -268,7 +255,7 @@ export function TopBar({
     }
     if (context.kind === "reply") {
       const ctx = context;
-      dispatch.reset();
+      asking.reset();
       setReshaped(null);
       answer.mutate(
         { ctx, text },
@@ -291,59 +278,35 @@ export function TopBar({
     answer.reset();
     setEcho(null);
     setReshaped(null);
-    // A verdict on the finished run on screen, when the message is one of the exact
-    // verdict phrases. The surface keeps it on the run whatever the corpus answers.
-    const read = context.outcome ? readVerdict(text) : null;
-    const verdict = read?.verdict ?? null;
-    if (context.outcome && verdict) {
-      const o = context.outcome;
-      const said = verdict === "achieved" ? "reached" : "not reached";
-      const submission = { executionId: o.executionId, goal: o.goal, verdict, notes: read?.notes ?? text, dispatchId: o.dispatchId, judgeReached: o.judgeReached, ...(o.about ? { about: o.about } : {}) };
-      const signedOut = session?.available === true && !session.signedIn;
-      const settle = (corpus: boolean): void => {
-        if (!corpus && signedOut) setPendingVerdict(submission);
-        setEcho(
-          `Read as your verdict on this run: ${said} · ` +
-            (corpus ? (session?.signedIn ? "recorded as yours" : "kept on the run") : signedOut ? "kept on the run; sign in to record it as yours" : "kept on the run; the learning corpus didn't take it yet"),
-        );
-        cleared();
-      };
-      grade.mutate(submission, { onSuccess: () => settle(true), onError: () => settle(false) });
-      // A message in two parts ("that worked, now also list the sources"): the verdict
-      // above, and the request after it sent as an ask of its own.
-      if (read?.ask) ask(read.ask);
-      return;
-    }
     ask(text);
   };
 
   const ask = (text: string): void => {
-    dispatch.mutate(
-      { goal: text, operator: "human-surface", tags: ["surface:do-anything"], onScreen: onScreenReport(onScreen) },
-      {
-        onSuccess: (outcome) => {
-          if (outcome.kind === "view") {
-            dispatch.reset();
-            redraw(outcome.form);
-            return;
-          }
-          if (outcome.kind === "signIn") {
-            dispatch.reset();
-            if (session?.available) {
-              setPendingAsk(text);
-              setSignInSignal((n) => n + 1);
-            } else {
-              setEcho("Not sent: sign-in is unavailable");
-            }
-            return;
-          }
-          if ((outcome.kind === "accepted" || outcome.kind === "refused") && outcome.dispatchId) {
-            onDispatched(outcome.dispatchId);
-          }
-          if (outcome.kind === "accepted") cleared();
-        },
+    asking.mutate(text, {
+      onSuccess: (r) => {
+        if (r.kind === "reshaped") {
+          if (r.change.kind === "view") redraw(r.change.form);
+          else setReshaped(r.change);
+          if (r.change.kind !== "viewRefused") cleared();
+          return;
+        }
+        const got = r.got;
+        if (got.ok) {
+          setEcho(`Asked${got.seq !== null ? ` (record #${got.seq})` : ""}. What the system does with it appears below as it happens.`);
+          cleared();
+          return;
+        }
+        if (got.signedOut) {
+          // Kept in the box; it goes once the person signs in with their key.
+          void queryClient.invalidateQueries({ queryKey: SESSION_KEY });
+          setPendingAsk(text);
+          setSignInSignal((n) => n + 1);
+          setEcho("Not sent yet: sign in with your key, and your ask goes then.");
+          return;
+        }
+        setEcho(`Not sent: ${got.reason}`);
       },
-    );
+    });
   };
 
   return (
@@ -376,8 +339,6 @@ export function TopBar({
             className="sf-ask-box"
             placeholder={words.placeholder}
             value={goal}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
             onChange={(e) => {
               setGoal(e.target.value);
               fit(e.target);
@@ -397,12 +358,6 @@ export function TopBar({
                   {p}
                 </button>
               ))}
-            </div>
-          ) : null}
-          {focused && goal.trim().length === 0 && context.kind === "new" ? (
-            // mousedown is swallowed so choosing a chip does not blur the box first.
-            <div className="sf-ask-suggest" onMouseDown={(e) => e.preventDefault()}>
-              <StarterChips onInsert={(text) => put(text, true)} />
             </div>
           ) : null}
         </div>
@@ -430,13 +385,6 @@ export function TopBar({
               setPendingAsk(null);
               ask(text);
             }
-            if (!pendingVerdict) return;
-            const said = pendingVerdict.verdict === "achieved" ? "reached" : "not reached";
-            grade.mutate(pendingVerdict, {
-              onSuccess: () => setEcho(`Your verdict on that run: ${said} · recorded as yours`),
-              onError: (e) => setEcho(`Your verdict on that run: ${said} · kept on the run; not recorded: ${(e as Error).message}`),
-            });
-            setPendingVerdict(null);
           }}
         />
         <button
@@ -455,10 +403,10 @@ export function TopBar({
         ) : null}
       </div>
 
-      {dispatch.isError ? (
+      {asking.isError ? (
         <div className="sf-outcome-line" data-tone="error" role="status">
-          <span>Not sent: {(dispatch.error as Error).message}</span>
-          <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => dispatch.reset()}>
+          <span>Not sent: {(asking.error as Error).message}</span>
+          <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => asking.reset()}>
             ×
           </button>
         </div>
@@ -496,9 +444,6 @@ export function TopBar({
         </div>
       ) : null}
       {reshaped ? <OutcomeLine outcome={reshaped} onSuggest={(t) => put(t, false)} onDismiss={() => setReshaped(null)} /> : null}
-      {dispatch.data ? (
-        <OutcomeLine outcome={dispatch.data} onSuggest={(t) => put(t, false)} onDismiss={() => dispatch.reset()} />
-      ) : null}
     </header>
   );
 }

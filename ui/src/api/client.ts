@@ -487,19 +487,22 @@ export function formOfItem(item: ReportItem): ReportForm {
   return typeof (item as { pointer?: unknown }).pointer === "object" && (item as { pointer?: unknown }).pointer !== null ? (item as ReportForm) : { pointer: item as ReportPointer };
 }
 
+/** What a person's row write came to: its record number, or why it was not recorded. */
+export type RowWrite = { ok: true; seq: number | null } | { ok: false; reason: string; signedOut?: true };
+
 /**
- * A person's verdict on a row: an outcome row citing it, written through discovery. The
- * surface sends it under the signed-in person's own key and refuses it signed out
- * (routes/proxy.ts), so the row names the person as its writer.
+ * A row a person writes to records, through discovery. The surface sends it under the
+ * signed-in person's own key and refuses it signed out (routes/proxy.ts), so records names
+ * the person as its writer.
  */
-export async function writeOutcome(rowId: string, r: 0 | 1): Promise<{ ok: true; seq: number | null } | { ok: false; reason: string; signedOut?: true }> {
+async function writeRow(row: Record<string, unknown>): Promise<RowWrite> {
   let res: Response;
   try {
     res = await fetch("/api/discovery/resolve", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ pointer: { type: "record_write", row: { shape: "outcome", r, input_refs: [rowId] } } }),
+      body: JSON.stringify({ pointer: { type: "record_write", row } }),
     });
   } catch {
     return { ok: false, reason: "the surface did not answer" };
@@ -510,6 +513,19 @@ export async function writeOutcome(rowId: string, r: 0 | 1): Promise<{ ok: true;
   if (res.status === 401 && body["error"] === "sign_in_required") return { ok: false, reason: "you are no longer signed in", signedOut: true };
   if (!res.ok || said.length > 0 || body["success"] === false) return { ok: false, reason: [...new Set(said)].join(": ") || `not recorded (${res.status})` };
   return { ok: true, seq: typeof inner?.["seq"] === "number" ? (inner["seq"] as number) : null };
+}
+
+/** A person's verdict on a row: an outcome row citing exactly that row. */
+export function writeOutcome(rowId: string, r: 0 | 1): Promise<RowWrite> {
+  return writeRow({ shape: "outcome", r, input_refs: [rowId] });
+}
+
+/**
+ * A person's ask: one `world_changed` row with their words. Written under their key it is
+ * exogenous, so the walk takes it up from its pool; nothing is dispatched or polled.
+ */
+export function writeAsk(what: string): Promise<RowWrite> {
+  return writeRow({ shape: "world_changed", what, input_refs: [] });
 }
 
 /** A report's answer, or why there is none. `answer` is what the producer returned, uninterpreted. */

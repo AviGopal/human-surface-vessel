@@ -23,7 +23,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   calls.push({ url, body });
   if (url.includes("/api/feedback")) return new Response(JSON.stringify({ resolved: true, body: { filed_gap_id: "ui-feedback-x" } }), { status: 200 });
   if (url.includes("/api/surface-intent")) return new Response(JSON.stringify({ applied: false, unparsed: [] }), { status: 422 });
-  if (url.includes("/api/run-goal")) return new Response(JSON.stringify({ accepted: true, dispatchId: "d-new" }), { status: 202 });
+  if (url.includes("/api/discovery/resolve")) return Response.json({ ok: true, seq: 302 });
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
   return new Response(JSON.stringify({ resolved: true, success: true, body: {} }), { status: 200 });
 }) as typeof fetch;
@@ -66,7 +66,7 @@ async function mount(node: unknown): Promise<HTMLElement> {
   return el;
 }
 const topBar = (props: Record<string, unknown> = {}) =>
-  React.createElement(TopBar, { onDispatched: () => {}, openIssues: null, onToggleIssues: () => {}, issuesOpen: false, ...props });
+  React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false, ...props });
 
 async function type(el: HTMLElement, text: string): Promise<void> {
   const t = el.querySelector("textarea")!;
@@ -97,7 +97,7 @@ describe("the box files a complaint", () => {
     const el = await mount(topBar());
     await type(el, "hard to understand: the dates are unreadable");
     expect(filed().map((c) => c.body)).toEqual([{ panel_id: "the surface", kind: "hard_to_understand", value: "the dates are unreadable" }]);
-    expect(calls.some((c) => c.url.includes("/api/run-goal") || c.url.includes("/api/surface-intent"))).toBe(false);
+    expect(calls.some((c) => c.url.includes("/api/discovery/resolve") || c.url.includes("/api/surface-intent"))).toBe(false);
     expect(el.querySelector(".sf-outcome-line")?.textContent).toBe("Interface issue×");
   });
 
@@ -120,7 +120,7 @@ describe("the box files a complaint", () => {
     const el = await mount(topBar());
     await type(el, "the dates — hard to see: everything");
     expect(filed()).toEqual([]);
-    expect(calls.some((c) => c.url.includes("/api/run-goal"))).toBe(true);
+    expect(calls.find((c) => c.url.includes("/api/discovery/resolve"))?.body).toEqual({ pointer: { type: "record_write", row: { shape: "world_changed", what: "the dates — hard to see: everything", input_refs: [] } } });
   });
 });
 
