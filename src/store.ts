@@ -60,8 +60,8 @@ export interface RunLink {
   solicitationId: string;
   /** ms epoch; null when the asker sent none. */
   deadlineAt: number | null;
-  /** The surface READ the run's walk state and found it running (and, when goal-host
-   *  reports one, waiting on this solicitation). Only a linked question is shown on the run. */
+  /** Whether the question was tied to a run the surface could read. Always false now: no run
+   *  model is read, and the field stays so earlier journal lines load. */
   linked: boolean;
 }
 

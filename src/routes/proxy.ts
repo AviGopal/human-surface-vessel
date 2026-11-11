@@ -1,14 +1,9 @@
 /**
  * The browser proxy — a SECURITY BOUNDARY, not a CORS shim.
  *
- * goal-host-vessel has NO inbound auth of any kind: no middleware, no header
- * check, no 401 path. Any request that reaches port 8210 executes a goal. It
- * also sets no CORS headers at all and 404s preflight. Two consequences drive
- * every decision in this file:
- *
- *   1. The browser must NEVER reach goal-host. Only this vessel talks to it.
- *   2. The API key must NEVER reach the browser. It is injected server-side
- *      here and never echoed into a response body.
+ * The browser reaches other vessels only through this file, and only through
+ * discovery. The API key must NEVER reach the browser: it is injected
+ * server-side here and never echoed into a response body.
  *
  * Other load-bearing properties:
  *
@@ -17,9 +12,8 @@
  *     to the client's poll loop; re-wrapping them destroys information. The
  *     upstream body is streamed through, never parsed and rebuilt.
  *   - Outbound headers are CONSTRUCTED, never forwarded. That strips any
- *     inbound `x-caller-vessel` (which, absent `parent_execution_id`, trips
- *     goal-host's D3 guard and 400s the call) and everything else a hostile
- *     page might try to smuggle.
+ *     inbound `x-caller-vessel` and everything else a hostile page might try
+ *     to smuggle.
  *   - Every call to another vessel goes THROUGH DISCOVERY by shape
  *     (`viaDiscovery`). The surface holds no producer's address and reads none
  *     from the registry.
@@ -318,8 +312,7 @@ async function rawBodyOf(c: { req: { text: () => Promise<string> } }): Promise<s
 export const proxyRouter = new Hono();
 
 /**
- * Preflight is handled here because goal-host 404s OPTIONS. Every /api/* path
- * answers preflight, including ones that do not exist upstream — a 404 on
+ * Preflight is answered here, not by any producer. Every /api/* path answers preflight, including ones that do not exist upstream — a 404 on
  * preflight reads to a browser as a CORS failure, not a routing error.
  */
 proxyRouter.options("/api/*", (c) =>
@@ -719,8 +712,7 @@ proxyRouter.get("/api/ui-view", (c) => {
  * HTTP, and that is the security-boundary decision this file exists to make:
  * a self-loopback would either need the API key in a request the browser can
  * see the shape of, or would have to trust an address the vessel advertises but
- * cannot always dial (goal-host hit exactly that wall from outside the
- * container). Calling the parser directly keeps the key server-side by
+ * cannot always dial. Calling the parser directly keeps the key server-side by
  * construction — there is no outbound request to attach it to.
  *
  * `text` is the ONLY input accepted. The browser never sends a policy patch:

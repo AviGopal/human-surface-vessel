@@ -507,7 +507,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       }
 
       // (3) A new panel or question must carry something. A blank question is a
-      // demand on a person's attention with nothing in it, and goal-host reads a 200
+      // demand on a person's attention with nothing in it, and an asker reads a 200
       // as "asked". A blank panel is the same hollow write: no flow creates a panel
       // empty and fills it later (every writer sends its content in the first write),
       // so an empty one is only ever a defaulted step's side effect, and it was kept
@@ -562,7 +562,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         return c.json({ resolved: false, success: false, shape: type, error: "solicitation_id is required" }, 400);
       }
       const dispatchId = optStr(pointer, "dispatch_id") ?? optStr(pointer, "dispatchId") ?? null;
-      // The brief is what the asker wrote (a shaped brief, or goal-host's markdown today).
+      // The brief is what the asker wrote (a shaped brief, or markdown).
       const brief = Object.hasOwn(pointer, "brief") ? pointer["brief"] : (pointer["question_markdown"] ?? "");
       const deadlineAt =
         optNum(pointer, "deadline_at") ??

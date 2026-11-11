@@ -10,7 +10,7 @@ import { getRenderPolicy } from "./store.ts";
  *
  * Responsibilities:
  *   - serve the seven inherited shapes at /v2/impulses/resolve
- *   - proxy the browser to goal-host and discovery, injecting auth server-side
+ *   - proxy the browser's reads to discovery, injecting auth server-side
  *     (see routes/proxy.ts — that file is a security boundary)
  *   - serve the built UI from ../ui/dist
  *   - register flat with discovery, re-registering as its own heartbeat
