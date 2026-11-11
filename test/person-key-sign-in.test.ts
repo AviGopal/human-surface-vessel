@@ -118,6 +118,16 @@ describe("the page's discovery path: reads under the node's key, writes under th
     expect(sent[0]!.body).toEqual({ pointer: OUTCOME });
   });
 
+  test("must-fail: a mutating primitive not named `_write` is a write too: refused signed out, never under the node's key", async () => {
+    const commit = { type: "git_commit", message: "x" };
+    expect((await post("/api/discovery/resolve", { pointer: commit })).status).toBe(401);
+    expect(toDiscovery()).toEqual([]);
+    const cookie = cookieOf(await post("/api/session/key", { key: PERSON_KEY }));
+    calls.length = 0;
+    await post("/api/discovery/resolve", { pointer: commit }, cookie);
+    expect(toDiscovery().map((c) => c.auth)).toEqual([`ApiKey ${PERSON_KEY}`]);
+  });
+
   test("a read goes under the node's key, signed in or not", async () => {
     const cookie = cookieOf(await post("/api/session/key", { key: PERSON_KEY }));
     calls.length = 0;
