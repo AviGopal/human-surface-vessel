@@ -1442,7 +1442,8 @@ body { overflow: hidden; }
 .sf-app {
   height: 100dvh;
   display: grid;
-  grid-template-columns: minmax(17rem, 24rem) minmax(0, 1fr);
+  /* The rail is a list of names: it takes a fifth of a desk, never the content's room. */
+  grid-template-columns: clamp(13rem, 20vw, 18rem) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "top  top"
@@ -2054,8 +2055,9 @@ body { overflow: hidden; }
 .sf-verdict-chips { display: flex; flex-wrap: wrap; gap: var(--sf-space-2); align-items: center; }
 
 /* The landing: the blocks its view names, in order (components/Landing.tsx). */
-.sf-landing { display: flex; flex-direction: column; }
-.sf-mark { align-self: flex-end; margin: var(--sf-space-1) var(--sf-space-2) 0; font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
+/* One reading column, centred in the pane it is given; its mark sits at its own edge. */
+.sf-landing { display: flex; flex-direction: column; width: 100%; max-width: 50rem; margin-inline: auto; padding-inline: var(--sf-space-4); box-sizing: border-box; }
+.sf-mark { align-self: flex-end; margin: var(--sf-space-1) 0 0; font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
 .sf-mark > summary { list-style: none; cursor: help; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid var(--sf-rule-strong); border-radius: 50%; font-weight: 600; }
 .sf-mark > summary::-webkit-details-marker { display: none; }
 .sf-mark[data-fell-back] > summary { color: var(--sf-waiting); background: var(--sf-waiting-bg); border-color: var(--sf-waiting); }
@@ -2082,8 +2084,8 @@ body { overflow: hidden; }
 .sf-brief-source { opacity: 0.7; font-size: var(--sf-text-xs); }
 .sf-brief-options { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0; }
 /* The landing reads as one column, in the order its view names. */
-.sf-landing .sf-sign-in-to-judge { padding: 0 var(--sf-space-4) var(--sf-space-2); }
-.sf-landing .sf-reports { grid-template-columns: minmax(0, 1fr); max-width: 48rem; padding: 0 var(--sf-space-4) var(--sf-space-6); }
+.sf-landing .sf-sign-in-to-judge { padding: 0 0 var(--sf-space-2); }
+.sf-landing .sf-reports { grid-template-columns: minmax(0, 1fr); padding: 0 0 var(--sf-space-6); }
 .sf-reports { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sf-space-3); }
 .sf-report { display: flex; flex-direction: column; gap: var(--sf-space-2); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); min-width: 0; }
 .sf-report-title { margin: 0; font-size: var(--sf-text-sm); font-weight: 600; color: var(--sf-ink); }
@@ -2106,6 +2108,13 @@ body { overflow: hidden; }
 .sf-row-prose { white-space: normal; }
 .sf-row-prose > .sf-prose { font: inherit; color: inherit; max-width: none; }
 .sf-row-prose > .sf-prose > :last-child { margin-bottom: 0; }
+/* A row's time, its details and the person's verdict share one line; what opens takes the
+   full width under it. */
+.sf-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-1) var(--sf-space-3); min-width: 0; }
+.sf-row-meta > .sf-row-details { order: 1; }
+.sf-row-meta > .sf-row-judge { order: 2; margin-left: auto; justify-content: flex-end; }
+.sf-row-meta > .sf-row-details[open] { order: 3; flex-basis: 100%; }
+.sf-row-meta > .sf-row-system-grade { order: 4; flex-basis: 100%; }
 .sf-row-time { margin: 0; font-size: var(--sf-text-sm); }
 .sf-row-details > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-row-details[open] > summary { margin-bottom: var(--sf-space-1); }

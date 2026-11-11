@@ -260,19 +260,21 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
             ) : (
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
-            {time ? <p className="sf-muted sf-row-time">{time}</p> : null}
-            <details className="sf-row-details">
-              <summary>details</summary>
-              <dl className="sf-row-fields">
-                {Object.entries(o).map(([k, v]) => (
-                  <div key={k} className="sf-row-field">
-                    <dt>{k.replace(/_/g, " ")}</dt>
-                    <dd>{fieldText(v)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </details>
-            {judge && id ? <Judge rowId={id} graded={entry.graded} reading={reading} /> : null}
+            <div className="sf-row-meta">
+              {time ? <p className="sf-muted sf-row-time">{time}</p> : null}
+              <details className="sf-row-details">
+                <summary>details</summary>
+                <dl className="sf-row-fields">
+                  {Object.entries(o).map(([k, v]) => (
+                    <div key={k} className="sf-row-field">
+                      <dt>{k.replace(/_/g, " ")}</dt>
+                      <dd>{fieldText(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </details>
+              {judge && id ? <Judge rowId={id} graded={entry.graded} reading={reading} /> : null}
+            </div>
             {entry.thread && id ? <Thread entry={entry.thread} rowId={id} reading={reading} /> : null}
           </li>
         );
