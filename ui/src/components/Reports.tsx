@@ -217,6 +217,52 @@ function when(t: unknown): string | null {
   return Number.isNaN(d.getTime()) ? t : d.toLocaleString(undefined, WHEN);
 }
 
+/** An instant as an ISO string, and an identifier as a long run of hex or a UUID: what a value is, never which field holds it. */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+const HEX_ID = /^(?:[0-9a-f]{16,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/;
+
+/** An id drawn as a short mark: the whole id is the element's text, so selecting it copies all of it; the style clips it. */
+function ShortId({ id }: { id: string }): ReactNode {
+  return (
+    <code className="sf-row-id" title={id}>
+      {id}
+    </code>
+  );
+}
+
+/**
+ * One field's value in a row's details, drawn by what it is: an instant in the reader's zone (the
+ * exact value on hover), an id as a short mark, several ids as their count folded over their marks,
+ * an empty list as "none", anything else as its text.
+ */
+function FieldValue({ v }: { v: unknown }): ReactNode {
+  if (typeof v === "string" && ISO_INSTANT.test(v) && !Number.isNaN(Date.parse(v))) {
+    return (
+      <time dateTime={v} title={v}>
+        {when(v)}
+      </time>
+    );
+  }
+  if (typeof v === "string" && HEX_ID.test(v)) return <ShortId id={v} />;
+  if (Array.isArray(v) && v.length === 0) return <span className="sf-muted">none</span>;
+  if (Array.isArray(v) && v.every((x) => typeof x === "string" && HEX_ID.test(x))) {
+    const ids = v as string[];
+    if (ids.length === 1) return <ShortId id={ids[0]!} />;
+    // Many ids are a count first: a walk's answer can cite a hundred rows.
+    return (
+      <details className="sf-row-ids-fold">
+        <summary>{`${ids.length} ids`}</summary>
+        <span className="sf-row-ids">
+          {ids.map((x, i) => (
+            <ShortId key={i} id={x} />
+          ))}
+        </span>
+      </details>
+    );
+  }
+  return fieldText(v);
+}
+
 /**
  * A row's time as an age ("12m ago"), the exact instant with its zone on hover and in the DOM, so
  * it takes a few characters of the row's line and can still be lined up with times elsewhere.
@@ -290,7 +336,9 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
                   {Object.entries(o).map(([k, v]) => (
                     <div key={k} className="sf-row-field">
                       <dt>{k.replace(/_/g, " ")}</dt>
-                      <dd>{fieldText(v)}</dd>
+                      <dd>
+                        <FieldValue v={v} />
+                      </dd>
                     </div>
                   ))}
                 </dl>
