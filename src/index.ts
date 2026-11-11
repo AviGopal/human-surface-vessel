@@ -153,7 +153,8 @@ app.get("/api/stream", (c) => {
       };
       send({ event: "hello", data: { vesselId: VESSEL_ID, ts: Date.now() } });
       const unsubscribe = subscribe(send);
-      const keepalive = setInterval(() => send({ event: "ping", data: Date.now() }), 25_000);
+      // Under the server's idle timeout by construction, so the two cannot drift apart.
+      const keepalive = setInterval(() => send({ event: "ping", data: Date.now() }), (SERVER_IDLE_TIMEOUT_S * 1000 * 5) / 6);
       const onClose = (): void => {
         clearInterval(keepalive);
         unsubscribe();
