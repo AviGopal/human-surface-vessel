@@ -204,6 +204,8 @@ export type ViewEntry = {
   readonly words?: readonly string[];
   /** One further read drawn under each row, bound to its id through ROW_BINDING; it holds no thread itself. */
   readonly thread?: ViewEntry;
+  /** Draw the rows `show` kept in reverse of the producer's order. */
+  readonly newest?: true;
 };
 
 /** What a person's row write came to: its record number and id, or why it was not recorded. */

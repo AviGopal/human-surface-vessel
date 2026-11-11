@@ -138,14 +138,16 @@ function Judge({ rowId }: { rowId: string }): ReactNode {
 
 /**
  * The rows an entry draws: the answer, or the field of it the entry names, and with `show`
- * only the last n in the order the producer returned them. Null when there are no rows to
+ * only the last n in the order the producer returned them; with `newest`, those n reversed, on a
+ * copy, so the cut stays the producer's. Null when there are no rows to
  * draw, with what was found instead.
  */
-export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show">): { rows: readonly unknown[]; total: number } | { missing: string } {
+export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show" | "newest">): { rows: readonly unknown[]; total: number } | { missing: string } {
   const at = entry.field === undefined ? answer : typeof answer === "object" && answer !== null && !Array.isArray(answer) ? (answer as Record<string, unknown>)[entry.field] : undefined;
   if (at === undefined || at === null) return { missing: entry.field === undefined ? "answered with nothing" : `the answer has no ${entry.field}` };
   const all = Array.isArray(at) ? at : [at];
-  return { rows: entry.show === undefined ? all : all.slice(-entry.show), total: all.length };
+  const kept = entry.show === undefined ? all : all.slice(-entry.show);
+  return { rows: entry.newest ? [...kept].reverse() : kept, total: all.length };
 }
 
 /** A row's time as the person's clock reads it; the producer's text when it is not a time. */
@@ -281,7 +283,7 @@ function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; 
   if (got.rows.length === 0) return <p className="sf-muted sf-report-note">{emptyReasonOf(answer) ?? entry.empty ?? "answered with no rows"}</p>;
   return (
     <>
-      {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the last {got.rows.length} of {got.total}</p> : null}
+      {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the {entry.newest ? "newest" : "last"} {got.rows.length} of {got.total}</p> : null}
       {entry.form === "questions" ? <Questions rows={got.rows} onOpen={reading.onOpenQuestion} /> : <Rows rows={got.rows} entry={entry} reading={reading} />}
     </>
   );
