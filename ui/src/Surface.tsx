@@ -58,6 +58,11 @@ function Workbench(): ReactNode {
   const open = questionId ? (questions.query.data?.questions.find((q) => q.id === questionId && q.run !== undefined && !q.answered && !q.declined) ?? null) : null;
   const context = boxContext(open, open?.title ?? null, setAside);
 
+  const narrow = useNarrow();
+  const [railOpen, setRailOpen] = useState<boolean | null>(null);
+  const railFolded = narrow && !(railOpen ?? questions.waiting > 0);
+  const waitingCount = questions.waiting > 0 ? <span className="sf-count" data-attention="true">{questions.waiting}</span> : null;
+
   const openQuestion = (id: string): void => {
     setIssuesOpen(false);
     void navigate({ to: "/question/$questionId", params: { questionId: id } });
@@ -75,11 +80,20 @@ function Workbench(): ReactNode {
         onToggleIssues={() => setIssuesOpen((v) => !v)}
       />
 
-      <nav className="sf-rail" aria-label="Questions">
+      <nav className="sf-rail" aria-label="Questions" data-folded={railFolded ? "" : undefined}>
         <h2 className="sf-rail-head">
-          Questions{questions.waiting > 0 ? <span className="sf-count" data-attention="true">{questions.waiting}</span> : null}
+          {narrow ? (
+            // On a phone the rail is one line until opened, unless something waits on the person.
+            <button type="button" className="sf-rail-toggle" aria-expanded={!railFolded} aria-controls="sf-rail-list" onClick={() => setRailOpen(railFolded)}>
+              Questions{waitingCount}
+            </button>
+          ) : (
+            <>Questions{waitingCount}</>
+          )}
         </h2>
-        <QuestionsList selectedId={questionId} onSelect={openQuestion} />
+        <div id="sf-rail-list" className="sf-rail-list" hidden={railFolded}>
+          <QuestionsList selectedId={questionId} onSelect={openQuestion} />
+        </div>
       </nav>
 
       <main className="sf-main">
@@ -98,6 +112,21 @@ function Workbench(): ReactNode {
       {issuesOpen ? <IssuesDrawer onClose={closeIssues} /> : null}
     </div>
   );
+}
+
+/** Whether the page is at phone width, the width at which the rail becomes a band (styles.css). */
+const NARROW = "(max-width: 760px)";
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() => typeof window.matchMedia === "function" && window.matchMedia(NARROW).matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const q = window.matchMedia(NARROW);
+    const on = (): void => setNarrow(q.matches);
+    on();
+    q.addEventListener("change", on);
+    return () => q.removeEventListener("change", on);
+  }, []);
+  return narrow;
 }
 
 export function Surface(): ReactNode {
