@@ -255,7 +255,8 @@ const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:?\d\d)?$
 const EPOCH_KEY = /(^|_)(at|time|ts)$|At$|Ms$/;
 const URL_VALUE = /^https?:\/\/[^\s]+$/;
 
-function relative(ms: number): string {
+/** How long ago (or how soon) an instant is, as a reader places it: "12m ago". */
+export function relative(ms: number): string {
   const d = Date.now() - ms;
   const a = Math.abs(d);
   const s = Math.round(a / 1000);

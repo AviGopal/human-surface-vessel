@@ -30,6 +30,7 @@ import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
 import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
 import { Prose } from "./Prose";
+import { relative } from "./ContentRender";
 
 /** Where the owners' declarations of a row's words are read: records' `shape_description` rows. */
 const DECLARATIONS = { type: "record_read", shape: "shape_description" } as const;
@@ -217,6 +218,21 @@ function when(t: unknown): string | null {
 }
 
 /**
+ * A row's time as an age ("12m ago"), the exact instant with its zone on hover and in the DOM, so
+ * it takes a few characters of the row's line and can still be lined up with times elsewhere.
+ */
+function RowTime({ t, full }: { t: string; full: string }): ReactNode {
+  const ms = Date.parse(t);
+  return Number.isNaN(ms) ? (
+    <p className="sf-muted sf-row-time">{full}</p>
+  ) : (
+    <time className="sf-muted sf-row-time" dateTime={t} title={full}>
+      {relative(ms)}
+    </time>
+  );
+}
+
+/**
  * One declared field as words: text as its writer formatted it, line breaks kept, through Prose,
  * which builds elements and draws markup and links as text; any other value as one line with its field's name.
  */
@@ -267,7 +283,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
             <div className="sf-row-meta">
-              {time ? <p className="sf-muted sf-row-time">{time}</p> : null}
+              {time ? <RowTime t={o["t"] as string} full={time} /> : null}
               <details className="sf-row-details">
                 <summary>details</summary>
                 <dl className="sf-row-fields">

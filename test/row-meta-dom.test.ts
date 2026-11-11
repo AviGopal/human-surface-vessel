@@ -11,7 +11,7 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
 import { DEFAULT_VIEWS } from "../src/ui-views.ts";
 
@@ -54,6 +54,7 @@ const { Entries } = await import("../ui/src/components/Reports");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
+  setSystemTime();
   await teardownDom();
 });
 beforeEach(() => {
@@ -84,6 +85,17 @@ describe("a row's time, details and verdict share one line", () => {
     expect(meta).toBeDefined();
     expect([...meta.children].map((c) => c.className.split(" ").find((n) => n.startsWith("sf-row-")))).toEqual(["sf-row-time", "sf-row-details", "sf-row-judge"]);
     expect([...meta.children].some((c) => c.getAttribute("role") === "group")).toBe(true);
+  });
+
+  test("must-fail: the time on that line is an age, the exact instant with its zone on hover", async () => {
+    setSystemTime(new Date("2026-11-11T13:46:30.000Z"));
+    const el = await mount([answered]);
+    setSystemTime();
+    const time = row(el).querySelector(".sf-row-time")!;
+    expect(time.tagName).toBe("TIME");
+    expect(time.textContent).toBe("12m ago");
+    expect(time.getAttribute("dateTime")).toBe(ANSWER.t);
+    expect(time.getAttribute("title")).toMatch(/2026.*(\d:\d\d|[AP]M) (UTC|GMT([+-]\d{1,2}(:\d\d)?)?|[A-Z]{3,5})$/);
   });
 
   test("must-fail: after a verdict the system's grade joins that line, outside the verdict group", async () => {

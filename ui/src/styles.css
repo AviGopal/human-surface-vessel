@@ -2133,6 +2133,12 @@ body { overflow: hidden; }
 .sf-row-time { margin: 0; font-size: var(--sf-text-sm); }
 /* A row of an entry that declares a thread (an ask) reads above the rows under it (its replies). */
 .sf-row-parent > .sf-row-words { font-weight: 600; }
+/* A row with a thread under it carries its time and details at the end of its words' line; what opens, and the thread, take the full width. */
+.sf-row-parent { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sf-space-3); align-items: baseline; }
+.sf-row-parent > .sf-row-meta { grid-column: 2; grid-row: 1; justify-content: flex-end; }
+.sf-row-parent > .sf-row-meta:has(> .sf-row-details[open]) { grid-column: 1 / -1; grid-row: auto; }
+.sf-row-parent > .sf-row-words, .sf-row-parent > .sf-thread { grid-column: 1 / -1; }
+.sf-row-parent > .sf-row-words:first-child { grid-column: 1; }
 .sf-earlier > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-earlier[open] > summary { margin-bottom: var(--sf-space-2); }
 .sf-row-details > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }

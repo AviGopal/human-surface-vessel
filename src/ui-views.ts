@@ -133,7 +133,8 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
-        show: 5,
+        // Three, so the folded reads under the asks start on the first screen; the rest are "N earlier".
+        show: 3,
         newest: true,
         title: "What people asked",
         words: ["what"],
