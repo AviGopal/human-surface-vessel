@@ -50,6 +50,14 @@ export type QuestionClass = "ask" | "notice" | "settled" | "unread" | "malformed
 
 const UNRENDERED = /\{\{[^}]*\}\}/;
 
+/**
+ * Whether a naming text is still a template placeholder its writer never filled ("{{goal.id}}").
+ * The one predicate: the reader classes such a question malformed, and the write doors refuse it.
+ */
+export function isUnfilledTemplate(text: string): boolean {
+  return UNRENDERED.test(text);
+}
+
 function bodyText(question: Pick<ClassifiableQuestion, "body">): string {
   if (typeof question.body === "string") return question.body;
   if (question.body === null || question.body === undefined) return "";
@@ -58,7 +66,7 @@ function bodyText(question: Pick<ClassifiableQuestion, "body">): string {
 
 /** Why a question gives a person nothing to act on, or null when it does not fail that way. */
 export function malformedReason(question: ClassifiableQuestion): "unrendered_template" | "empty" | null {
-  if (UNRENDERED.test(question.id) || UNRENDERED.test(question.title) || UNRENDERED.test(question.kind ?? "")) return "unrendered_template";
+  if (isUnfilledTemplate(question.id) || isUnfilledTemplate(question.title) || isUnfilledTemplate(question.kind ?? "")) return "unrendered_template";
   const text = bodyText(question).trim();
   const empty = text === "" || text === "{}";
   if (empty && !(question.asks && question.asks.length > 0) && question.run?.linked !== true) return "empty";

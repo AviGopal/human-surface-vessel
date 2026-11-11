@@ -16,16 +16,17 @@ export function emptyRefusals(): { uiPanel_write: number; uiQuestion_write: numb
 }
 
 /**
- * Writes the panel door refused because a naming field (id, kind, title, importance) was still a
- * template placeholder, "{{goal.id}}": a writer whose bindings never resolved. Counted per shape
+ * Writes the question doors refused because a naming field (a panel's id, kind, title or
+ * importance; human_input's solicitation_id or dispatch_id) was still a template placeholder, "{{goal.id}}": a writer whose bindings never resolved. Counted per shape
  * since this process started, beside the empty refusals, so such a writer is visible without logs.
  */
-const templateCounts: Record<"uiPanel_write" | "uiQuestion_write", number> = { uiPanel_write: 0, uiQuestion_write: 0 };
+type TemplateDoor = "uiPanel_write" | "uiQuestion_write" | "human_input";
+const templateCounts: Record<TemplateDoor, number> = { uiPanel_write: 0, uiQuestion_write: 0, human_input: 0 };
 
-export function countTemplateRefusal(shape: "uiPanel_write" | "uiQuestion_write"): void {
+export function countTemplateRefusal(shape: TemplateDoor): void {
   templateCounts[shape] += 1;
 }
 
-export function templateRefusals(): { uiPanel_write: number; uiQuestion_write: number; since: number } {
+export function templateRefusals(): { uiPanel_write: number; uiQuestion_write: number; human_input: number; since: number } {
   return { ...templateCounts, since };
 }

@@ -147,7 +147,7 @@ export interface UiViewReport {
   /** New panels and questions refused for carrying nothing, per shape, since `since` (src/write-refusals.ts). */
   refused_empty_writes: { uiPanel_write: number; uiQuestion_write: number; since: number };
   /** Panels and questions refused for a naming field still a template placeholder, per shape, since `since`. */
-  refused_template_writes: { uiPanel_write: number; uiQuestion_write: number; since: number };
+  refused_template_writes: { uiPanel_write: number; uiQuestion_write: number; human_input: number; since: number };
 }
 
 export interface RegionView {

@@ -41,7 +41,7 @@ import {
 import { explainRanking, rankPanels, type ImportanceWeights } from "../importance.ts";
 import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.ts";
 import { knownGapStatus, listedShapes, refreshGapStatuses } from "./proxy.ts";
-import { classifyQuestion, gapIdForPanel, type QuestionClass } from "../question-class.ts";
+import { classifyQuestion, gapIdForPanel, isUnfilledTemplate, type QuestionClass } from "../question-class.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
@@ -103,8 +103,6 @@ function optPosition(p: Pointer): { x: number; y: number } | undefined {
 const PANEL_CONTENT_KEYS = ["title", "body", "kind", "importance", "asks", "visibility", "reader"] as const;
 /** The fields that name a panel or question; a template placeholder in one is refused. */
 const PLACEHOLDER_FIELDS = ["id", "kind", "title", "importance"] as const;
-/** A template placeholder its writer never filled: "{{goal.id}}", "{{ run.title }}". */
-const PLACEHOLDER = /\{\{\s*[\w$.-]+\s*\}\}/;
 
 /** Why a questions read served none, in the person's words. */
 function emptyReason(open: boolean, discoveryAnswered: boolean, classes: Record<QuestionClass, number>): string {
@@ -444,7 +442,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       // writer whose bindings never resolved: stored, it is a question titled with a
       // placeholder, ranked like any other, and every later write with the same unfilled
       // id lands on that one row. The body is the writer's content and may quote one.
-      const unfilled = PLACEHOLDER_FIELDS.find((k) => typeof pointer[k] === "string" && PLACEHOLDER.test(pointer[k] as string));
+      const unfilled = PLACEHOLDER_FIELDS.find((k) => typeof pointer[k] === "string" && isUnfilledTemplate(pointer[k] as string));
       if (unfilled) {
         countTemplateRefusal(type);
         return c.json({
@@ -541,6 +539,18 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         return c.json({ resolved: false, success: false, shape: type, error: "solicitation_id is required" }, 400);
       }
       const dispatchId = optStr(pointer, "dispatch_id") ?? optStr(pointer, "dispatchId") ?? null;
+      // An unfilled template names the stored question ("solicitation-{{goal.id}}"), so it is
+      // refused as the panel door refuses one. The brief, and the title read off it, are content.
+      const unfilled = ([["solicitation_id", solicitationId], ["dispatch_id", dispatchId]] as const).find(([, v]) => v !== null && isUnfilledTemplate(v));
+      if (unfilled) {
+        countTemplateRefusal(type);
+        return c.json({
+          resolved: false,
+          success: false,
+          shape: type,
+          error: `unfilled template refused: ${unfilled[0]} is ${JSON.stringify(unfilled[1])}, a placeholder its writer never filled. Nothing was written. Fill the template's bindings before writing.`,
+        }, 422);
+      }
       // The brief is what the asker wrote (a shaped brief, or markdown).
       const brief = Object.hasOwn(pointer, "brief") ? pointer["brief"] : (pointer["question_markdown"] ?? "");
       const deadlineAt =
