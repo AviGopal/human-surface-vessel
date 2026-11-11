@@ -13,10 +13,12 @@
  * each row offers a person's verdict, outside the fold, written as an outcome row citing it
  * under their own key.
  * `questions`: each row is a question this surface holds, opened on selection.
+ * An entry's `thread` is read again under each row it draws, bound to that row's id, and drawn
+ * as its own entry: a person's ask shows the rows citing it. One level; the rows are its read's.
  */
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { writeOutcome, type ReportAnswer, type ViewEntry } from "../api/client";
+import { bind, ROW_BINDING, writeOutcome, type ReportAnswer, type ViewEntry } from "../api/client";
 import { useReport } from "../api/queries";
 import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
@@ -158,13 +160,34 @@ function word(k: string, v: unknown): string {
   return typeof v === "string" ? v : `${k.replace(/_/g, " ")} ${fieldText(v)}`;
 }
 
-function Rows({ rows, judge, entryWords, declared }: { rows: readonly unknown[]; judge: boolean; entryWords: readonly string[] | undefined; declared: ReadonlyMap<string, readonly string[]> }): ReactNode {
+type Reading = { declared: ReadonlyMap<string, readonly string[]>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void };
+
+/** An entry's thread under one row: its read, bound to the row's id, drawn as its own entry. */
+function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; reading: Reading }): ReactNode {
+  const pointer = bind(entry.pointer, ROW_BINDING, rowId);
+  const q = useReport(pointer, { enabled: reading.enabled, intervalMs: reading.intervalMs });
+  const a: ReportAnswer | undefined = q.data;
+  return (
+    <div className="sf-thread" data-thread-of={rowId}>
+      {!a ? (
+        <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>
+      ) : !a.ok ? (
+        <p className="sf-muted sf-report-note">no answer: {a.reason}</p>
+      ) : (
+        <Drawn entry={entry} answer={a.answer} reading={reading} />
+      )}
+    </div>
+  );
+}
+
+function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewEntry; reading: Reading }): ReactNode {
+  const judge = entry.judge === "outcome";
   return (
     <ol className="sf-rows">
       {rows.map((row, i) => {
         const o: Record<string, unknown> = typeof row === "object" && row !== null && !Array.isArray(row) ? (row as Record<string, unknown>) : { value: row };
         const id = typeof o["id"] === "string" ? (o["id"] as string) : null;
-        const words = rowWords(o, wordsFor(o["shape"], declared, entryWords)).map((w) => word(w.field, w.value));
+        const words = rowWords(o, wordsFor(o["shape"], reading.declared, entry.words)).map((w) => word(w.field, w.value));
         const time = when(o["t"]);
         return (
           <li key={id ?? i} className="sf-row" data-row={id ?? undefined}>
@@ -190,6 +213,7 @@ function Rows({ rows, judge, entryWords, declared }: { rows: readonly unknown[];
               </dl>
             </details>
             {judge && id ? <Judge rowId={id} /> : null}
+            {entry.thread && id ? <Thread entry={entry.thread} rowId={id} reading={reading} /> : null}
           </li>
         );
       })}
@@ -250,7 +274,7 @@ function emptyReasonOf(answer: unknown): string | null {
 }
 
 /** The answer drawn in the entry's form, or what was found instead of rows. */
-function Drawn({ entry, answer, declared, onOpenQuestion }: { entry: ViewEntry; answer: unknown; declared: ReadonlyMap<string, readonly string[]>; onOpenQuestion: (id: string) => void }): ReactNode {
+function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; reading: Reading }): ReactNode {
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
@@ -258,20 +282,20 @@ function Drawn({ entry, answer, declared, onOpenQuestion }: { entry: ViewEntry; 
   return (
     <>
       {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the last {got.rows.length} of {got.total}</p> : null}
-      {entry.form === "questions" ? <Questions rows={got.rows} onOpen={onOpenQuestion} /> : <Rows rows={got.rows} judge={entry.judge === "outcome"} entryWords={entry.words} declared={declared} />}
+      {entry.form === "questions" ? <Questions rows={got.rows} onOpen={reading.onOpenQuestion} /> : <Rows rows={got.rows} entry={entry} reading={reading} />}
     </>
   );
 }
 
-function Entry({ entry, declared, enabled, intervalMs, onOpenQuestion }: { entry: ViewEntry; declared: ReadonlyMap<string, readonly string[]>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void }): ReactNode {
+function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): ReactNode {
   const pointer = entry.pointer;
-  const q = useReport(pointer, { enabled, intervalMs });
+  const q = useReport(pointer, { enabled: reading.enabled, intervalMs: reading.intervalMs });
   const title = entry.title ?? reportTitle(pointer.type);
   const a: ReportAnswer | undefined = q.data;
   let inner: ReactNode;
   if (!a) inner = <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>;
   else if (!a.ok) inner = <p className="sf-muted sf-report-note">no answer: {a.reason}</p>;
-  else inner = <Drawn entry={entry} answer={a.answer} declared={declared} onOpenQuestion={onOpenQuestion} />;
+  else inner = <Drawn entry={entry} answer={a.answer} reading={reading} />;
   return (
     <section className="sf-report" data-report={pointer.type} data-form={entry.form} aria-label={title}>
       <h2 className="sf-report-title">{title}</h2>
@@ -294,10 +318,11 @@ export function Entries({
   // Read on the entries' cadence, so a declaration an owner writes later moves what is shown with no reload.
   const declarations = useReport(DECLARATIONS, { enabled, intervalMs }).data;
   const declared = declarations?.ok ? declaredWords(declarations.answer) : new Map<string, readonly string[]>();
+  const reading: Reading = { declared, enabled, intervalMs, onOpenQuestion };
   return (
     <div className="sf-reports">
       {entries.map((e) => (
-        <Entry key={JSON.stringify(e.pointer)} entry={e} declared={declared} enabled={enabled} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} />
+        <Entry key={JSON.stringify(e.pointer)} entry={e} reading={reading} />
       ))}
     </div>
   );

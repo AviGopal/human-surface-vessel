@@ -29,6 +29,11 @@ import { FIELD_NAME, MAX_WORDS, wordFields } from "./row-words.ts";
  */
 export const VIEW_REGIONS = ["landing", "ask"] as const;
 export const ASK_BINDING = "$ask";
+/**
+ * In an entry's `thread`, a pointer argument written as ROW_BINDING stands for the id of the row
+ * the thread is drawn under: the one value the page knows per row and a view's writer cannot.
+ */
+export const ROW_BINDING = "$row";
 
 export type ViewRegion = (typeof VIEW_REGIONS)[number];
 
@@ -58,6 +63,10 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * `words` names the fields that hold a row's words, in order, for a row whose shape has no
  * `shape_description` row declaring them (the owner's declaration comes first); a row with
  * neither is drawn as its shape and time, every field folded.
+ * `thread` is one further read drawn under each row (form "rows" only), its pointer bound to
+ * that row's id through ROW_BINDING: a person's ask shows what cites it. It is an entry itself,
+ * with its own `show` (the per-row limit), `words`, `judge` and `empty`, and holds no thread of
+ * its own: one level. Which rows it holds is its pointer's, so the producer's.
  */
 export type ViewEntry = {
   readonly pointer: ReportPointer;
@@ -68,6 +77,7 @@ export type ViewEntry = {
   readonly judge?: "outcome";
   readonly empty?: string;
   readonly words?: readonly string[];
+  readonly thread?: ViewEntry;
 };
 
 /** How many entries one view may name, and how many rows `show` may ask for. */
@@ -86,7 +96,16 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
   landing: {
     entries: [
       { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you" },
-      { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", show: 10, title: "What people asked", words: ["what"] },
+      {
+        pointer: { type: "record_read", shape: "world_changed" },
+        form: "rows",
+        show: 10,
+        title: "What people asked",
+        words: ["what"],
+        // Under each ask, its answers: a read records filters by shape, not a choice the page makes.
+        // Dropping `shape` draws the whole thread of rows citing the ask.
+        thread: { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 3, words: ["text"], judge: "outcome", empty: "Not answered yet." },
+      },
       { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, judge: "outcome", title: "What the walk answered", words: ["text"] },
       { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, title: "What failed" },
       { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, title: "Verdicts and outcomes", words: ["r"] },
@@ -113,12 +132,13 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names]}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
     `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows; ` +
     `words names the fields drawn as a row's words when its shape's shape_description row (records, written by the owner) names none in its own words field; ` +
-    `a row with neither is drawn as its shape and time, every other field folded under details. ` +
+    `a row with neither is drawn as its shape and time, every other field folded under details; ` +
+    `thread (rows only) is read again under each row, its pointer argument "${ROW_BINDING}" replaced by that row's id, and drawn as its own entry, one level deep. ` +
     `region ask is drawn under the box after a person's ask; there a pointer argument "${ASK_BINDING}" is replaced by the id of that ask's row`;
   const defaults = contract.regions
     .map((r) => `default ${r}: ${(contract.defaults[r]?.entries ?? []).map((e) => e.title ?? e.pointer.type).join(", ")}`)
@@ -248,12 +268,16 @@ function load(): void {
 }
 
 /** One entry as written, or why it is not one. */
-function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
+function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail: string } {
   if (typeof e !== "object" || e === null || Array.isArray(e)) return { detail: "each entry is {pointer, form}" };
-  const { pointer, form, title, field, show, judge, empty, words, ...rest } = e as Record<string, unknown>;
-  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge, empty and words only` };
+  const { pointer, form, title, field, show, judge, empty, words, thread, ...rest } = e as Record<string, unknown>;
+  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge, empty, words and thread only` };
   const got = pointerOf(pointer);
   if ("detail" in got) return got;
+  const bound = Object.values(got.pointer).includes(ROW_BINDING);
+  if (inThread && !bound) return { detail: `thread: its pointer names "${ROW_BINDING}", the row it is drawn under` };
+  if (!inThread && bound) return { detail: `${ROW_BINDING}: only a thread's pointer is bound to a row` };
+  if (inThread && thread !== undefined) return { detail: "thread: one level only" };
   if (typeof form !== "string" || !(ENTRY_FORMS as readonly string[]).includes(form)) return { detail: `form: ${ENTRY_FORMS.join(", ")}` };
   if (title !== undefined && (typeof title !== "string" || !title.trim() || title.length > 80)) return { detail: "title: 1 to 80 characters" };
   if (field !== undefined && (typeof field !== "string" || !FIELD_NAME.test(field))) return { detail: "field: a field name" };
@@ -263,6 +287,9 @@ function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
   if (empty !== undefined && (typeof empty !== "string" || !empty.trim() || empty.length > 160)) return { detail: "empty: 1 to 160 characters" };
   if (words !== undefined && !wordFields(words)) return { detail: `words: 1 to ${MAX_WORDS} field names` };
   if (words !== undefined && form !== "rows") return { detail: `words needs form "rows": words are a row's` };
+  if (thread !== undefined && form !== "rows") return { detail: `thread needs form "rows": a thread is under a row` };
+  const under = thread === undefined ? null : entryOf(thread, true);
+  if (under && "detail" in under) return under;
   return {
     entry: {
       pointer: got.pointer,
@@ -273,6 +300,7 @@ function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
       ...(judge === "outcome" ? { judge } : {}),
       ...(typeof empty === "string" ? { empty: empty.trim() } : {}),
       ...(words !== undefined ? { words: words as string[] } : {}),
+      ...(under ? { thread: under.entry } : {}),
     },
   };
 }
