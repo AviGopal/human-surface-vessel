@@ -149,7 +149,11 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
     ],
   },
   ask: {
-    entries: [{ pointer: { type: "record_read", refs_to: ASK_BINDING }, form: "rows", title: "What cites your ask", empty: "No row cites your ask yet." }],
+    entries: [
+      // The reply first, in words; every row citing the ask (most are the walk's choices) folded and counted under it.
+      { pointer: { type: "record_read", refs_to: ASK_BINDING, shape: "answer" }, form: "rows", show: 1, newest: true, title: "The answer so far", words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
+      { pointer: { type: "record_read", refs_to: ASK_BINDING }, form: "rows", show: 10, newest: true, title: "What the system did for it", folded: true },
+    ],
   },
 };
 

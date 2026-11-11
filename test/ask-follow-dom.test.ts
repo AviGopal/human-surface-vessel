@@ -1,8 +1,12 @@
 /**
  * After an ask is written, the box draws the `ask` region's view under it, with the ask's own
- * row id bound where the view says "$ask". By default that is the rows citing the ask, and
- * before anything cites it the page says so in plain words. A view written for the region
- * replaces what follows an ask; the surface supplies only the id.
+ * row id bound where the view says "$ask". By default that is the latest reply to the ask in
+ * words, then every row citing it folded and counted, and before it is answered the page says so
+ * in plain words. A view written for the region replaces what follows an ask; the surface supplies
+ * only the id.
+ *
+ * Shape: one node 11-11. The ports ask was cited by 28 rows, 18 of them the walk's choices; the
+ * follow drew all 28 open under the box, about 2000 px, each a bare shape name and a timestamp.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -26,7 +30,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const pointer = body["pointer"] as Record<string, unknown>;
     if (pointer["type"] === "record_write") return Response.json({ resolved: true, success: true, body: { ...(pointer["row"] as object), seq: 2434, id: ASK_ID } });
     reads.push(pointer);
-    return Response.json({ resolved: true, success: true, body: citing });
+    return Response.json({ resolved: true, success: true, body: citing.filter((r) => pointer["shape"] === undefined || r["shape"] === pointer["shape"]) });
   }
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [] } });
   return Response.json({ resolved: true, success: true, body: {} });
@@ -77,11 +81,12 @@ async function askHello(): Promise<{ el: HTMLElement; qc: InstanceType<typeof Qu
 }
 
 describe("the box follows an ask", () => {
-  test("must-fail: the follow-up reads the rows citing the ask by its own id, and says so when there are none", async () => {
+  test("must-fail: the follow-up reads the replies to the ask by its own id, and says so when there are none", async () => {
     const { el } = await askHello();
     expect(el.textContent).toContain("Asked (record #2434).");
+    expect(reads).toContainEqual({ type: "record_read", refs_to: ASK_ID, shape: "answer" });
     expect(reads).toContainEqual({ type: "record_read", refs_to: ASK_ID });
-    expect(el.querySelector("[aria-label='What cites your ask']")?.textContent).toContain("No row cites your ask yet.");
+    expect(el.querySelector("[aria-label='The answer so far']")?.textContent).toContain("Not answered yet.");
   });
 
   test("must-fail: a view written for the ask region replaces what follows an ask", async () => {
@@ -90,15 +95,23 @@ describe("the box follows an ask", () => {
     expect(reads).toContainEqual({ type: "record_read", shape: "answer", refs_to: ASK_ID });
     expect(reads).not.toContainEqual({ type: "record_read", refs_to: ASK_ID });
     expect(el.querySelector("[aria-label='Answers to it']")?.textContent).toContain("Not answered yet.");
-    expect(el.textContent).not.toContain("What cites your ask");
+    expect(el.textContent).not.toContain("The answer so far");
   });
 
-  test("must-fail: a row citing the ask is drawn under it", async () => {
-    citing = [{ shape: "answer", id: "row-answer-1", text: "It is 08:10 in Lisbon.", input_refs: [ASK_ID] }];
+  test("must-fail: the reply is drawn open in words; the walk's own rows are folded and counted, not drawn", async () => {
+    const step = (i: number) => ({ shape: "selection", id: `row-sel-${i}`, input_refs: [ASK_ID, "6966cc456396b37fd25db92f329eb575b3df60478ff7c4e6c4b4fbcc27ecd61e"], t: `2026-11-11T15:4${i}:00.000Z` });
+    citing = [step(0), step(1), { shape: "answer", id: "row-answer-1", text: "It is 08:10 in Lisbon.", input_refs: [ASK_ID], t: "2026-11-11T15:42:00.000Z" }, step(3)];
     const { el } = await askHello();
-    const follow = el.querySelector("[aria-label='What cites your ask']")!;
-    expect(follow.textContent).toContain("It is 08:10 in Lisbon.");
-    expect(follow.textContent).not.toContain("No row cites");
+    const answer = el.querySelector("[aria-label='The answer so far']")!;
+    expect(answer.textContent).toContain("It is 08:10 in Lisbon.");
+    expect(answer.textContent).not.toContain("Not answered yet.");
+    const steps = el.querySelector("[aria-label='What the system did for it']") as HTMLDetailsElement;
+    expect(steps.tagName).toBe("DETAILS");
+    expect(steps.open).toBe(false);
+    expect(steps.querySelector("[data-count]")!.getAttribute("data-count")).toBe("4");
+    // Nothing of the walk's own rows is drawn outside the fold.
+    const open = [...el.querySelectorAll(".sf-row")].filter((r) => !r.closest("details[aria-label='What the system did for it']"));
+    expect(open.map((r) => r.getAttribute("data-row"))).toEqual(["row-answer-1"]);
   });
 
   test("must-fail: the follow-up looks again on the policy's report floor, not a number of its own", async () => {

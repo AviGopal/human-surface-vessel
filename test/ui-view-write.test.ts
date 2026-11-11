@@ -186,7 +186,7 @@ describe("uiView_write", () => {
   });
 
   test("must-fail: the ask region is written and read back like any region; its default reads what cites the ask", async () => {
-    expect((await read("ask")).json).toMatchObject({ revision: 0, entries: [{ pointer: { type: "record_read", refs_to: "$ask" }, empty: "No row cites your ask yet." }] });
+    expect((await read("ask")).json).toMatchObject({ revision: 0, entries: [{ pointer: { type: "record_read", refs_to: "$ask", shape: "answer" }, empty: "Not answered yet." }, { pointer: { type: "record_read", refs_to: "$ask" }, folded: true }] });
     const entry = { pointer: { type: "record_read", shape: "answer", refs_to: "$ask" }, form: "rows", title: "Answers to it", empty: "Not answered yet." };
     expect((await write({ region: "ask", entries: [entry] })).status).toBe(200);
     expect((await read("ask")).json).toMatchObject({ revision: 1, entries: [entry] });
