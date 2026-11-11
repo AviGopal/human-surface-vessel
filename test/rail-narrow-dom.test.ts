@@ -1,6 +1,6 @@
 /**
- * At phone width the rail is one line until the person opens it, unless something waits on
- * them. Its folded groups (notices, questions naming no reader, malformed) are bookkeeping a
+ * At phone width the rail is one line until the person opens it; what waits on the person is
+ * listed once, in the main pane, and the line carries only its count. Its folded groups (notices, questions naming no reader, malformed) are bookkeeping a
  * person cannot act on, and the band they filled was a third of the screen before any content.
  * At desk width the rail is drawn open, as before.
  *
@@ -73,10 +73,14 @@ describe("the rail at phone width", () => {
     expect(toggle(el)!.getAttribute("aria-expanded")).toBe("true");
   });
 
-  test("must-fail: when something waits on the person, the rail is open", async () => {
+  test("must-fail: when something waits on the person, the rail stays one line carrying the count; the main pane lists it once", async () => {
     waiting = true;
     const el = await page(420);
-    expect(list(el).hidden).toBe(false);
+    expect(list(el).hidden).toBe(true);
+    expect(toggle(el)!.querySelector("[data-attention]")!.textContent).toBe("1");
+    expect(el.querySelector("main")!.textContent).toContain("Pick one.");
+    const visible = [...el.querySelectorAll("*")].filter((n) => n.children.length === 0 && n.textContent === "Pick one." && !n.closest("[hidden]"));
+    expect(visible.length).toBe(1);
   });
 
   test("at desk width the rail is drawn open, with no toggle", async () => {

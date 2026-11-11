@@ -59,8 +59,8 @@ function Workbench(): ReactNode {
   const context = boxContext(open, open?.title ?? null, setAside);
 
   const narrow = useNarrow();
-  const [railOpen, setRailOpen] = useState<boolean | null>(null);
-  const railFolded = narrow && !(railOpen ?? questions.waiting > 0);
+  const [railOpen, setRailOpen] = useState(false);
+  const railFolded = narrow && !railOpen;
   const waitingCount = questions.waiting > 0 ? <span className="sf-count" data-attention="true">{questions.waiting}</span> : null;
 
   const openQuestion = (id: string): void => {
@@ -83,7 +83,8 @@ function Workbench(): ReactNode {
       <nav className="sf-rail" aria-label="Questions" data-folded={railFolded ? "" : undefined}>
         <h2 className="sf-rail-head">
           {narrow ? (
-            // On a phone the rail is one line until opened, unless something waits on the person.
+            // On a phone the rail is one line until opened. What waits on the person is listed in the
+            // main pane's "Waiting on you"; the line carries only its count, so nothing is said twice.
             <button type="button" className="sf-rail-toggle" aria-expanded={!railFolded} aria-controls="sf-rail-list" onClick={() => setRailOpen(railFolded)}>
               Questions{waitingCount}
             </button>
