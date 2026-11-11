@@ -25,7 +25,7 @@ import { isWritePointerType } from "../caller-credential.ts";
 import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, recentSurfaceIntents, recordObservation, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
-import { unnamed } from "../unname.ts";
+import { unnamed, unnamePeople } from "../unname.ts";
 import { arrivedOverTls, closeSession, keySignInAvailable, loginAllowed, noteLoginFailure, openSession, sessionOf, signInWithKey, viewOf } from "../person-session.ts";
 import { VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
@@ -669,7 +669,7 @@ proxyRouter.get("/api/render-policy", (c) =>
 proxyRouter.get("/api/ui-view", (c) => {
   const region = c.req.query("region") ?? "";
   if (!(VIEW_REGIONS as readonly string[]).includes(region)) return c.json({ error: "unknown_region" }, 404);
-  return c.json(currentView(region as ViewRegion), 200, corsHeaders(c.req.header("Origin")));
+  return c.json(unnamePeople(currentView(region as ViewRegion), sessionOf(c.req.header("Cookie"))?.userId ?? null), 200, corsHeaders(c.req.header("Origin")));
 });
 
 // ─── typed instruction → interface change (browser write) ───────────────────
@@ -817,7 +817,7 @@ proxyRouter.post("/api/surface-intent", requireCaller("/api/surface-intent"), as
 /** What the box understands, so the surface can say so without guessing. */
 proxyRouter.get("/api/surface-intent/grammar", (c) =>
   c.json(
-    { grammar: GRAMMAR, recent: recentSurfaceIntents(20) },
+    { grammar: GRAMMAR, recent: unnamePeople(recentSurfaceIntents(20), sessionOf(c.req.header("Cookie"))?.userId ?? null) },
     200,
     corsHeaders(c.req.header("Origin")),
   ),

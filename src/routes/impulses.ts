@@ -51,6 +51,8 @@ import { TIMEOUTS } from "../timeouts.ts";
 import { runOf, undoView, writeView } from "../ui-views.ts";
 import { countEmptyRefusal, countTemplateRefusal } from "../write-refusals.ts";
 import { admitCaller, type Caller } from "../inbound-auth.ts";
+import { sessionOf } from "../person-session.ts";
+import { unnamePeople } from "../unname.ts";
 
 type Pointer = Record<string, unknown>;
 
@@ -660,8 +662,9 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           // publish them onto the row, and `collectCandidates` in
           // ui/src/lib/exposure.ts (currently :352-358) reads them back off the
           // element into the exposure record's rank / rank_source /
-          // ranking_explanation.
-          questions: sliced,
+          // ranking_explanation. Who asked or answered is named only to that person (unname.ts):
+          // this read answers without a caller.
+          questions: unnamePeople(sliced, sessionOf(c.req.header("Cookie"))?.userId ?? null),
           // UNCHANGED MEANING: every solicitation this read matched, not the
           // size of the slice above. A caller that compares the two can tell a
           // slice from the whole, which is the point.
@@ -1019,7 +1022,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       // typography, the forms content was drawn in, and the questions rail
       // (how each kind is presented, who reads its answers, what people did).
       // A question writer reads this by shape before it asks.
-      return c.json({ resolved: true, success: true, shape: type, body: buildUiView(getRenderPolicy().tokenOverrides, await listedShapes()) });
+      return c.json({ resolved: true, success: true, shape: type, body: unnamePeople(buildUiView(getRenderPolicy().tokenOverrides, await listedShapes()), sessionOf(c.req.header("Cookie"))?.userId ?? null) });
     }
 
     case "renderPolicy": {

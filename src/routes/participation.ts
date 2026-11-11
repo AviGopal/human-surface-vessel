@@ -1,22 +1,20 @@
 import { Hono } from "hono";
 import { impulsesRouter } from "./impulses.ts";
 import { admittedCaller, carry, requireCaller, type Caller } from "../inbound-auth.ts";
-import { sessionOf } from "../person-session.ts";
-import { unnamed } from "../unname.ts";
 
 /** Browser adapter for the existing shapes. No private question/answer store. */
 export const participationRouter = new Hono();
 
 /** In process; a write carries the caller this route admitted (inbound-auth.ts `carry`). */
-async function resolve(pointer: Record<string, unknown>, caller?: Caller): Promise<Response> {
+async function resolve(pointer: Record<string, unknown>, caller?: Caller, cookie?: string): Promise<Response> {
   return impulsesRouter.request("/v2/impulses/resolve", {
-    method: "POST", headers: { "content-type": "application/json" },
+    method: "POST", headers: { "content-type": "application/json", ...(cookie ? { Cookie: cookie } : {}) },
     body: JSON.stringify({ pointer }),
   }, caller ? carry(caller) : undefined);
 }
 
-// Who answered or asked is named only to that person signed in (unname.ts).
-participationRouter.get("/api/questions", async (c) => unnamed(await resolve({ type: "uiQuestion" }), sessionOf(c.req.header("Cookie"))?.userId ?? null));
+// The viewer's session goes with the read, which names who asked or answered only to that person.
+participationRouter.get("/api/questions", (c) => resolve({ type: "uiQuestion" }, undefined, c.req.header("Cookie")));
 
 /** A reply is a sentence or a short paste; the cap bounds what one contribution adds to the journal. */
 export const PARTICIPATION_MAX_VALUE_CHARS = 20_000;

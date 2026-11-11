@@ -33,6 +33,8 @@ import {
 } from "./discovery-registration.ts";
 import { impulsesRouter } from "./routes/impulses.ts";
 import { inboundAuthCounts } from "./inbound-auth.ts";
+import { sessionOf } from "./person-session.ts";
+import { unnamePeople } from "./unname.ts";
 import { participationRouter } from "./routes/participation.ts";
 import { corsHeaders, listedShapes, proxyRouter, refuseForeignOriginWrites } from "./routes/proxy.ts";
 import {
@@ -126,15 +128,16 @@ app.route("/", proxyRouter);
 
 // ─── Local read surface for the UI ──────────────────────────────────────────
 
+// Who wrote a question, answer or observation is named only to that person (unname.ts).
 app.get("/api/state", (c) =>
-  c.json({
+  c.json(unnamePeople({
     panels: listPanels(),
     feedback: recentFeedback(20),
     observations: recentObservations(20),
     events: recentEvents(50),
     asserts: recentAsserts(30),
     attachments: recentAttachments(30),
-  }),
+  }, sessionOf(c.req.header("Cookie"))?.userId ?? null)),
 );
 
 app.get("/api/signature-inputs", (c) => c.json(signatureInputs()));
@@ -142,10 +145,12 @@ app.get("/api/signature-inputs", (c) => c.json(signatureInputs()));
 /** Server-sent events so the surface updates without polling. */
 app.get("/api/stream", (c) => {
   const encoder = new TextEncoder();
+  // The session the stream opened under: each event names only that person (unname.ts).
+  const own = sessionOf(c.req.header("Cookie"))?.userId ?? null;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const send = (event: { event: string; data: unknown }): void => {
-        const payload = `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
+        const payload = `event: ${event.event}\ndata: ${JSON.stringify(unnamePeople(event.data, own))}\n\n`;
         try {
           controller.enqueue(encoder.encode(payload));
         } catch {
@@ -297,7 +302,7 @@ app.post("/resolve", async (c) => {
   // `human_surface:ui_view` is the name ui_legibility_scan asks for first; same report.
   if (type === "obsidian:ui_view" || type === "human_surface:ui_view") {
     // `.content` as a JSON STRING is the detector's expected envelope.
-    return c.json({ content: JSON.stringify(buildUiView(getRenderPolicy().tokenOverrides, await listedShapes())), metadata: { shape: type } });
+    return c.json({ content: JSON.stringify(unnamePeople(buildUiView(getRenderPolicy().tokenOverrides, await listedShapes()), sessionOf(c.req.header("Cookie"))?.userId ?? null)), metadata: { shape: type } });
   }
   if (type === "obsidian:note") {
     // No theme-override note on this surface: tokens are the single source and
