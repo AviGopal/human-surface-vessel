@@ -8,6 +8,10 @@
  * So the ceiling is derived from that timeout, and a missing or junk value reads as its
  * default, never as "no limit".
  *
+ * The ceiling bounds one wait, not a sum: it holds because no request handler awaits two of
+ * these in sequence (the gap-status refresh runs off the request path). A handler that chains
+ * two must budget them together under the idle timeout.
+ *
  * Kept out: the identity check's wait, with the other auth limits (a named law-1 debt: an
  * owner-role row, never the sentence parser's reach).
  */
