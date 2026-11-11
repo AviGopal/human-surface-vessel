@@ -121,7 +121,13 @@ describe("a folded read draws when its rows came", () => {
     const el = await mount([failed]);
     const strip = summary(el).querySelector(".sf-strip")!;
     expect(strip.getAttribute("aria-label")).toBe("7 in the last 24 hours, most around 1 PM");
-    expect(summary(el).querySelector(".sf-strip-caption")!.textContent).toBe("last 24 hours");
+    expect(summary(el).querySelector(".sf-strip-caption")!.textContent).toBe("7 in the last 24 hours");
+    // The read's total says it is the total, so it is not read as the window's.
+    expect(summary(el).querySelector("[data-count]")!.textContent).toBe("9 in all");
+    // The strip's ends are named for a sighted reader.
+    expect([...summary(el).querySelectorAll(".sf-strip-axis > span")].map((s) => s.textContent)).toEqual(["24 h ago", "now"]);
+    // The count flows with the title's words, so a wrapped title keeps it after its last word.
+    expect(summary(el).querySelector(".sf-report-name")!.textContent).toBe("What failed9 in all");
     expect(bars(el)[20]!.getAttribute("title")).toBe("1 PM: 4");
     expect(bars(el)[23]!.getAttribute("title")).toBe("4 PM: 2");
     const text = summary(el).textContent! + [...summary(el).querySelectorAll("[title],[aria-label]")].map((n) => `${n.getAttribute("title")} ${n.getAttribute("aria-label")}`).join(" ");
@@ -154,10 +160,11 @@ describe("a folded read draws when its rows came", () => {
 });
 
 describe("controls", () => {
-  test("an entry with no strip draws no strip", async () => {
+  test("an entry with no strip draws no strip, and its count is the bare number", async () => {
     const el = await mount([{ ...failed, strip: undefined }]);
     expect(summary(el).querySelector(".sf-strip")).toBeNull();
     expect(summary(el).querySelector("[data-count]")!.getAttribute("data-count")).toBe("9");
+    expect(summary(el).querySelector("[data-count]")!.textContent).toBe("9");
   });
 
   test("an empty window draws the baseline and says none", async () => {

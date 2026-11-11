@@ -415,6 +415,7 @@ function Strip({ rows, hours, last }: { rows: readonly unknown[]; hours: number;
       : `${total} in the ${span}, most around ${hourName(start + bins.indexOf(top) * HOUR_MS)}`;
   return (
     <span className="sf-strip-wrap" data-strip={hours}>
+      <span className="sf-strip-plot">
       <span className="sf-strip" role="img" aria-label={said} data-cut={cut ? "" : undefined}>
         {bins.map((n, i) => (
           <span
@@ -427,7 +428,13 @@ function Strip({ rows, hours, last }: { rows: readonly unknown[]; hours: number;
           />
         ))}
       </span>
-      <span className="sf-strip-caption">{cut || total === 0 ? said : span}</span>
+      {/* The strip's two ends in words, so a sighted reader sees when as well as how many. */}
+      <span className="sf-strip-axis" aria-hidden="true">
+        <span>{`${hours} h ago`}</span>
+        <span>now</span>
+      </span>
+      </span>
+      <span className="sf-strip-caption">{cut || total === 0 ? said : `${total} in the ${span}`}</span>
     </span>
   );
 }
@@ -459,8 +466,11 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
     return (
       <details className="sf-report sf-report-folded" data-report={pointer.type} data-form={entry.form} aria-label={title}>
         <summary className="sf-report-title">
-          {title}
-          {count !== null ? <span className="sf-report-count" data-count={count}>{count}</span> : null}
+          {/* The title and its count flow as one line of words, so a wrapped title keeps its count after its last word. */}
+          <span className="sf-report-name">
+            {title}
+            {count !== null ? <span className="sf-report-count" data-count={count}>{entry.strip ? `${count} in all` : count}</span> : null}
+          </span>
           {entry.strip && got && "total" in got ? (
             <Strip rows={[...got.earlier, ...got.rows]} hours={entry.strip.hours} last={typeof pointer["last"] === "number" ? (pointer["last"] as number) : undefined} />
           ) : null}

@@ -2104,7 +2104,7 @@ body { overflow: hidden; }
 .sf-reports { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sf-space-3); }
 .sf-report { display: flex; flex-direction: column; gap: var(--sf-space-2); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); min-width: 0; }
 .sf-report-title { margin: 0; font-size: var(--sf-text-sm); font-weight: 600; color: var(--sf-ink); }
-.sf-report-folded > summary { cursor: pointer; display: flex; gap: var(--sf-space-2); align-items: baseline; }
+.sf-report-folded > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: var(--sf-space-2); align-items: baseline; }
 .sf-report-folded[open] > summary { margin-bottom: var(--sf-space-2); }
 .sf-report-count { font-weight: 400; color: var(--sf-ink-3); font-variant-numeric: tabular-nums; }
 .sf-report-fields { margin: 0; display: flex; flex-direction: column; gap: var(--sf-space-1); }
@@ -2150,8 +2150,12 @@ body { overflow: hidden; }
 
 /* A folded read's strip: when its rows came, one bar per hour, in its summary after the count. */
 /* Pushed to the summary's end, so the strips of every folded read line up under one another. */
-.sf-strip-wrap { display: inline-flex; align-items: flex-end; gap: var(--sf-space-2); margin-left: auto; align-self: center; flex: none; }
+.sf-strip-wrap { display: inline-flex; align-items: flex-start; gap: var(--sf-space-2); margin-left: auto; align-self: center; flex: none; }
+.sf-strip-plot { display: inline-flex; flex-direction: column; }
+.sf-strip-axis { display: flex; justify-content: space-between; font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); line-height: 1.2; }
+.sf-report-name > .sf-report-count { margin-left: var(--sf-space-2); }
 .sf-strip { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; border-bottom: 1px solid var(--sf-rule-strong); }
 .sf-strip-bar { display: block; width: 4px; background: var(--sf-ink-3); border-radius: 1px 1px 0 0; }
-.sf-strip-caption { font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); white-space: nowrap; }
+/* One width for every caption, so the strips of every folded read line up whatever their numbers. */
+.sf-strip-caption { font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); white-space: nowrap; min-width: 13em; font-variant-numeric: tabular-nums; }
 @media (max-width: 480px) { .sf-strip-bar { width: 3px; } }
