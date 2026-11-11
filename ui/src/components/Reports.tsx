@@ -25,6 +25,7 @@ import type { Question } from "../api/participation";
 import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
 import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
+import { Prose } from "./Prose";
 
 /** Where the owners' declarations of a row's words are read: records' `shape_description` rows. */
 const DECLARATIONS = { type: "record_read", shape: "shape_description" } as const;
@@ -165,9 +166,18 @@ function when(t: unknown): string | null {
   return Number.isNaN(d.getTime()) ? t : d.toLocaleString(undefined, WHEN);
 }
 
-/** One declared field as words: text as written; any other value with its field's name. */
-function word(k: string, v: unknown): string {
-  return typeof v === "string" ? v : `${k.replace(/_/g, " ")} ${fieldText(v)}`;
+/**
+ * One declared field as words: text as its writer formatted it, through Prose, which builds
+ * elements and draws markup and links as text; any other value as one line with its field's name.
+ */
+function Word({ k, v }: { k: string; v: unknown }): ReactNode {
+  return typeof v === "string" ? (
+    <div className="sf-row-words sf-row-prose">
+      <Prose source={v} />
+    </div>
+  ) : (
+    <p className="sf-row-words">{`${k.replace(/_/g, " ")} ${fieldText(v)}`}</p>
+  );
 }
 
 type Reading = { declared: ReadonlyMap<string, readonly string[]>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void };
@@ -197,16 +207,12 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
       {rows.map((row, i) => {
         const o: Record<string, unknown> = typeof row === "object" && row !== null && !Array.isArray(row) ? (row as Record<string, unknown>) : { value: row };
         const id = typeof o["id"] === "string" ? (o["id"] as string) : null;
-        const words = rowWords(o, wordsFor(o["shape"], reading.declared, entry.words)).map((w) => word(w.field, w.value));
+        const words = rowWords(o, wordsFor(o["shape"], reading.declared, entry.words));
         const time = when(o["t"]);
         return (
           <li key={id ?? i} className="sf-row" data-row={id ?? undefined}>
             {words.length > 0 ? (
-              words.map((w, j) => (
-                <p key={j} className="sf-row-words">
-                  {w}
-                </p>
-              ))
+              words.map((w, j) => <Word key={j} k={w.field} v={w.value} />)
             ) : (
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}

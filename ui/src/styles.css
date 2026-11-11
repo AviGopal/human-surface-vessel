@@ -2101,6 +2101,11 @@ body { overflow: hidden; }
 .sf-row { display: flex; flex-direction: column; gap: var(--sf-space-2); border-top: 1px solid var(--sf-rule); padding-top: var(--sf-space-2); min-width: 0; }
 .sf-row:first-child { border-top: 0; padding-top: 0; }
 .sf-row-words { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* A row's text words are its writer's formatting through Prose, in the row's own type: the
+   reading serif and measure belong to a document, not to one line of a list. */
+.sf-row-prose { white-space: normal; }
+.sf-row-prose > .sf-prose { font: inherit; color: inherit; max-width: none; }
+.sf-row-prose > .sf-prose > :last-child { margin-bottom: 0; }
 .sf-row-time { margin: 0; font-size: var(--sf-text-sm); }
 .sf-row-details > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-row-details[open] > summary { margin-bottom: var(--sf-space-1); }
