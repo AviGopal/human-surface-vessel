@@ -14,6 +14,7 @@ const React = await import(Bun.resolveSync("react", uiSrc));
 const { createRoot: rawCreateRoot } = await import(Bun.resolveSync("react-dom/client", uiSrc));
 const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
+const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { ContentRender } = await import("../ui/src/components/ContentRender");
 const { readableNumber, parseRows } = await import("../ui/src/lib/ledger");
 
@@ -37,7 +38,7 @@ describe("readable numbers", () => {
   });
 
   test("table cells use the same reading", () => {
-    const rows = parseRows(JSON.stringify([{ kind: "a", weight: 0.8333333333333334 }]))!;
+    const rows = parseRows(JSON.stringify([{ kind: "a", weight: 0.8333333333333334 }]), 2000)!;
     const c = rows.rows[0]![rows.columns.indexOf("weight")]!;
     expect([c.text, c.title]).toEqual(["0.8333", "0.8333333333333334"]);
   });
@@ -47,7 +48,7 @@ describe("readable numbers", () => {
     document.body.appendChild(el);
     const text = JSON.stringify({ target: "webSearchResult", confidence: 0.8333333333333334, nested: { weight: 1.2395022e32 } });
     await act(async () => {
-      createRoot(el).render(React.createElement(ContentRender, { plan: { form: "record", text, decidedBy: "test" } }));
+      createRoot(el).render(React.createElement(QueryClientProvider, { client: new QueryClient() }, React.createElement(ContentRender, { plan: { form: "record", text, decidedBy: "test" } })));
     });
     const values = [...el.querySelectorAll(".sf-scalar-value.sf-mono")].map((v) => [v.textContent, v.getAttribute("title")]);
     expect(values).toEqual([

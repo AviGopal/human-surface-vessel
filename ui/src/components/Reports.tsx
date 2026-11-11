@@ -18,11 +18,8 @@ import { useReport } from "../api/queries";
 import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
 import { questionRowSubject } from "../state/questions";
+import { useLimits } from "../state/limits";
 
-/** How many plain values a report shows before "and N more". */
-const FIELDS_SHOWN = 8;
-/** How many items of a list are named under it. */
-const ITEMS_NAMED = 3;
 /** The fields that name an item, in the order tried. */
 const NAME_FIELDS = ["summary", "title", "name", "goal", "unit", "activity_id", "id"] as const;
 
@@ -56,14 +53,14 @@ export function itemName(item: unknown): string {
 }
 
 /** The rows a report draws: plain values as they are, a list as its size and first items, a nested object as its plain values. */
-export function reportRows(answer: unknown): { label: string; value: string; items?: readonly string[] }[] {
-  if (Array.isArray(answer)) return [{ label: "rows", value: String(answer.length), items: answer.slice(0, ITEMS_NAMED).map(itemName) }];
+export function reportRows(answer: unknown, itemsNamed: number): { label: string; value: string; items?: readonly string[] }[] {
+  if (Array.isArray(answer)) return [{ label: "rows", value: String(answer.length), items: answer.slice(0, itemsNamed).map(itemName) }];
   if (typeof answer !== "object" || answer === null) return [{ label: "answer", value: plain(answer) }];
   const rows: { label: string; value: string; items?: readonly string[] }[] = [];
   for (const [k, v] of Object.entries(answer as Record<string, unknown>)) {
     if (v === null || v === undefined) continue;
     if (isPlain(v)) rows.push({ label: k.replace(/_/g, " "), value: plain(v) });
-    else if (Array.isArray(v)) rows.push({ label: k.replace(/_/g, " "), value: String(v.length), items: v.slice(0, ITEMS_NAMED).map(itemName) });
+    else if (Array.isArray(v)) rows.push({ label: k.replace(/_/g, " "), value: String(v.length), items: v.slice(0, itemsNamed).map(itemName) });
     else {
       for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) {
         if (isPlain(v2)) rows.push({ label: `${k} ${k2}`.replace(/_/g, " "), value: plain(v2) });
@@ -190,8 +187,9 @@ function Questions({ rows, onOpen }: { rows: readonly unknown[]; onOpen: (id: st
 }
 
 function Fields({ answer }: { answer: unknown }): ReactNode {
-  const rows = reportRows(answer);
-  const shown = rows.slice(0, FIELDS_SHOWN);
+  const limits = useLimits();
+  const rows = reportRows(answer, limits.itemsNamed);
+  const shown = rows.slice(0, limits.fieldsShown);
   if (rows.length === 0) return <p className="sf-muted sf-report-note">answered with nothing</p>;
   return (
     <>

@@ -147,6 +147,8 @@ export interface RenderPolicy {
   readonly presentation?: "onepage" | "stacked";
   /** How often the page looks again (src/recheck.ts); absent on older policies. */
   readonly recheck?: Readonly<Record<string, number>>;
+  /** How much the page draws (src/limits.ts); absent on older policies. */
+  readonly limits?: Readonly<Record<string, number>>;
   readonly revision: number;
   readonly updatedAt: number;
   readonly note: string | null;

@@ -46,6 +46,7 @@ import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
 import { recheckPatch } from "../recheck.ts";
+import { LIMITS } from "../limits.ts";
 import { runOf, undoView, writeView } from "../ui-views.ts";
 import { countEmptyRefusal } from "../write-refusals.ts";
 import { admitCaller, type Caller } from "../inbound-auth.ts";
@@ -1067,6 +1068,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const importanceWeights = importanceWeightsPatch(pointer, rejected);
       const visibleSliceSize = visibleSliceSizePatch(pointer, rejected);
       const recheck = recheckPatch(pointer["recheck"], rejected);
+      const limits = LIMITS.patch(pointer["limits"], rejected);
       const write = writeRenderPolicy({
         ...(tokenOverrides ? { tokenOverrides } : {}),
         ...(formByShape ? { formByShape } : {}),
@@ -1078,6 +1080,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         ...(importanceWeights ? { importanceWeights } : {}),
         ...(visibleSliceSize !== undefined ? { visibleSliceSize } : {}),
         ...(recheck ? { recheck } : {}),
+        ...(limits ? { limits } : {}),
         ...(typeof pointer["note"] === "string" ? { note: pointer["note"] as string } : {}),
         ...(assignedBy ? { assignedBy } : {}),
         ...(assignmentReason ? { reason: assignmentReason } : {}),

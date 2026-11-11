@@ -21,22 +21,18 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
-import { CUT_KEY, findMarkup, heuristicForm, parseDiff, parseRows, readableNumber, type MetaChip, type RenderPlan } from "../lib/ledger";
+import { CUT_KEY, findMarkup, heuristicForm, parseDiff, parseRows, readableNumber, SCALAR_MAX_CHARS, type MetaChip, type RenderPlan } from "../lib/ledger";
+import { useLimits } from "../state/limits";
 import { Prose } from "./Prose";
 import { parseBriefText } from "../lib/brief";
 
-/** Above this a value is not a scalar, whatever the plan said. */
-const SCALAR_MAX_CHARS = 300;
-
-/** Beyond this depth a record summarises instead of recursing. */
-const RECORD_MAX_DEPTH = 4;
 
 function Verbatim({ text }: { text: string }): ReactNode {
   return <pre className="sf-verbatim">{text}</pre>;
 }
 
 function Rows({ text }: { text: string }): ReactNode {
-  const parsed = parseRows(text);
+  const parsed = parseRows(text, useLimits().cellTitleChars);
   // Parsing can fail on a truncated preview of a JSON array. Falling through to
   // verbatim is the honest rendering of a fragment — better a readable
   // fragment than an empty table that claims there were no rows.
@@ -293,7 +289,8 @@ function CountHead({ n, what }: { n: number; what: string }): ReactNode {
  * hold, and unbounded recursion there produces a page that cannot be read and a
  * browser that stops responding. Past the cap it summarises and says so.
  */
-function renderValue(key: string, v: unknown, depth: number): ReactNode {
+/** `maxDepth`: beyond it a record summarises instead of recursing (limits.recordMaxDepth). */
+function renderValue(key: string, v: unknown, depth: number, maxDepth: number): ReactNode {
   if (v === null || v === undefined) return <span className="sf-muted">null</span>;
   if (typeof v === "number" && EPOCH_KEY.test(key) && v > 1e12 && v < 1e13) {
     return <TimeValue ms={v} raw={String(v)} />;
@@ -352,7 +349,7 @@ function renderValue(key: string, v: unknown, depth: number): ReactNode {
         </>
       );
     }
-    if (objects && depth < RECORD_MAX_DEPTH) {
+    if (objects && depth < maxDepth) {
       return (
         <>
         <CountHead n={v.length} what={what} />
@@ -373,11 +370,11 @@ function renderValue(key: string, v: unknown, depth: number): ReactNode {
       );
     }
     const scalars = v.every((e) => e === null || typeof e !== "object");
-    if (scalars || depth < RECORD_MAX_DEPTH) {
+    if (scalars || depth < maxDepth) {
       return (
         <ul className="sf-value-list">
           {v.map((item, i) => (
-            <li key={`${i}:${typeof item}`}>{renderValue(key, item, depth + 1)}</li>
+            <li key={`${i}:${typeof item}`}>{renderValue(key, item, depth + 1, maxDepth)}</li>
           ))}
         </ul>
       );
@@ -385,7 +382,7 @@ function renderValue(key: string, v: unknown, depth: number): ReactNode {
     return <Summarised label={plural(v.length, "item", "items")} value={v} />;
   }
   if (Object.keys(v as object).length === 0) return <span className="sf-muted">empty</span>;
-  if (depth < RECORD_MAX_DEPTH) {
+  if (depth < maxDepth) {
     return <RecordDl o={v as Record<string, unknown>} depth={depth + 1} />;
   }
   return <Summarised label={plural(Object.keys(v as object).length, "field", "fields")} value={v} />;
@@ -427,6 +424,7 @@ function Summarised({ label, value }: { label: string; value: unknown }): ReactN
 }
 
 function RecordDl({ o, depth }: { o: Readonly<Record<string, unknown>>; depth: number }): ReactNode {
+  const maxDepth = useLimits().recordMaxDepth;
   return (
     <dl className={depth > 1 ? "sf-record sf-record--nested" : "sf-record"}>
       {Object.keys(o).map((key) =>
@@ -438,7 +436,7 @@ function RecordDl({ o, depth }: { o: Readonly<Record<string, unknown>>; depth: n
         ) : (
         <div className="sf-record-row" key={key}>
           <dt className="sf-record-key">{key}</dt>
-          <dd className="sf-record-value">{renderValue(key, o[key], depth)}</dd>
+          <dd className="sf-record-value">{renderValue(key, o[key], depth, maxDepth)}</dd>
         </div>
         ),
       )}
@@ -447,6 +445,7 @@ function RecordDl({ o, depth }: { o: Readonly<Record<string, unknown>>; depth: n
 }
 
 function RecordFields({ text }: { text: string }): ReactNode {
+  const maxDepth = useLimits().recordMaxDepth;
   let parsed: unknown;
   try {
     parsed = JSON.parse(text.trim());
@@ -459,7 +458,7 @@ function RecordFields({ text }: { text: string }): ReactNode {
   }
   if (Array.isArray(parsed)) {
     // A top-level collection: the same table-or-cards decision a nested one gets.
-    return parsed.length === 0 ? <Verbatim text={text} /> : <>{renderValue("items", parsed, 0)}</>;
+    return parsed.length === 0 ? <Verbatim text={text} /> : <>{renderValue("items", parsed, 0, maxDepth)}</>;
   }
   if (typeof parsed !== "object" || parsed === null) {
     return <Verbatim text={text} />;

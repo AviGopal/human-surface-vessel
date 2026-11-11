@@ -21,8 +21,8 @@ import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { SignIn } from "./SignIn";
 import { SESSION_KEY } from "../api/session";
+import { useLimits } from "../state/limits";
 
-const MAX_BOX_LINES = 8;
 
 /** The echo for a reply delivered to a waiting run. */
 const REPLY_ECHO: Readonly<Record<string, string>> = { answered: "Answer", declined: "Declined", insufficient_context: "Need more" };
@@ -104,6 +104,7 @@ export function TopBar({
   complaintRegion?: string | null;
 }): ReactNode {
   const [goal, setGoal] = useState("");
+  const limits = useLimits();
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
   const { paused, setPaused } = useLiveControls();
   const { recordReceipt } = useQuestions();
@@ -170,7 +171,7 @@ export function TopBar({
     if (!el) return;
     el.style.height = "auto";
     const line = parseFloat(getComputedStyle(el).lineHeight) || 20;
-    el.style.height = `${Math.min(el.scrollHeight, line * MAX_BOX_LINES + 16)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, line * limits.boxLines + 16)}px`;
   };
 
   const put = (text: string, append: boolean): void => {

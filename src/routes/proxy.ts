@@ -548,8 +548,6 @@ export async function readGapById(id: string): Promise<{ found: boolean; gap: un
  * refreshed off the request path: the questions read never waits on it, and a
  * status not yet read is unknown, never "closed".
  */
-const GAP_STATUS_CONCURRENCY = 4;
-const GAP_STATUS_MAX_PER_READ = 60;
 const gapStatuses = new Map<string, { status: string | null; at: number }>();
 const gapStatusInFlight = new Set<string>();
 
@@ -563,7 +561,7 @@ export async function refreshGapStatuses(ids: readonly string[]): Promise<void> 
   const now = Date.now();
   const due = [...new Set(ids)]
     .filter((id) => !gapStatusInFlight.has(id) && now - (gapStatuses.get(id)?.at ?? 0) > getRenderPolicy().recheck.gapStatusTtlMs)
-    .slice(0, GAP_STATUS_MAX_PER_READ);
+    .slice(0, getRenderPolicy().limits.gapStatusPerRead);
   for (const id of due) gapStatusInFlight.add(id);
   const queue = [...due];
   const worker = async (): Promise<void> => {
@@ -580,7 +578,7 @@ export async function refreshGapStatuses(ids: readonly string[]): Promise<void> 
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(GAP_STATUS_CONCURRENCY, due.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(getRenderPolicy().limits.gapStatusConcurrency, due.length) }, worker));
 }
 
 /**

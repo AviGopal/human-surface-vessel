@@ -246,8 +246,11 @@ export interface RenderPlan {
   readonly envelopeShape?: string;
 }
 
-/** Above this a value is not a scalar, whatever it parsed out of. */
-const SCALAR_MAX_CHARS = 300;
+/**
+ * Above this a value is not a scalar, whatever it parsed out of. A form decision: it moves to
+ * an activity with the form learner (3.2), with the rest of the planner's thresholds.
+ */
+export const SCALAR_MAX_CHARS = 300;
 
 /**
  * Rescue a bare value from the verbatim block.
@@ -1041,8 +1044,6 @@ export interface ParsedRows {
   readonly rows: readonly (readonly Cell[])[];
 }
 
-/** A tooltip is a hint, not a second content pane. */
-const CELL_TITLE_CAP = 2000;
 
 /**
  * A value, made fit for one table cell.
@@ -1067,7 +1068,8 @@ export function readableNumber(n: number): { text: string; exact?: string } {
   return text === full ? { text } : { text, exact: full };
 }
 
-function cell(v: unknown): Cell {
+/** `titleChars`: the policy's cap on a tooltip (limits.cellTitleChars); a hint, not a second content pane. */
+function cell(v: unknown, titleChars: number): Cell {
   if (v === null || v === undefined) return { text: "" };
   // A multiline string cannot blow up the row height either. The pilcrow keeps
   // the break visible instead of silently joining two lines into one claim.
@@ -1079,7 +1081,7 @@ function cell(v: unknown): Cell {
   if (typeof v === "boolean") return { text: String(v) };
   let title: string;
   try {
-    title = JSON.stringify(v).slice(0, CELL_TITLE_CAP);
+    title = JSON.stringify(v).slice(0, titleChars);
   } catch {
     title = String(v);
   }
@@ -1089,7 +1091,7 @@ function cell(v: unknown): Cell {
   return { text: `{${Object.keys(v as object).length} fields}`, title, summarised: true };
 }
 
-export function parseRows(text: string): ParsedRows | null {
+export function parseRows(text: string, titleChars: number): ParsedRows | null {
   const trimmed = text.trim();
   if (trimmed.startsWith("[")) {
     try {
@@ -1101,7 +1103,7 @@ export function parseRows(text: string): ParsedRows | null {
         for (const key of Object.keys(row)) if (!columns.includes(key)) columns.push(key);
       }
       const rows = parsed.map((row) =>
-        columns.map((c) => cell((row as Record<string, unknown>)[c])),
+        columns.map((c) => cell((row as Record<string, unknown>)[c], titleChars)),
       );
       return { columns, rows };
     } catch {

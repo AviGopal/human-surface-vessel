@@ -68,7 +68,8 @@ describe("recheck is a policy field", () => {
 
 /**
  * Every numeric constant in the source is named here, in the list that says why it is still a
- * constant. The last 2.3 commit empties PENDING; the debts are each owned elsewhere.
+ * constant. The last 2.3 commit empties PENDING; the debts are each owned elsewhere. Shaped
+ * groups (recheck, limits) are objects of defaults, not constants, and are not listed.
  */
 const BOOTSTRAP = new Set([
   // The server's idle timeout and discovery registration: the proposal's bootstrap tier.
@@ -86,18 +87,22 @@ const DEBT_AUTH = new Set([
   "LOGIN_FAILURES_PER_WINDOW", "LOGIN_WINDOW_MS", "MAX_SESSIONS", "KEY_SESSION_MS",
   "CREDENTIAL_VALIDATION_TTL_MS", "CREDENTIAL_CACHE_MAX_ENTRIES",
 ]);
-/** Learner and parser thresholds: they become activity input when the learners leave (3.2, 3.3). */
+/** Learner, parser and form-planner thresholds: they become activity input when those leave (3.2, 3.3). */
 const DEBT_LEARNERS = new Set([
   "FORM_OBSERVATION_FLOOR", "PRIOR_ALPHA", "PRIOR_BETA", "CENSUS_WINDOW", "RECENT_BRIEFS_MAX",
-  "TEXT_MIN_PX", "TEXT_MAX_PX", "SPACE_MIN_PX", "SPACE_MAX_PX", "VIEW_ASK_MAX",
+  "TEXT_MIN_PX", "TEXT_MAX_PX", "SPACE_MIN_PX", "SPACE_MAX_PX", "VIEW_ASK_MAX", "SCALAR_MAX_CHARS",
 ]);
-/** The 2.3 groups not yet shaped: page and list limits, then read timeouts. */
-const PENDING = new Set([
-  "PARTICIPATION_MAX_VALUE_CHARS", "GAP_STATUS_CONCURRENCY", "GAP_STATUS_MAX_PER_READ", "SURFACE_INTENT_MAX_CHARS",
-  "FRAME_MAX_BYTES", "FRAME_MAX_ENTRIES", "MAX_HISTORY", "MAX_ENTRIES", "MAX_SHOW", "MAX_BOX_LINES",
-  "SCALAR_MAX_CHARS", "RECORD_MAX_DEPTH", "FIELDS_SHOWN", "ITEMS_NAMED", "CELL_TITLE_CAP",
-  "DISCOVERY_RESOLVE_TIMEOUT_MS", "SHAPES_TIMEOUT_MS",
+/** The in-memory history ring: it goes with the surface-kept state it bounds (3.4). */
+const DEBT_SURFACE_STATE = new Set(["MAX_HISTORY"]);
+/**
+ * The guard: what a write may contain or the surface may hold. The guard stays in the surface,
+ * and a policy any node-key caller writes must not be able to raise it. Its own numbers, named.
+ */
+const GUARD = new Set([
+  "PARTICIPATION_MAX_VALUE_CHARS", "SURFACE_INTENT_MAX_CHARS", "FRAME_MAX_BYTES", "FRAME_MAX_ENTRIES", "MAX_ENTRIES", "MAX_SHOW",
 ]);
+/** The 2.3 group not yet shaped: read timeouts. */
+const PENDING = new Set(["DISCOVERY_RESOLVE_TIMEOUT_MS", "SHAPES_TIMEOUT_MS"]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -117,7 +122,8 @@ describe("no behaviour constant outside the named lists", () => {
         found.add(m[1]!);
       }
     }
-    const unnamed = [...found].filter((n) => !BOOTSTRAP.has(n) && !DEBT_AUTH.has(n) && !DEBT_LEARNERS.has(n) && !PENDING.has(n));
+    const named = [BOOTSTRAP, DEBT_AUTH, DEBT_LEARNERS, DEBT_SURFACE_STATE, GUARD, PENDING];
+    const unnamed = [...found].filter((n) => !named.some((list) => list.has(n)));
     expect(unnamed).toEqual([]);
   });
 
