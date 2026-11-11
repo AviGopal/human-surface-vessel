@@ -210,6 +210,8 @@ export type ViewEntry = {
   readonly newest?: true;
   /** Draw the entry closed under its title and its row count. */
   readonly folded?: true;
+  /** Folded entries: how many rows read fall in each of the last `hours` hours, drawn in the summary. */
+  readonly strip?: { readonly hours: number };
   /** The read of the system's own grades of a row (judged entries only), drawn after the person's verdict. */
   readonly graded?: { readonly pointer: ReportPointer };
 };

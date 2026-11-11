@@ -13,6 +13,10 @@
  * each row offers a person's verdict, outside the fold, written as an outcome row citing it
  * under their own key.
  * `questions`: each row is a question this surface holds, opened on selection.
+ * A folded entry with `strip: {hours}` draws in its summary one bar per hour of the last `hours`,
+ * each as tall as the rows read whose `t` falls in it, on that strip's own scale; from the rows
+ * already read, never a second read. A read cut to its newest rows (its pointer's `last`) that
+ * does not reach back to the window's start says so, rather than drawing a strip that looks whole.
  * An entry's `thread` is read again under each row it draws, bound to that row's id, and drawn
  * as its own entry: a person's ask shows the rows citing it. One level; the rows are its read's.
  */
@@ -373,6 +377,61 @@ function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; 
   );
 }
 
+const HOUR_MS = 3_600_000;
+
+/** An hour as the viewer's clock names it: "3 PM", or "15" where the locale reads so. */
+const hourName = (ms: number): string => new Date(ms).toLocaleTimeString(undefined, { hour: "numeric" });
+
+/**
+ * How many of `rows` fall in each of the last `hours` hours on the viewer's clock, the current hour last, oldest bin
+ * first, and whether the read was cut short of the window.
+ */
+export function stripOf(rows: readonly unknown[], hours: number, now: number, last?: number): { bins: number[]; start: number; cut: boolean } {
+  const next = new Date(now);
+  next.setMinutes(60, 0, 0);
+  const start = next.getTime() - hours * HOUR_MS;
+  const bins = new Array<number>(hours).fill(0);
+  let oldest = Infinity;
+  for (const r of rows) {
+    const t = typeof r === "object" && r !== null ? Date.parse(String((r as Record<string, unknown>)["t"])) : NaN;
+    if (Number.isNaN(t)) continue;
+    oldest = Math.min(oldest, t);
+    const i = Math.floor((t - start) / HOUR_MS);
+    if (i >= 0 && i < hours) bins[i]! += 1;
+  }
+  const cut = last !== undefined && rows.length >= last && oldest > start;
+  return { bins, start, cut };
+}
+
+function Strip({ rows, hours, last }: { rows: readonly unknown[]; hours: number; last?: number }): ReactNode {
+  const { bins, start, cut } = stripOf(rows, hours, Date.now(), last);
+  const total = bins.reduce((a, b) => a + b, 0);
+  const top = Math.max(...bins);
+  const span = hours === 1 ? "last hour" : `last ${hours} hours`;
+  const said = cut
+    ? `only the latest ${rows.length} shown`
+    : total === 0
+      ? `none in the ${span}`
+      : `${total} in the ${span}, most around ${hourName(start + bins.indexOf(top) * HOUR_MS)}`;
+  return (
+    <span className="sf-strip-wrap" data-strip={hours}>
+      <span className="sf-strip" role="img" aria-label={said} data-cut={cut ? "" : undefined}>
+        {bins.map((n, i) => (
+          <span
+            key={i}
+            className="sf-strip-bar"
+            data-n={n}
+            // A share of the strip's height (its stylesheet's); a bin with any row is never drawn flat.
+            style={{ height: `${n === 0 ? 0 : Math.round((n / top) * 100)}%`, minHeight: n === 0 ? undefined : "1px" }}
+            title={`${hourName(start + i * HOUR_MS)}: ${n}`}
+          />
+        ))}
+      </span>
+      <span className="sf-strip-caption">{cut || total === 0 ? said : span}</span>
+    </span>
+  );
+}
+
 /** What a view's `show` left out: closed under what it shows, and neither drawn nor read until opened. */
 function Earlier({ count, draw }: { count: number; draw: () => ReactNode }): ReactNode {
   const [open, setOpen] = useState(false);
@@ -402,6 +461,9 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
         <summary className="sf-report-title">
           {title}
           {count !== null ? <span className="sf-report-count" data-count={count}>{count}</span> : null}
+          {entry.strip && got && "total" in got ? (
+            <Strip rows={[...got.earlier, ...got.rows]} hours={entry.strip.hours} last={typeof pointer["last"] === "number" ? (pointer["last"] as number) : undefined} />
+          ) : null}
           {a && !a.ok ? <span className="sf-report-count" data-no-answer="">no answer</span> : null}
         </summary>
         {inner}

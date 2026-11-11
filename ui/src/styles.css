@@ -2147,3 +2147,11 @@ body { overflow: hidden; }
 .sf-thread { margin-left: var(--sf-space-2); padding-left: var(--sf-space-3); border-left: 2px solid var(--sf-rule); display: flex; flex-direction: column; gap: var(--sf-space-2); min-width: 0; }
 .sf-row-judge { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-2); }
 .sf-row-note { margin: 0; flex-basis: 100%; font-size: var(--sf-text-sm); overflow-wrap: anywhere; }
+
+/* A folded read's strip: when its rows came, one bar per hour, in its summary after the count. */
+/* Pushed to the summary's end, so the strips of every folded read line up under one another. */
+.sf-strip-wrap { display: inline-flex; align-items: flex-end; gap: var(--sf-space-2); margin-left: auto; align-self: center; flex: none; }
+.sf-strip { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; border-bottom: 1px solid var(--sf-rule-strong); }
+.sf-strip-bar { display: block; width: 4px; background: var(--sf-ink-3); border-radius: 1px 1px 0 0; }
+.sf-strip-caption { font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); white-space: nowrap; }
+@media (max-width: 480px) { .sf-strip-bar { width: 3px; } }

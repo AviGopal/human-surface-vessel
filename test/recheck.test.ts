@@ -75,7 +75,7 @@ const BOOTSTRAP = new Set([
   // The server's idle timeout and discovery registration: the proposal's bootstrap tier.
   "SERVER_IDLE_TIMEOUT_S", "REREGISTER_INTERVAL_MS", "DEREGISTER_TIMEOUT_MS",
   // A unit, not a behaviour.
-  "MS_PER_DAY",
+  "MS_PER_DAY", "HOUR_MS",
   // The default of a field already shaped (`visibleSliceSize`), named so readers share it.
   "DEFAULT_VISIBLE_SLICE_SIZE",
 ]);
@@ -99,7 +99,7 @@ const DEBT_SURFACE_STATE = new Set(["MAX_HISTORY"]);
  * and a policy any node-key caller writes must not be able to raise it. Its own numbers, named.
  */
 const GUARD = new Set([
-  "PARTICIPATION_MAX_VALUE_CHARS", "SURFACE_INTENT_MAX_CHARS", "FRAME_MAX_BYTES", "FRAME_MAX_ENTRIES", "MAX_ENTRIES", "MAX_SHOW", "MAX_WORDS", "MAX_WHERE",
+  "PARTICIPATION_MAX_VALUE_CHARS", "SURFACE_INTENT_MAX_CHARS", "FRAME_MAX_BYTES", "FRAME_MAX_ENTRIES", "MAX_ENTRIES", "MAX_SHOW", "MAX_WORDS", "MAX_WHERE", "MAX_STRIP_HOURS",
 ]);
 /** Every 2.3 group is shaped; nothing is pending. */
 const PENDING = new Set<string>();

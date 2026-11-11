@@ -71,6 +71,10 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * order: the cut is still the producer's last n, and the page sorts by nothing.
  * `folded: true` draws the entry closed under its title and the count of rows its read holds:
  * the evidence behind one control, never hidden uncounted.
+ * `strip: {hours}` (folded entries only) draws, in the fold's summary, how many of the rows its
+ * read returned fall in each of the last `hours` hours, by their `t`: a picture of when, from
+ * rows already read, never a second read. When the read was cut to its newest rows and they do
+ * not reach back to the window's start, the strip says so instead of looking whole.
  * `graded` (with `judge: "outcome"` only) is the read of the system's own grades of a row, its
  * pointer bound to the row through ROW_BINDING and narrowed by records' `where` (equality on a
  * row's fields; records stamps `role` from the writer's key). It is drawn only after this person
@@ -88,6 +92,7 @@ export type ViewEntry = {
   readonly thread?: ViewEntry;
   readonly newest?: true;
   readonly folded?: true;
+  readonly strip?: { readonly hours: number };
   readonly graded?: GradedRead;
 };
 
@@ -98,6 +103,8 @@ export type GradedRead = { readonly pointer: Readonly<Record<string, Plain | Rea
 /** How many entries one view may name, and how many rows `show` may ask for. */
 const MAX_ENTRIES = 8;
 const MAX_SHOW = 200;
+/** The widest window a strip may draw: a week, an hour per bar. */
+const MAX_STRIP_HOURS = 168;
 const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_:.-]{0,79}$/;
 
 /**
@@ -114,6 +121,9 @@ const MAX_WHERE = 4;
  * The walk's own grades of a row: outcomes citing it that the described-shape vessel wrote, which
  * records stamps with role "described". A person's outcome carries role "person" and is not read.
  */
+/** The folded reads draw when their rows came, over the last day. */
+const DAY = { hours: 24 } as const;
+
 const WALK_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "outcome", where: { role: "described" } } };
 
 export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }> = {
@@ -135,9 +145,9 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
       // the line says so rather than assembling one from the raw reads.
       { pointer: { type: "record_read", shape: "health" }, form: "rows", show: 1, title: "How the system is doing", empty: "Nothing reports health yet." },
       // The raw reads stay, folded and counted under the line, until the composer answers.
-      { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, newest: true, judge: "outcome", graded: WALK_GRADES, title: "What the walk answered", words: ["text"], folded: true },
-      { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, newest: true, title: "What failed", folded: true },
-      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "Verdicts and outcomes", words: ["r"], folded: true },
+      { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, newest: true, judge: "outcome", graded: WALK_GRADES, title: "What the walk answered", words: ["text"], folded: true, strip: DAY },
+      { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, newest: true, title: "What failed", folded: true, strip: DAY },
+      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "Verdicts and outcomes", words: ["r"], folded: true, strip: DAY },
     ],
   },
   ask: {
@@ -161,7 +171,7 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, newest?: true, folded?: true, graded?: {pointer}}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
     `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; ` +
@@ -169,6 +179,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     `a row with neither is drawn as its shape and time, every other field folded under details; ` +
     `newest: true (rows only) draws the rows show kept newest first, the reverse of the producer's order, which also decides which rows are kept; ` +
     `folded: true draws the entry closed under its title and the count of rows its read holds; ` +
+    `strip (folded only) draws in that summary how many of the rows read fall in each of the last hours hours, by their t; ` +
     `graded (with judge "outcome" only) is the read of the system's own grades of a row, its pointer naming "${ROW_BINDING}" and narrowed by where: {field: value} (equality, 1 to ${MAX_WHERE} fields), drawn closed only after the person has given their verdict on that row; ` +
     `thread (rows only) is read again under each row, its pointer argument "${ROW_BINDING}" replaced by that row's id, and drawn as its own entry, one level deep. ` +
     `region ask is drawn under the box after a person's ask; there a pointer argument "${ASK_BINDING}" is replaced by the id of that ask's row`;
@@ -302,8 +313,8 @@ function load(): void {
 /** One entry as written, or why it is not one. */
 function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail: string } {
   if (typeof e !== "object" || e === null || Array.isArray(e)) return { detail: "each entry is {pointer, form}" };
-  const { pointer, form, title, field, show, judge, empty, words, thread, newest, folded, graded, ...rest } = e as Record<string, unknown>;
-  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge, empty, words, thread, newest, folded and graded only` };
+  const { pointer, form, title, field, show, judge, empty, words, thread, newest, folded, strip, graded, ...rest } = e as Record<string, unknown>;
+  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge, empty, words, thread, newest, folded, strip and graded only` };
   const got = pointerOf(pointer);
   if ("detail" in got) return got;
   const bound = Object.values(got.pointer).includes(ROW_BINDING);
@@ -323,6 +334,9 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
   if (newest !== undefined && newest !== true) return { detail: "newest: true" };
   if (newest !== undefined && form !== "rows") return { detail: `newest needs form "rows": it reverses the rows drawn` };
   if (folded !== undefined && folded !== true) return { detail: "folded: true" };
+  if (strip !== undefined && folded !== true) return { detail: "strip needs folded: true: it is drawn in the fold's summary" };
+  const hours = typeof strip === "object" && strip !== null && !Array.isArray(strip) ? (strip as Record<string, unknown>)["hours"] : undefined;
+  if (strip !== undefined && (Object.keys(strip as object).length !== 1 || typeof hours !== "number" || !Number.isInteger(hours) || hours < 1 || hours > MAX_STRIP_HOURS)) return { detail: `strip: {hours: 1..${MAX_STRIP_HOURS}}` };
   if (graded !== undefined && judge !== "outcome") return { detail: `graded needs judge "outcome": the system's grade is drawn after a person's verdict` };
   const grades = graded === undefined ? null : gradedOf(graded);
   if (grades && "detail" in grades) return grades;
@@ -341,6 +355,7 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
       ...(under ? { thread: under.entry } : {}),
       ...(newest === true ? { newest } : {}),
       ...(folded === true ? { folded } : {}),
+      ...(typeof hours === "number" ? { strip: { hours } } : {}),
       ...(grades ? { graded: grades.graded } : {}),
     },
   };
