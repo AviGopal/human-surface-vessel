@@ -213,7 +213,12 @@ function isMachineRecordLine(lines: readonly string[]): boolean {
   }
 }
 
-export function Prose({ source }: { source: string }): ReactNode {
+/**
+ * With `breaks`, a paragraph's single line breaks are drawn as breaks, as a short text's writer
+ * meant them (an address, a line per fact); a blank line still starts a paragraph. Without it, a
+ * document's soft-wrapped lines reflow into one paragraph.
+ */
+export function Prose({ source, breaks = false }: { source: string; breaks?: boolean }): ReactNode {
   const blocks = parseBlocks(source);
   return (
     <div className="sf-prose">
@@ -285,7 +290,9 @@ export function Prose({ source }: { source: string }): ReactNode {
               </pre>
             ) : (
               <p key={key} {...(isCodeRecord(block.lines.join(" ")) ? { className: "sf-prose-record" } : {})}>
-                {renderInline(block.lines.join(" "), key)}
+                {breaks
+                  ? block.lines.flatMap((line, j) => [...(j > 0 ? [<br key={`${key}-br${j}`} />] : []), ...renderInline(line, `${key}-${j}`)])
+                  : renderInline(block.lines.join(" "), key)}
               </p>
             );
         }

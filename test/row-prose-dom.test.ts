@@ -1,7 +1,8 @@
 /**
  * A row's text words are drawn as the writer formatted them (surface-acts-on-shapes-present R.6):
  * emphasis, lists and paragraphs through the surface's own Prose, which builds elements and
- * never markup. Raw HTML in a row is drawn as text; a link is its label and its target as text,
+ * never markup. A single line break in a row stays a line break, as its writer wrote it; a blank
+ * line starts a paragraph. Raw HTML in a row is drawn as text; a link is its label and its target as text,
  * never an anchor. A word that is not text (an outcome's `r`) stays a plain line.
  *
  * Shapes: one node 11-11. The walk's answer to "What is happening in the world today?" was a
@@ -26,7 +27,8 @@ const HOSTILE =
   'Before <script>window.__ran = 1</script> and <img src="x" onerror="window.__ran = 2"> after.\n\n' +
   "See [the source](javascript:window.__ran=3) and [a page](https://example.org/a).";
 const answer = (n: number, text: string) => ({ input_refs: [HEX], text, shape: "answer", seq: n, t: "2026-11-11T13:34:30.000Z", writer: "described-shape-vessel", role: "described", id: String(n).padEnd(64, "a") });
-const ROWS = [answer(1, LIST), answer(2, HOSTILE)];
+const LINES = "12 Main St\nSpringfield\n\nA second paragraph.";
+const ROWS = [answer(1, LIST), answer(2, HOSTILE), answer(4, LINES)];
 const OUTCOME = { input_refs: [HEX], r: 0, shape: "outcome", seq: 3, t: "2026-11-11T13:34:36.000Z", writer: "described-shape-vessel", role: "described", id: "3".padEnd(64, "b") };
 
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -83,6 +85,14 @@ describe("a row's text words are drawn as the writer formatted them", () => {
     expect(row.querySelector("em")!.textContent).toBe("focused");
     expect(row.textContent).not.toContain("**");
     expect(row.textContent).not.toMatch(/(^|\s)\*\s/);
+  });
+
+  test("must-fail: a single line break stays a line break, and a blank line starts a paragraph", async () => {
+    const el = await mount([answers]);
+    const paras = [...inView(words(el, 4)).querySelectorAll(".sf-prose > p")];
+    expect(paras.length).toBe(2);
+    expect([...paras[0]!.childNodes].map((n) => (n.nodeName === "BR" ? "\n" : n.textContent)).join("")).toBe("12 Main St\nSpringfield");
+    expect(paras[1]!.textContent).toBe("A second paragraph.");
   });
 
   test("must-fail: raw HTML is drawn as text, never as elements, and runs nothing", async () => {

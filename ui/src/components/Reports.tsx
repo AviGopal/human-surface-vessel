@@ -167,13 +167,13 @@ function when(t: unknown): string | null {
 }
 
 /**
- * One declared field as words: text as its writer formatted it, through Prose, which builds
- * elements and draws markup and links as text; any other value as one line with its field's name.
+ * One declared field as words: text as its writer formatted it, line breaks kept, through Prose,
+ * which builds elements and draws markup and links as text; any other value as one line with its field's name.
  */
 function Word({ k, v }: { k: string; v: unknown }): ReactNode {
   return typeof v === "string" ? (
     <div className="sf-row-words sf-row-prose">
-      <Prose source={v} />
+      <Prose source={v} breaks />
     </div>
   ) : (
     <p className="sf-row-words">{`${k.replace(/_/g, " ")} ${fieldText(v)}`}</p>
