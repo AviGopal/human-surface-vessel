@@ -12,7 +12,6 @@ process.once("exit", () => rmSync(workspace, { recursive: true, force: true }));
 // own, so a test write sends `Authorization: ApiKey <it>` (testAuth below) and never the live
 // fleet key: the live keys are dropped here. Identity points at an address nothing answers,
 // so any other key fails closed unless a test stands up its own identity stub.
-delete process.env.HUMAN_SURFACE_VESSEL_API_KEY;
 process.env.METABOB_API_KEY = `test-node-key-${crypto.randomUUID()}`;
 process.env.IDENTITY_VESSEL_URL = "http://127.0.0.1:9";
 

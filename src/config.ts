@@ -48,8 +48,8 @@ export const DISCOVERY_ENDPOINT =
  */
 export const IDENTITY_VESSEL_URL = (process.env.IDENTITY_VESSEL_URL ?? "").trim();
 
-export const METABOB_API_KEY =
-  process.env.HUMAN_SURFACE_VESSEL_API_KEY ?? process.env.METABOB_API_KEY ?? "";
+/** The node's key: every service on a node uses it, and no vessel has a key of its own. */
+export const METABOB_API_KEY = process.env.METABOB_API_KEY ?? "";
 
 /**
  * The shape vocabulary this vessel serves. INHERITED from stateful-ui-vessel,
