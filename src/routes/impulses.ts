@@ -41,7 +41,7 @@ import {
 import { explainRanking, rankPanels, type ImportanceWeights } from "../importance.ts";
 import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.ts";
 import { knownGapStatus, listedShapes, refreshGapStatuses } from "./proxy.ts";
-import { classifyQuestion, gapIdForPanel } from "../question-class.ts";
+import { classifyQuestion, gapIdForPanel, type QuestionClass } from "../question-class.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
 import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
@@ -101,6 +101,15 @@ function optPosition(p: Pointer): { x: number; y: number } | undefined {
  * by field) to decide default-vs-preserve. Keep the two in step.
  */
 const PANEL_CONTENT_KEYS = ["title", "body", "kind", "importance", "asks", "visibility", "reader"] as const;
+
+/** Why a questions read served none, in the person's words. */
+function emptyReason(open: boolean, discoveryAnswered: boolean, classes: Record<QuestionClass, number>): string {
+  if (!discoveryAnswered) return "None confirmed: discovery did not answer, so no question's reader could be checked.";
+  if (!open) return "No questions.";
+  const n = classes.unread;
+  if (n === 0) return "Nothing waits on you.";
+  return `None. ${n} open question${n === 1 ? "" : "s"} name${n === 1 ? "s" : ""} no reader this node serves.`;
+}
 
 /** The declared reader: a shape name, or undefined when the pointer names none or names it badly. */
 function readerOf(pointer: Record<string, unknown>): string | undefined {
@@ -550,13 +559,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         .filter(pn => isSolicitation(pn) && (!wanted || pn.id === wanted))
         .map(questionView)
         // A declared reader counts only while discovery lists it; unknown is not listed.
-        .map((view) => ({ ...view, readerListed: view.reader !== undefined && listed !== null && listed.has(view.reader) }));
-      // Open questions not offered as waiting because no reader of theirs is listed, counted before
-      // `open: true` drops them, so a read that shows none says why.
-      const unlisted = matched.filter((q) => !q.answered && !q.declined && !q.readerListed).length;
-      const questions = matched
-        // `open: true`: only what waits on a person (an ask not answered or set aside).
-        .filter((q) => pointer["open"] !== true || (!q.answered && !q.declined && classifyQuestion(q) === "ask"))
+        .map((view) => ({ ...view, readerListed: view.reader !== undefined && listed !== null && listed.has(view.reader) }))
         // The status of the gap each one asks about, as last read. Unknown stays
         // unknown: only a status the gap store gave can fold a question as settled.
         .map((view) => {
@@ -564,8 +567,16 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           const status = gapId ? knownGapStatus(gapId) : null;
           return status ? { ...view, gapStatus: status } : view;
         });
+      // How the open questions classify, over the whole matched set and not the slice, so a
+      // folded line's count is the state and not what fitted in a payload. One pass over the
+      // stored questions, in memory, with no read of its own.
+      const classes: Record<QuestionClass, number> = { ask: 0, notice: 0, settled: 0, unread: 0, malformed: 0 };
+      for (const q of matched) if (!q.answered && !q.declined) classes[classifyQuestion(q)] += 1;
+      const questions = matched
+        // `open: true`: only what waits on a person (an ask not answered or set aside).
+        .filter((q) => pointer["open"] !== true || (!q.answered && !q.declined && classifyQuestion(q) === "ask"));
       // Refreshed off the request path: this read never waits on the gap store.
-      void refreshGapStatuses(questions.flatMap((q) => gapIdForPanel(q.id) ?? [])).catch(() => {});
+      void refreshGapStatuses(matched.flatMap((q) => gapIdForPanel(q.id) ?? [])).catch(() => {});
 
       // ORDERED BY IMPORTANCE, from the impulse, at request time.
       //
@@ -630,12 +641,17 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
           // Also over the whole matched set, never the slice: how many questions
           // are waiting on a human is not a fact about what fitted in a payload.
           unanswered: questions.filter((q) => !q.answered && !q.declined).length,
-          // Why open questions are not offered as waiting: none of these names a reader discovery
-          // lists. When discovery did not answer, no reader could be confirmed.
+          classes,
+          // Why open questions are not offered as waiting. `unlisted` is the open questions that
+          // ask something (not a notice, which asks nothing; not malformed; not about a closed gap)
+          // and name no reader discovery lists: `classes.unread`. When discovery did not answer,
+          // no reader could be confirmed.
           readers: {
             discovery: listed === null ? "unreachable" : "answered",
-            unlisted,
+            unlisted: classes.unread,
           },
+          // What an empty read means, said by the read, so the page does not guess it.
+          ...(questions.length === 0 ? { empty_reason: emptyReason(pointer["open"] === true, listed !== null, classes) } : {}),
           /**
            * The honest summary. Truncation is stated, not implied: a caller
            * seeing `not_shown_count > 0` knows there is more and knows how much.

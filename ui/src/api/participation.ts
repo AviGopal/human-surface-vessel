@@ -85,10 +85,15 @@ export interface Ranking {
   readonly rejected_values?: readonly string[];
 }
 
+/** Open questions by how they classify, over the whole set the read matched (not the slice). */
+export type QuestionClasses = Readonly<Record<"ask" | "notice" | "settled" | "unread" | "malformed", number>>;
+
 export interface QuestionPage {
   readonly questions: Question[];
   /** Null when the server did not publish a summary — an older build. Never faked. */
   readonly ranking: Ranking | null;
+  /** Null when the server did not publish them. Never counted from the slice. */
+  readonly classes: QuestionClasses | null;
 }
 
 async function read(response: Response): Promise<Record<string, unknown>> {
@@ -101,14 +106,15 @@ async function read(response: Response): Promise<Record<string, unknown>> {
 
 export async function fetchQuestions(): Promise<QuestionPage> {
   const result = await read(await fetch("/api/questions", { credentials: "same-origin" }));
-  const body = result.body as { questions?: Question[]; ranking?: Ranking } | undefined;
+  const body = result.body as { questions?: Question[]; ranking?: Ranking; classes?: QuestionClasses } | undefined;
   if (!Array.isArray(body?.questions)) throw new Error("The question record is unavailable.");
   // The summary is PASSED THROUGH when present and null when absent. Deriving
   // it from `questions.length` would produce a line claiming the slice is the
   // whole set — which is exactly the withholding this exists to disclose.
   const ranking =
     body?.ranking && typeof body.ranking.solicitations_total === "number" ? body.ranking : null;
-  return { questions: body.questions, ranking };
+  const classes = body?.classes && typeof body.classes.unread === "number" ? body.classes : null;
+  return { questions: body.questions, ranking, classes };
 }
 
 export async function sendContribution(contribution: Contribution): Promise<ParticipationResponse> {

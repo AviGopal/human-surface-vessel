@@ -53,8 +53,11 @@ export function QuestionsList({
         <details key={group.kind} className="sf-qgroup" data-folded={group.folded} open={!group.folded}>
           <summary className="sf-qgroup-head">
             <span>{group.label}</span>
-            <span className="sf-qgroup-count">{group.questions.length}</span>
+            <span className="sf-qgroup-count">{group.count}</span>
           </summary>
+          {group.count > group.questions.length ? (
+            <p className="sf-muted sf-qgroup-note">{group.questions.length === 0 ? "none of them in this page of questions" : `${group.questions.length} of them in this page of questions`}</p>
+          ) : null}
           <ul className="sf-qgroup-list">
             {group.questions.map((question) => {
               const gapId = questionGapId(question);

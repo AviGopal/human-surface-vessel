@@ -209,12 +209,18 @@ function Fields({ answer }: { answer: unknown }): ReactNode {
   );
 }
 
+/** Why the producer served no rows, when it said: its `empty_reason`, ahead of the view's own words. */
+function emptyReasonOf(answer: unknown): string | null {
+  const why = typeof answer === "object" && answer !== null && !Array.isArray(answer) ? (answer as Record<string, unknown>)["empty_reason"] : undefined;
+  return typeof why === "string" && why.trim() ? why.trim().slice(0, 300) : null;
+}
+
 /** The answer drawn in the entry's form, or what was found instead of rows. */
 function Drawn({ entry, answer, onOpenQuestion }: { entry: ViewEntry; answer: unknown; onOpenQuestion: (id: string) => void }): ReactNode {
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
-  if (got.rows.length === 0) return <p className="sf-muted sf-report-note">{entry.empty ?? "answered with no rows"}</p>;
+  if (got.rows.length === 0) return <p className="sf-muted sf-report-note">{emptyReasonOf(answer) ?? entry.empty ?? "answered with no rows"}</p>;
   return (
     <>
       {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the last {got.rows.length} of {got.total}</p> : null}

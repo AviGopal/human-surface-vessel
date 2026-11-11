@@ -10,7 +10,7 @@
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { fetchQuestions, type ParticipationResponse, type Question, type QuestionPage, type Ranking } from "../api/participation";
+import { fetchQuestions, type ParticipationResponse, type Question, type QuestionClasses, type QuestionPage, type Ranking } from "../api/participation";
 import { reportExposureAct } from "../lib/exposure-reporter";
 import { sortRuns } from "../lib/sort";
 import { FOLDED, classifyQuestion } from "../lib/questionClass";
@@ -22,6 +22,11 @@ export interface QuestionGroup {
   readonly kind: string;
   readonly label: string;
   readonly questions: readonly Question[];
+  /**
+   * How many there are: for a folded group, the read's count over every open question of its
+   * class, not the rows that fitted in the slice; for asks, the rows drawn.
+   */
+  readonly count: number;
   /** Not asks (lib/questionClass): drawn closed, below the asks, and not counted as waiting. */
   readonly folded: boolean;
 }
@@ -94,7 +99,7 @@ function orderQuestions(visible: readonly Question[]): readonly Question[] {
 }
 
 /** Groups keep the importance order: a group sits where its best row would. */
-export function groupQuestions(ordered: readonly Question[]): readonly QuestionGroup[] {
+export function groupQuestions(ordered: readonly Question[], classes: QuestionClasses | null = null): readonly QuestionGroup[] {
   const byKind = new Map<string, Question[]>();
   const byClass = new Map<string, Question[]>();
   for (const q of ordered) {
@@ -109,11 +114,13 @@ export function groupQuestions(ordered: readonly Question[]): readonly QuestionG
     kind,
     label: kindLabel(kind === "other" ? undefined : kind),
     questions,
+    count: questions.length,
     folded: false,
   }));
   const folded = FOLDED.flatMap(({ cls, label }) => {
-    const questions = byClass.get(cls);
-    return questions ? [{ kind: cls, label, questions, folded: true }] : [];
+    const questions = byClass.get(cls) ?? [];
+    const count = classes ? classes[cls] : questions.length;
+    return questions.length > 0 || count > 0 ? [{ kind: cls, label, questions, count, folded: true }] : [];
   });
   return [...asks, ...folded];
 }
@@ -137,12 +144,14 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
   });
   const [snapshot, setSnapshot] = useState<Question[] | null>(null);
   const [ranking, setRanking] = useState<Ranking | null>(null);
+  const [classes, setClasses] = useState<QuestionClasses | null>(null);
   const [acceptedTicks, setAcceptedTicks] = useState(0);
 
   useEffect(() => {
     if (snapshot === null && query.data) {
       setSnapshot(query.data.questions);
       setRanking(query.data.ranking);
+      setClasses(query.data.classes);
       setAcceptedTicks((n) => n + 1);
     }
   }, [snapshot, query.data]);
@@ -152,6 +161,7 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
     if (result.data && !result.isError) {
       setSnapshot(result.data.questions);
       setRanking(result.data.ranking);
+      setClasses(result.data.classes);
       setAcceptedTicks((n) => n + 1);
     }
   }, [query]);
@@ -189,7 +199,7 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
     return {
       query,
       ordered,
-      groups: groupQuestions(ordered),
+      groups: groupQuestions(ordered, classes),
       ranking,
       waiting: waitingCount(visible),
       changed: snapshot !== null && query.data !== undefined && contentOf(query.data.questions) !== contentOf(visible),
@@ -197,7 +207,7 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
       accept,
       recordReceipt,
     };
-  }, [snapshot, query, ranking, acceptedTicks, accept, recordReceipt]);
+  }, [snapshot, query, ranking, classes, acceptedTicks, accept, recordReceipt]);
 
   return <QuestionsContext.Provider value={value}>{children}</QuestionsContext.Provider>;
 }

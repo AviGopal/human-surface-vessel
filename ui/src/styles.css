@@ -1623,6 +1623,7 @@ body { overflow: hidden; }
   z-index: 1;
 }
 .sf-qgroup-count { font-variant-numeric: tabular-nums; color: var(--sf-ink-3); }
+.sf-qgroup-note { margin: 0; padding: 0.25rem 0.875rem; font-size: 0.8125rem; }
 .sf-qgroup-list { list-style: none; margin: 0; padding: 0; }
 .sf-qrow {
   display: flex;

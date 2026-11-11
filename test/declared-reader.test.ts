@@ -19,9 +19,10 @@ const routerModule = new URL("../src/routes/impulses.ts", import.meta.url).pathn
 
 const SCENARIO = `
   let listing = true;
+  let shapes = ["listed_reader"];
   const server = Bun.serve({ port: 0, async fetch(req) {
     const url = new URL(req.url);
-    if (url.pathname === "/registry/shapes") return listing ? Response.json({ shapes: ["listed_reader"] }) : new Response("", { status: 503 });
+    if (url.pathname === "/registry/shapes") return listing ? Response.json({ shapes }) : new Response("", { status: 503 });
     return Response.json({}, { status: 404 });
   } });
   process.env.DISCOVERY_ENDPOINT = "http://127.0.0.1:" + server.port;
@@ -39,14 +40,18 @@ const SCENARIO = `
   await resolve({ type: "uiQuestion_write", id: "q-unlisted", title: "Which way?", body: "Pick one.", reader: "gone_reader" });
   // An id and kind the old table read as an escalation, with no reader declared.
   await resolve({ type: "uiQuestion_write", id: "needs-human-g1", title: "Gap needs a decision", body: "Gap g1 failed.", kind: "gap_needs_human" });
+  // A notice asks nothing, so it is not counted as missing a reader.
+  await resolve({ type: "uiQuestion_write", id: "q-notice", title: "Run finished", body: "Nothing to decide.", kind: "notice" });
   // A later write that names no reader keeps the declared one.
   await resolve({ type: "uiQuestion_write", id: "q-listed", importance: "high" });
   const open = await resolve({ type: "uiQuestion", open: true });
   const whole = await resolve({ type: "uiQuestion" });
+  shapes = ["other_reader"];
+  const none = await resolve({ type: "uiQuestion", open: true });
   listing = false;
   const dark = await resolve({ type: "uiQuestion", open: true });
   server.stop(true);
-  console.log(JSON.stringify({ open: open.body, whole: whole.body, dark: dark.body }));
+  console.log(JSON.stringify({ open: open.body, whole: whole.body, none: none.body, dark: dark.body }));
 `;
 
 function run(workspace: string) {
@@ -82,11 +87,20 @@ describe("a question waits on a person only when discovery lists its declared re
     expect((byId.get("needs-human-g1") as any)?.readerListed).toBe(false);
     expect((byId.get("needs-human-g1") as any)?.reader).toBeUndefined();
     expect(r.whole.readers).toEqual({ discovery: "answered", unlisted: 2 });
+    expect(r.whole.classes).toEqual({ ask: 1, notice: 1, settled: 0, unread: 2, malformed: 0 });
+  });
+
+  test("must-fail: an open read that serves none says why, with the count from the read", () => {
+    expect(r.open.empty_reason).toBeUndefined();
+    expect(r.none.questions).toEqual([]);
+    expect(r.none.empty_reason).toBe("None. 3 open questions name no reader this node serves.");
+    expect(r.dark.empty_reason).toBe("None confirmed: discovery did not answer, so no question's reader could be checked.");
   });
 
   test("must-fail: when discovery does not answer, no reader is confirmed and the read says why", () => {
     expect(r.dark.questions).toEqual([]);
     expect(r.dark.readers).toEqual({ discovery: "unreachable", unlisted: 3 });
+    expect(r.dark.classes.notice).toBe(1);
   });
 });
 
