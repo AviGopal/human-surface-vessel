@@ -49,7 +49,7 @@ import { recheckPatch } from "../recheck.ts";
 import { LIMITS } from "../limits.ts";
 import { TIMEOUTS } from "../timeouts.ts";
 import { runOf, undoView, writeView } from "../ui-views.ts";
-import { countEmptyRefusal } from "../write-refusals.ts";
+import { countEmptyRefusal, countTemplateRefusal } from "../write-refusals.ts";
 import { admitCaller, type Caller } from "../inbound-auth.ts";
 
 type Pointer = Record<string, unknown>;
@@ -101,6 +101,10 @@ function optPosition(p: Pointer): { x: number; y: number } | undefined {
  * by field) to decide default-vs-preserve. Keep the two in step.
  */
 const PANEL_CONTENT_KEYS = ["title", "body", "kind", "importance", "asks", "visibility", "reader"] as const;
+/** The fields that name a panel or question; a template placeholder in one is refused. */
+const PLACEHOLDER_FIELDS = ["id", "kind", "title", "importance"] as const;
+/** A template placeholder its writer never filled: "{{goal.id}}", "{{ run.title }}". */
+const PLACEHOLDER = /\{\{\s*[\w$.-]+\s*\}\}/;
 
 /** Why a questions read served none, in the person's words. */
 function emptyReason(open: boolean, discoveryAnswered: boolean, classes: Record<QuestionClass, number>): string {
@@ -436,6 +440,20 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
   switch (type) {
     case "uiPanel_write":
     case "uiQuestion_write": {
+      // (0) REFUSE an unfilled template. A naming field still reading "{{goal.id}}" is a
+      // writer whose bindings never resolved: stored, it is a question titled with a
+      // placeholder, ranked like any other, and every later write with the same unfilled
+      // id lands on that one row. The body is the writer's content and may quote one.
+      const unfilled = PLACEHOLDER_FIELDS.find((k) => typeof pointer[k] === "string" && PLACEHOLDER.test(pointer[k] as string));
+      if (unfilled) {
+        countTemplateRefusal(type);
+        return c.json({
+          resolved: false,
+          success: false,
+          shape: type,
+          error: `unfilled template refused: ${unfilled} is ${JSON.stringify(pointer[unfilled])}, a placeholder its writer never filled. Nothing was written. Fill the template's bindings before writing.`,
+        }, 422);
+      }
       const id = str(pointer, "id", `panel-${Date.now()}`);
       const existing = getPanel(id);
 

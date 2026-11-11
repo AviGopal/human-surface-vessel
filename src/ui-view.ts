@@ -19,7 +19,7 @@
 
 import { buildFormCensus, type FormCensus } from "./form-census.ts";
 import { VIEW_REGIONS, currentView, type ViewRegion } from "./ui-views.ts";
-import { emptyRefusals } from "./write-refusals.ts";
+import { emptyRefusals, templateRefusals } from "./write-refusals.ts";
 import { aggregateByKind, readExposureCorpus } from "./importance-learn.ts";
 import { isSolicitation } from "./solicitation.ts";
 import { listPanels, questionView } from "./store.ts";
@@ -146,6 +146,8 @@ export interface UiViewReport {
   views: Record<string, RegionView>;
   /** New panels and questions refused for carrying nothing, per shape, since `since` (src/write-refusals.ts). */
   refused_empty_writes: { uiPanel_write: number; uiQuestion_write: number; since: number };
+  /** Panels and questions refused for a naming field still a template placeholder, per shape, since `since`. */
+  refused_template_writes: { uiPanel_write: number; uiQuestion_write: number; since: number };
 }
 
 export interface RegionView {
@@ -213,5 +215,6 @@ export function buildUiView(overrides: Record<string, string>, listed: ReadonlyS
     asks: buildAsksView(listed),
     views: buildViews(),
     refused_empty_writes: emptyRefusals(),
+    refused_template_writes: templateRefusals(),
   };
 }
