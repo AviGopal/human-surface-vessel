@@ -67,20 +67,20 @@ describe("a folded entry is closed and counted", () => {
     expect(fold.hasAttribute("open")).toBe(false);
     expect(fold.querySelector("summary")!.textContent).toBe("What failed12");
     expect(fold.querySelector(".sf-report-count")!.getAttribute("data-count")).toBe("12");
-    expect(inView(el)).not.toContain("the last 3 of 12");
+    expect(inView(el)).not.toContain("9 earlier");
   });
 
   test("must-fail: opening it shows what the entry draws unfolded", async () => {
     const el = await mount([{ ...failed, folded: true }]);
     const fold = el.querySelector("details.sf-report-folded")!;
     expect(fold.querySelectorAll(".sf-rows > .sf-row").length).toBe(3);
-    expect(fold.textContent).toContain("the last 3 of 12");
+    expect(fold.textContent).toContain("9 earlier");
   });
 
   test("must-fail: an unfolded entry is drawn open, as before", async () => {
     const el = await mount([failed]);
     expect(el.querySelector("details.sf-report-folded")).toBeNull();
-    expect(inView(el)).toContain("the last 3 of 12");
+    expect(inView(el)).toContain("9 earlier");
   });
 
   test("must-fail: a folded read with no answer says so on its title while closed, with no count", async () => {

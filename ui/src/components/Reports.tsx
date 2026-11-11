@@ -189,15 +189,17 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
 /**
  * The rows an entry draws: the answer, or the field of it the entry names, and with `show`
  * only the last n in the order the producer returned them; with `newest`, those n reversed, on a
- * copy, so the cut stays the producer's. Null when there are no rows to
- * draw, with what was found instead.
+ * copy, so the cut stays the producer's. `earlier` is what the cut left out, in the same order,
+ * drawn folded rather than dropped. Null when there are no rows to draw, with what was found instead.
  */
-export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show" | "newest">): { rows: readonly unknown[]; total: number } | { missing: string } {
+export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show" | "newest">): { rows: readonly unknown[]; earlier: readonly unknown[]; total: number } | { missing: string } {
   const at = entry.field === undefined ? answer : typeof answer === "object" && answer !== null && !Array.isArray(answer) ? (answer as Record<string, unknown>)[entry.field] : undefined;
   if (at === undefined || at === null) return { missing: entry.field === undefined ? "answered with nothing" : `the answer has no ${entry.field}` };
   const all = Array.isArray(at) ? at : [at];
-  const kept = entry.show === undefined ? all : all.slice(-entry.show);
-  return { rows: entry.newest ? [...kept].reverse() : kept, total: all.length };
+  const cut = entry.show === undefined ? 0 : Math.max(0, all.length - entry.show);
+  const kept = all.slice(cut);
+  const earlier = all.slice(0, cut);
+  return { rows: entry.newest ? [...kept].reverse() : kept, earlier: entry.newest ? [...earlier].reverse() : earlier, total: all.length };
 }
 
 /** A row's time as the person's clock reads it; the producer's text when it is not a time. */
@@ -254,7 +256,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
         const words = rowWords(o, wordsFor(o["shape"], reading.declared, entry.words));
         const time = when(o["t"]);
         return (
-          <li key={id ?? i} className="sf-row" data-row={id ?? undefined}>
+          <li key={id ?? i} className={entry.thread ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined}>
             {words.length > 0 ? (
               words.map((w, j) => <Word key={j} k={w.field} v={w.value} />)
             ) : (
@@ -361,11 +363,24 @@ function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; 
   const got = rowsOf(answer, entry);
   if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
   if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} />;
+  const draw = (rows: readonly unknown[]): ReactNode =>
+    entry.form === "questions" ? <Questions rows={rows} onOpen={reading.onOpenQuestion} /> : <Rows rows={rows} entry={entry} reading={reading} />;
   return (
     <>
-      {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the {entry.newest ? "newest" : "last"} {got.rows.length} of {got.total}</p> : null}
-      {entry.form === "questions" ? <Questions rows={got.rows} onOpen={reading.onOpenQuestion} /> : <Rows rows={got.rows} entry={entry} reading={reading} />}
+      {draw(got.rows)}
+      {got.earlier.length > 0 ? <Earlier count={got.earlier.length} draw={() => draw(got.earlier)} /> : null}
     </>
+  );
+}
+
+/** What a view's `show` left out: closed under what it shows, and neither drawn nor read until opened. */
+function Earlier({ count, draw }: { count: number; draw: () => ReactNode }): ReactNode {
+  const [open, setOpen] = useState(false);
+  return (
+    <details className="sf-earlier" data-earlier={count} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary>{count} earlier</summary>
+      {open ? draw() : null}
+    </details>
   );
 }
 

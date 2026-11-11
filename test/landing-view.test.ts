@@ -166,11 +166,11 @@ describe("the landing drawn from its view", () => {
     expect(inView(plain.querySelector(".sf-landing")!)).not.toMatch(/landing@|operator:qa|Showing/);
   });
 
-  test("must-fail: show draws the last n rows as the producer ordered them, and says how many there were", async () => {
+  test("must-fail: show draws the last n rows as the producer ordered them, and folds the rest under how many", async () => {
     const el = await mount({ view: view([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", show: 2 }]) });
     const rows = [...el.querySelectorAll("[data-report=record_read] [data-row]")].map((r) => r.getAttribute("data-row"));
     expect(rows).toEqual(["w4", "w5"]);
-    expect(el.textContent).toContain("the last 2 of 5");
+    expect(el.querySelector("details.sf-earlier > summary")!.textContent).toBe("3 earlier");
   });
 
   test("questions: a field's rows are drawn as questions; selecting one opens it and sends nothing", async () => {

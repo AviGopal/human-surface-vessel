@@ -2116,6 +2116,10 @@ body { overflow: hidden; }
 .sf-row-meta > .sf-row-details[open] { order: 3; flex-basis: 100%; }
 .sf-row-meta > .sf-row-system-grade { order: 4; flex-basis: 100%; }
 .sf-row-time { margin: 0; font-size: var(--sf-text-sm); }
+/* A row of an entry that declares a thread (an ask) reads above the rows under it (its replies). */
+.sf-row-parent > .sf-row-words { font-weight: 600; }
+.sf-earlier > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
+.sf-earlier[open] > summary { margin-bottom: var(--sf-space-2); }
 .sf-row-details > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-row-details[open] > summary { margin-bottom: var(--sf-space-1); }
 /* The system's own grade, closed under its row, apart from the person's Right and Wrong. */

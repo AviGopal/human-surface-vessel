@@ -63,13 +63,13 @@ describe("newest first is the view's declared reversal of the producer's order",
   test("must-fail: show keeps the producer's last n, and newest draws those n in reverse", async () => {
     const el = await mount([{ ...asks, newest: true }]);
     expect(top(el)).toEqual([hex("5"), hex("4"), hex("3")]);
-    expect(el.textContent).toContain("the newest 3 of 5");
+    expect(el.querySelector("details.sf-earlier > summary")!.textContent).toBe("2 earlier");
   });
 
   test("must-fail: without newest the producer's order stands", async () => {
     const el = await mount([asks]);
     expect(top(el)).toEqual([hex("3"), hex("4"), hex("5")]);
-    expect(el.textContent).toContain("the last 3 of 5");
+    expect(el.querySelector("details.sf-earlier > summary")!.textContent).toBe("2 earlier");
   });
 
   test("must-fail: a thread declares its own order", async () => {

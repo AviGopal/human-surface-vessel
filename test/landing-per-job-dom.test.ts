@@ -80,7 +80,7 @@ describe("the default landing is per job", () => {
     const asked = reports(el)[1]!;
     const top = [...asked.querySelectorAll(".sf-rows > .sf-row")].filter((r) => !r.parentElement!.closest(".sf-thread")).map((r) => r.getAttribute("data-row"));
     expect(top).toEqual([hex("7"), hex("6"), hex("5"), hex("4"), hex("3")]);
-    expect(asked.textContent).toContain("the newest 5 of 7");
+    expect([...asked.querySelectorAll("details.sf-earlier")].filter((d) => !d.closest(".sf-thread")).map((d) => d.querySelector("summary")!.textContent)).toEqual(["2 earlier"]);
     expect(asked.querySelector(`.sf-thread[data-thread-of="${hex("7")}"]`)!.textContent).toContain("Answer to 7.");
   });
 

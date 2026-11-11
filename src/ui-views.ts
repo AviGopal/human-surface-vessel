@@ -129,7 +129,7 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
         words: ["what"],
         // Under each ask, its answers: a read records filters by shape, not a choice the page makes.
         // Dropping `shape` draws the whole thread of rows citing the ask.
-        thread: { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 3, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
+        thread: { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
       },
       // One line of health, which a composer answers (Phase 5). Nothing writes `health` yet, and
       // the line says so rather than assembling one from the raw reads.

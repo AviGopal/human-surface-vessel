@@ -2,8 +2,8 @@
  * A person's asks are threads (surface-acts-on-shapes-present R.4). A view entry may name one
  * further read drawn under each row, its pointer bound to that row's id through "$row", as the
  * ask region binds "$ask". The rows under an ask are that read's answer: the page filters, sorts
- * and dedupes nothing, one level only, and the view bounds it (the thread's own `show`, with a cut
- * shown as a count). The default landing reads each ask's answers (records filters by shape), so
+ * and dedupes nothing, one level only, and the view bounds it (the thread's own `show`, with the cut
+ * folded under a count). The default landing reads each ask's answers (records filters by shape), so
  * a newer selection row citing the ask never pushes its answer out of view.
  *
  * Shapes: one node 11-11. A person asked "Close any known gap by changing the code." and the
@@ -85,12 +85,12 @@ describe("a person's ask is a thread", () => {
       { type: "record_read", refs_to: ASK_B.id, shape: "answer" },
     ]));
     expect(sent.some((p) => Object.values(p).includes("$row"))).toBe(false);
-    expect([...threadOf(el, ASK_A.id).querySelectorAll(".sf-row-words")].map((p) => p.textContent)).toEqual(["Answer 4.", "Answer 3.", "Answer 2."]);
+    expect([...threadOf(el, ASK_A.id).querySelectorAll(".sf-row-words")].map((p) => p.textContent)).toEqual(["Answer 4."]);
   });
 
   test("must-fail: the thread's own show bounds it and the cut is a count; an ask with none says so", async () => {
     const el = await mount([asked]);
-    expect(threadOf(el, ASK_A.id).textContent).toContain("the newest 3 of 4");
+    expect(threadOf(el, ASK_A.id).querySelector("details.sf-earlier > summary")!.textContent).toBe("3 earlier");
     expect(threadOf(el, ASK_B.id).textContent).toContain("Not answered yet.");
   });
 
@@ -104,7 +104,7 @@ describe("a person's ask is a thread", () => {
   test("must-fail: each answer under an ask takes a verdict, and nothing above a fold is an id", async () => {
     const el = await mount([asked]);
     const thread = threadOf(el, ASK_A.id);
-    expect(thread.querySelectorAll(".sf-row-judge").length).toBe(3);
+    expect(thread.querySelectorAll(".sf-row-judge").length).toBe(1);
     expect(inView(askRow(el, ASK_A.id))).not.toMatch(/[0-9a-f]{64}|key_|input refs/);
   });
 
