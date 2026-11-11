@@ -97,7 +97,48 @@ function offersVerdicts(entries: readonly ViewEntry[]): boolean {
   return entries.some((e) => e.judge === "outcome" || e.thread?.judge === "outcome");
 }
 
-function Judge({ rowId }: { rowId: string }): ReactNode {
+/** An outcome's `r` as words: right for 1, wrong for 0, else the value as written. */
+function gradeWords(r: unknown): string {
+  return r === 1 ? "right" : r === 0 ? "wrong" : `r ${fieldText(r)}`;
+}
+
+/**
+ * The system's own grades of a row, through the view's declared `graded` read: which grades are
+ * the system's is that read's `where`, never sorted out here. Mounted only after this person's
+ * verdict, so nothing of it is read or drawn before; drawn closed, and outside Right and Wrong.
+ */
+function SystemGrade({ graded, rowId, reading }: { graded: NonNullable<ViewEntry["graded"]>; rowId: string; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
+  const q = useReport(bind(graded.pointer, ROW_BINDING, rowId), { enabled: reading.enabled, intervalMs: reading.intervalMs });
+  const a: ReportAnswer | undefined = q.data;
+  const got = a?.ok ? rowsOf(a.answer, {}) : null;
+  return (
+    <details className="sf-row-system-grade" data-system-grade="">
+      <summary>the system's own grade</summary>
+      {!a ? (
+        <p className="sf-muted sf-row-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>
+      ) : !a.ok ? (
+        <p className="sf-muted sf-row-note">no answer: {a.reason}</p>
+      ) : !got || "missing" in got || got.rows.length === 0 ? (
+        <p className="sf-muted sf-row-note">The system has not graded this.</p>
+      ) : (
+        <ul className="sf-row-system-grades">
+          {got.rows.map((row, i) => {
+            const o = typeof row === "object" && row !== null ? (row as Record<string, unknown>) : {};
+            const time = when(o["t"]);
+            return (
+              <li key={typeof o["id"] === "string" ? o["id"] : i}>
+                the system graded this: {gradeWords(o["r"])}
+                {time ? ` · ${time}` : ""}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </details>
+  );
+}
+
+function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["graded"]; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
   const session = useSession();
   const client = useQueryClient();
   const [verdict, setVerdict] = useState<Verdict>({ state: "idle" });
@@ -115,6 +156,7 @@ function Judge({ rowId }: { rowId: string }): ReactNode {
     setVerdict(got.ok ? { state: "done", r, seq: got.seq } : { state: "refused", reason: got.reason });
   };
   return (
+    <>
     <div className="sf-row-judge" role="group" aria-label="Your verdict on this">
       {verdict.state === "done" ? (
         <p className="sf-row-note">
@@ -139,6 +181,8 @@ function Judge({ rowId }: { rowId: string }): ReactNode {
         </p>
       ) : null}
     </div>
+    {verdict.state === "done" && graded ? <SystemGrade graded={graded} rowId={rowId} reading={reading} /> : null}
+    </>
   );
 }
 
@@ -228,7 +272,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
                 ))}
               </dl>
             </details>
-            {judge && id ? <Judge rowId={id} /> : null}
+            {judge && id ? <Judge rowId={id} graded={entry.graded} reading={reading} /> : null}
             {entry.thread && id ? <Thread entry={entry.thread} rowId={id} reading={reading} /> : null}
           </li>
         );

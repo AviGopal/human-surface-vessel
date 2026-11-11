@@ -2109,6 +2109,9 @@ body { overflow: hidden; }
 .sf-row-time { margin: 0; font-size: var(--sf-text-sm); }
 .sf-row-details > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-row-details[open] > summary { margin-bottom: var(--sf-space-1); }
+/* The system's own grade, closed under its row, apart from the person's Right and Wrong. */
+.sf-row-system-grade > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
+.sf-row-system-grades { margin: var(--sf-space-1) 0 0; padding-left: var(--sf-space-4); font-size: var(--sf-text-sm); }
 .sf-row-fields { margin: 0; display: flex; flex-direction: column; gap: var(--sf-space-1); }
 .sf-row-field { display: grid; grid-template-columns: minmax(0, 8rem) minmax(0, 1fr); gap: var(--sf-space-3); font-size: var(--sf-text-sm); }
 .sf-row-field dt { color: var(--sf-ink-3); overflow-wrap: anywhere; }

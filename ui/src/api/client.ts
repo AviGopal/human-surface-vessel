@@ -175,7 +175,9 @@ export interface UiViewState {
   readonly notDrawn?: { readonly id: string; readonly refusal: string; readonly detail: string } | null;
 }
 
-export type ReportPointer = Readonly<Record<string, string | number | boolean>> & { readonly type: string };
+type Plain = string | number | boolean;
+/** A read's pointer: plain arguments, and at most records' `where` ({field: value}, by equality) in a `graded` read. */
+export type ReportPointer = Readonly<Record<string, Plain | Readonly<Record<string, Plain>>>> & { readonly type: string };
 /** In the `ask` region, a pointer argument with this value stands for the ask's row id (src/ui-views.ts ASK_BINDING). */
 export const ASK_BINDING = "$ask";
 /** In an entry's thread, a pointer argument with this value stands for the id of the row it is under (src/ui-views.ts ROW_BINDING). */
@@ -208,6 +210,8 @@ export type ViewEntry = {
   readonly newest?: true;
   /** Draw the entry closed under its title and its row count. */
   readonly folded?: true;
+  /** The read of the system's own grades of a row (judged entries only), drawn after the person's verdict. */
+  readonly graded?: { readonly pointer: ReportPointer };
 };
 
 /** What a person's row write came to: its record number and id, or why it was not recorded. */

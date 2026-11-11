@@ -103,6 +103,12 @@ describe("uiView_write", () => {
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", newest: "yes" }] }, "bad_entry", "newest: true"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "fields", newest: true }] }, "bad_entry", "newest needs form"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", folded: 1 }] }, "bad_entry", "folded: true"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } }] }, "bad_entry", 'graded needs judge "outcome"'],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", judge: "outcome", graded: { pointer: { type: "record_read", shape: "outcome" } } }] }, "bad_entry", 'graded: its pointer names "$row"'],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", judge: "outcome", graded: { pointer: { type: "record_read", refs_to: "$row", where: { role: { not: "person" } } } } }] }, "bad_entry", "where: 1 to 4 fields, each a plain value"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", judge: "outcome", graded: { ...{ pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } }, title: "x" } }] }, "bad_entry", "graded is {pointer}"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", judge: "outcome", graded: { pointer: { type: "outcome_write", refs_to: "$row" } } }] }, "bad_entry", "a view only reads"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", thread: { pointer: { type: "y", refs_to: "$row" }, form: "rows", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } } }] }, "bad_entry", 'graded needs judge "outcome"'],
       [{ region: "landing", entries: [load, { ...load, form: "rows" }] }, "bad_entry", "named twice"],
     ];
     for (const [pointer, refusal, why] of cases) {
@@ -176,7 +182,7 @@ describe("uiView_write", () => {
   });
 
   test("must-fail: an entry is stored as written, and only its pointer is a pointer", async () => {
-    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered", empty: "The walk has answered nothing yet.", words: ["text"], thread: { pointer: { type: "record_read", refs_to: "$row" }, form: "rows", show: 2, newest: true }, newest: true, folded: true };
+    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered", empty: "The walk has answered nothing yet.", words: ["text"], graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } }, thread: { pointer: { type: "record_read", refs_to: "$row" }, form: "rows", show: 2, newest: true, judge: "outcome", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } }, newest: true, folded: true };
     const w = await write({ region: "landing", entries: [entry, load] });
     expect(w.json.body.view.entries).toEqual([entry, load]);
   });
