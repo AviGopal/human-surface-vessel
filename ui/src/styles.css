@@ -1396,6 +1396,8 @@ summary {
   color: var(--sf-ink-2);
   margin-top: var(--sf-space-2);
 }
+/* In the rail the disclosure is a sentence in words, so it reads as one. */
+.sf-rail-foot.sf-participation-slice { font-family: inherit; }
 .sf-participation-updates { font-size: var(--sf-text-sm); }
 .sf-participation-updates .sf-live-controls { margin-top: var(--sf-space-3); }
 .sf-participation-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sf-space-4); padding: var(--sf-space-4) var(--sf-space-6); border-bottom: 1px solid var(--sf-rule); }
@@ -1630,6 +1632,19 @@ body { overflow: hidden; }
   z-index: 1;
 }
 .sf-qgroup-count { font-variant-numeric: tabular-nums; color: var(--sf-ink-3); }
+/* Heads are words, not labels: sentence case, each with the swatch of its share of the split. */
+.sf-qgroup-head { text-transform: none; letter-spacing: normal; font-size: var(--sf-text-sm); }
+.sf-qgroup-label { display: inline-flex; align-items: center; gap: var(--sf-space-2); min-width: 0; }
+.sf-qsplit { display: flex; gap: 2px; height: 10px; margin: var(--sf-space-3) var(--sf-space-4) var(--sf-space-2); border-radius: 3px; overflow: hidden; }
+.sf-qsplit-part { flex-basis: 0; min-width: 3px; }
+.sf-qswatch { flex: none; width: 10px; height: 10px; border-radius: 2px; }
+/* Neutral inks and shapes, not verdict colours: these groups are not verdicts. Only the asks,
+   which wait on the person, take the accent. */
+.sf-qsplit-part[data-fill="ask"], .sf-qswatch[data-fill="ask"] { background: var(--sf-accent); }
+.sf-qsplit-part[data-fill="notice"], .sf-qswatch[data-fill="notice"] { background: var(--sf-ink-3); }
+.sf-qsplit-part[data-fill="settled"], .sf-qswatch[data-fill="settled"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--sf-ink-3); }
+.sf-qsplit-part[data-fill="unread"], .sf-qswatch[data-fill="unread"] { background: repeating-linear-gradient(135deg, var(--sf-ink-3) 0 2px, transparent 2px 5px); box-shadow: inset 0 0 0 1px var(--sf-ink-3); }
+.sf-qsplit-part[data-fill="malformed"], .sf-qswatch[data-fill="malformed"] { background: repeating-linear-gradient(45deg, var(--sf-ink-2) 0 1.5px, transparent 1.5px 4px), repeating-linear-gradient(135deg, var(--sf-ink-2) 0 1.5px, transparent 1.5px 4px); box-shadow: inset 0 0 0 1px var(--sf-ink-2); }
 .sf-qgroup-note { margin: 0; padding: 0.25rem 0.875rem; font-size: 0.8125rem; }
 .sf-qgroup-list { list-style: none; margin: 0; padding: 0; }
 .sf-qrow {

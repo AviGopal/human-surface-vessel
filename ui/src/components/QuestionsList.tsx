@@ -13,9 +13,32 @@ import { reportExposureTick } from "../lib/exposure-reporter";
 import { useRenderPolicy } from "../api/queries";
 import { fromPanel } from "../lib/content";
 import { useLiveControls } from "../state/liveControls";
-import { gapTitle, questionGapId, questionRowSubject, useQuestions } from "../state/questions";
+import { gapTitle, questionGapId, questionRowSubject, useQuestions, type QuestionGroup } from "../state/questions";
 import { planFor } from "./Rendered";
 import { QUESTION_CONTENT_SHAPE } from "./QuestionView";
+
+/** A group's fill: every ask kind shares one, each folded class has its own. */
+function fillOf(group: QuestionGroup): string {
+  return group.folded ? group.kind : "ask";
+}
+
+/**
+ * How the questions split, drawn: one segment per group, as wide as its count, in the groups'
+ * order. The group heads carry the same swatches, so they are its legend. Not a list row: it
+ * is no exposure.
+ */
+function Split({ groups }: { groups: readonly QuestionGroup[] }): ReactNode {
+  const shown = groups.filter((g) => g.count > 0);
+  if (shown.length === 0) return null;
+  const said = shown.map((g) => `${g.count} ${g.label.toLowerCase()}`).join(", ");
+  return (
+    <div className="sf-qsplit" role="img" aria-label={`Questions: ${said}.`}>
+      {shown.map((g) => (
+        <span key={g.kind} className="sf-qsplit-part" data-fill={fillOf(g)} style={{ flexGrow: g.count }} title={`${g.count} ${g.label}`} />
+      ))}
+    </div>
+  );
+}
 
 export function QuestionsList({
   selectedId,
@@ -49,10 +72,15 @@ export function QuestionsList({
         <p className="sf-rail-empty">No questions</p>
       ) : null}
 
+      <Split groups={groups} />
+
       {groups.map((group) => (
         <details key={group.kind} className="sf-qgroup" data-folded={group.folded} open={!group.folded}>
           <summary className="sf-qgroup-head">
-            <span>{group.label}</span>
+            <span className="sf-qgroup-label">
+              <span className="sf-qswatch" data-fill={fillOf(group)} aria-hidden="true" />
+              {group.label}
+            </span>
             <span className="sf-qgroup-count">{group.count}</span>
           </summary>
           {group.count > group.questions.length ? (
@@ -95,7 +123,7 @@ export function QuestionsList({
 
       {ranking && ranking.not_shown_count > 0 ? (
         <p className="sf-participation-slice sf-rail-foot" data-slice-source={ranking.slice_source}>
-          {ranking.not_shown_count} lower-ranked not shown
+          {ranking.not_shown_count} more, less urgent, not listed
         </p>
       ) : null}
     </div>

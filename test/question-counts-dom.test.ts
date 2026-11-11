@@ -65,7 +65,7 @@ describe("counts and empty reasons come from the read", () => {
   test("must-fail: a folded line counts every open question of its class, and says how many this page holds", async () => {
     const el = await draw(React.createElement(QuestionsList, { selectedId: null, onSelect: () => {} }));
     const heads = [...el.querySelectorAll(".sf-qgroup-head")].map((h) => h.textContent);
-    expect(heads).toEqual(["Notices33", "No reader282", "Malformed1"]);
+    expect(heads).toEqual(["For your information33", "No reader listed for your answer282", "Empty or unfilled: nothing to answer1"]);
     const notes = [...el.querySelectorAll(".sf-qgroup-note")].map((n) => n.textContent);
     expect(notes).toEqual(["2 of them in this page of questions", "1 of them in this page of questions", "none of them in this page of questions"]);
   });

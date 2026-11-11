@@ -84,10 +84,11 @@ export function classifyQuestion(question: ClassifiableQuestion): QuestionClass 
 
 /** The folded groups, in the order they follow the asks. */
 export const FOLDED: readonly { cls: Exclude<QuestionClass, "ask">; label: string }[] = [
-  { cls: "notice", label: "Notices" },
-  { cls: "settled", label: "Gap closed" },
-  { cls: "unread", label: "No reader" },
-  { cls: "malformed", label: "Malformed" },
+  // Each label says no more than its predicate in classifyQuestion tests.
+  { cls: "notice", label: "For your information" },
+  { cls: "settled", label: "Its gap is no longer open" },
+  { cls: "unread", label: "No reader listed for your answer" },
+  { cls: "malformed", label: "Empty or unfilled: nothing to answer" },
 ];
 
 /** The part of a gap question's body before its truncated `Summary:` clause. */

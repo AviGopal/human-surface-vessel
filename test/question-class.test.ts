@@ -61,9 +61,9 @@ describe("the rail", () => {
       withAsks.id,
     ]);
     expect(groups.filter((g) => g.folded).map((g) => [g.label, g.questions.length])).toEqual([
-      ["Notices", 1],
-      ["No reader", 2],
-      ["Malformed", 3],
+      ["For your information", 1],
+      ["No reader listed for your answer", 2],
+      ["Empty or unfilled: nothing to answer", 3],
     ]);
   });
 
@@ -72,12 +72,12 @@ describe("the rail", () => {
     expect(waitingCount([...all, { ...escalation, id: "needs-human-x", answered: true }])).toBe(3);
   });
 
-  test("must-fail: a question whose gap has closed is folded under Gap closed and not counted as waiting", () => {
+  test("must-fail: a question whose gap has closed is folded as settled and not counted as waiting", () => {
     const settled = { ...escalation, id: "needs-human-closed-gap", gapStatus: "closed" };
     expect(waitingCount([...all, settled])).toBe(3);
     const groups = groupQuestions([...all, settled]);
-    expect(groups.find((g) => g.label === "Gap closed")?.questions.map((x) => x.id)).toEqual(["needs-human-closed-gap"]);
-    expect(groups.find((g) => g.label === "Gap closed")?.folded).toBe(true);
+    expect(groups.find((g) => g.label === "Its gap is no longer open")?.questions.map((x) => x.id)).toEqual(["needs-human-closed-gap"]);
+    expect(groups.find((g) => g.label === "Its gap is no longer open")?.folded).toBe(true);
   });
 
   test("a gap first read as open is not a change to offer; a gap that closed is", () => {
