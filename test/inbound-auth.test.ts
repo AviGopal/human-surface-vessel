@@ -68,7 +68,6 @@ const WRITES: ReadonlyArray<{ route: string; body: Record<string, unknown> }> = 
   })),
   { route: "/api/participation", body: { panel_id: "p-1", panel_revision: 1, response_id: "r-2", kind: "answer", value: "yes" } },
   { route: "/api/discovery/resolve", body: { pointer: { type: "vesselCapability", shape: "x" } } },
-  { route: "/api/feedback", body: { panel_id: "region-1", value: "wrong", kind: "wrong" } },
   { route: "/api/observations", body: { obs_type: "click", panel_id: "p-1" } },
   { route: "/api/surface-intent", body: { text: "make the text bigger" } },
   { route: "/api/page-frame", body: { source: "<p>x</p>" } },
@@ -155,7 +154,7 @@ describe("every write route names its caller", () => {
     const r = await post("/v2/impulses/resolve", { pointer: { type: "uiQuestion" } });
     expect(r.status).toBe(200);
     const before = await refusedCount("key_rejected", "keyed-unknown");
-    await post("/api/feedback", { panel_id: "region-1", value: "wrong", kind: "wrong" }, { Authorization: "ApiKey not-a-real-key" });
+    await post("/api/observations", { obs_type: "click", panel_id: "p-1" }, { Authorization: "ApiKey not-a-real-key" });
     expect(await refusedCount("key_rejected", "keyed-unknown")).toBe(before + 1);
   });
 });

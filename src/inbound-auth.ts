@@ -60,8 +60,6 @@ export interface Caller {
 export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string }> = [
   // ui/src/api/participation.ts (an answer or a decline)
   { route: "/api/participation" },
-  // ui/src/components/TopBar.tsx (a complaint typed in the box)
-  { route: "/api/feedback" },
   // ui/src/api/exposure.ts (exposure ticks and outcomes)
   { route: "/api/observations" },
   // ui/src/api/client.ts trySurfaceIntent (an instruction to change the interface)

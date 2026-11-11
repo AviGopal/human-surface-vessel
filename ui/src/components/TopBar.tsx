@@ -10,11 +10,11 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { trySurfaceIntent, writeAsk, type RowWrite } from "../api/client";
+import { trySurfaceIntent, writeAsk, writeComplaint, type RowWrite } from "../api/client";
 import { sendContribution } from "../api/participation";
 import { onScreenReport, useOnScreen } from "../state/onScreen";
 import type { DispatchOutcome } from "../api/types";
-import { complaintPayload, contributionContent } from "../lib/interaction";
+import { contributionContent } from "../lib/interaction";
 import { reportExposureAct } from "../lib/exposure-reporter";
 import { barePrefix, boxWords, presentationScope, readComplaint, readReplyPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
@@ -132,18 +132,10 @@ export function TopBar({
   const [pendingAsk, setPendingAsk] = useState<string | null>(null);
   const [signInSignal, setSignInSignal] = useState(0);
   const queryClient = useQueryClient();
-  // A complaint (16f-3): the same human_reported gap the form filed, about what is on screen.
+  // A complaint (16f-3): a row in the person's own words, about what is on screen, written as an ask is.
   const complain = useMutation({
     retry: false,
-    mutationFn: async (args: { kind: NonNullable<ReturnType<typeof readComplaint>>; region: string }) => {
-      const res = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(complaintPayload({ region: args.region, kind: args.kind.kind, text: args.kind.text })),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    },
+    mutationFn: (args: { text: string; about: string | null }): Promise<RowWrite> => writeComplaint(args.text, args.about),
   });
   // An ask: a presentation phrase changes this interface; anything else is written as the
   // person's ask. Signed out, nothing is written.
@@ -209,19 +201,27 @@ export function TopBar({
       return;
     }
     // An explicit complaint is a complaint in every context, never an answer or an ask.
-    const complaint = readComplaint(text);
-    if (complaint) {
-      const region = complaintRegion ?? "the surface";
+    if (readComplaint(text)) {
       asking.reset();
       setReshaped(null);
       complain.mutate(
-        { kind: complaint, region },
+        { text, about: complaintRegion },
         {
-          onSuccess: () => {
-            if (complaintRegion) reportExposureAct(complaintRegion, "complained");
-            void queryClient.invalidateQueries({ queryKey: ["interfaceGaps"] });
-            setEcho("Interface issue");
-            cleared();
+          onSuccess: (got) => {
+            if (got.ok) {
+              if (complaintRegion) reportExposureAct(complaintRegion, "complained");
+              setEcho(`Complaint recorded${got.seq !== null ? ` (record #${got.seq})` : ""}.`);
+              cleared();
+              return;
+            }
+            if (got.signedOut) {
+              // Kept in the box: it can be sent again once the person signs in with their key.
+              void queryClient.invalidateQueries({ queryKey: SESSION_KEY });
+              setSignInSignal((n) => n + 1);
+              setEcho("Not sent yet: sign in with your key, then send it again.");
+              return;
+            }
+            setEcho(`Not sent: ${got.reason}`);
           },
         },
       );

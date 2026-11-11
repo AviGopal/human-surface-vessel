@@ -44,17 +44,6 @@ export function questionForAsk(ask: { type: string; choices?: readonly string[] 
 
 /* ───────────────────────── payload builders (pinned) ───────────────────────── */
 
-export type ComplaintKind = "hard_to_see" | "hard_to_understand" | "wrong";
-
-/** Reporting a problem with the interface → `uiFeedback` via /api/feedback. */
-export function complaintPayload(args: { region: string; kind: ComplaintKind; text: string }): {
-  panel_id: string;
-  kind: ComplaintKind;
-  value: string;
-} {
-  return { panel_id: args.region, kind: args.kind, value: args.text.trim() };
-}
-
 /**
  * A response to a system question. `value` is the answer as the store keeps it
  * (text, parsed JSON, a chosen option, a number); `typed` never rides the wire

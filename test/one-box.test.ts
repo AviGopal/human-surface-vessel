@@ -185,7 +185,7 @@ describe("one box", () => {
       calls.length = 0;
       const el = await mount({});
       await type(el, text);
-      expect(wroteAnything() || calls.some((c) => c.url.includes("/api/feedback"))).toBe(false);
+      expect(wroteAnything() || calls.some((c) => c.url.includes("/api/discovery/resolve"))).toBe(false);
       expect(el.querySelector("textarea")!.value).toBe(text);
       expect(el.querySelector(".sf-outcome-line")?.textContent).toMatch(/^Say what's (hard to understand|hard to see|wrong)×$/);
     }

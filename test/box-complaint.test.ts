@@ -1,9 +1,9 @@
 /**
  * A complaint about the interface is typed in the one box (16f-3): a message that
- * STARTS with "hard to see:", "hard to understand:" or "wrong:" files the same
- * human_reported gap the form filed, about what is on screen (the open question on
- * the questions page, otherwise the surface). The form is gone; chips in the
- * Issues drawer and on the questions page fill the box and never send.
+ * STARTS with "hard to see:", "hard to understand:" or "wrong:" is written as the
+ * person's row, `world_changed` in their own words, where an ask goes, naming the open
+ * question when there is one. It is never filed by the surface itself. The form is gone;
+ * chips in the Issues drawer and on the questions page fill the box and never send.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -21,7 +21,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     /* not json */
   }
   calls.push({ url, body });
-  if (url.includes("/api/feedback")) return new Response(JSON.stringify({ resolved: true, body: { filed_gap_id: "ui-feedback-x" } }), { status: 200 });
   if (url.includes("/api/surface-intent")) return new Response(JSON.stringify({ applied: false, unparsed: [] }), { status: 422 });
   if (url.includes("/api/discovery/resolve")) return Response.json({ ok: true, seq: 302 });
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
@@ -79,7 +78,9 @@ async function type(el: HTMLElement, text: string): Promise<void> {
   });
   for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 }
-const filed = () => calls.filter((c) => c.url.includes("/api/feedback"));
+/** The rows the box wrote, through discovery. */
+const filed = () => calls.filter((c) => c.url.includes("/api/discovery/resolve")).map((c) => (c.body["pointer"] as { row: Record<string, unknown> }).row);
+const fedGap = () => calls.some((c) => c.url.includes("/api/feedback") || JSON.stringify(c.body).includes("uiFeedback"));
 
 describe("readComplaint", () => {
   test("only an exact prefix at the start, with something after the colon", () => {
@@ -93,25 +94,40 @@ describe("readComplaint", () => {
 });
 
 describe("the box files a complaint", () => {
-  test("must-fail: a prefixed message files the human_reported gap about the surface, and starts nothing", async () => {
+  test("must-fail: a prefixed message is the person's row in their own words, and nothing else is sent", async () => {
     const el = await mount(topBar());
     await type(el, "hard to understand: the dates are unreadable");
-    expect(filed().map((c) => c.body)).toEqual([{ panel_id: "the surface", kind: "hard_to_understand", value: "the dates are unreadable" }]);
-    expect(calls.some((c) => c.url.includes("/api/discovery/resolve") || c.url.includes("/api/surface-intent"))).toBe(false);
-    expect(el.querySelector(".sf-outcome-line")?.textContent).toBe("Interface issue×");
+    expect(filed()).toEqual([{ shape: "world_changed", what: "hard to understand: the dates are unreadable", input_refs: [] }]);
+    expect(fedGap()).toBe(false);
+    expect(calls.some((c) => c.url.includes("/api/surface-intent"))).toBe(false);
+    expect(el.querySelector(".sf-outcome-line")?.textContent).toBe("Complaint recorded (record #302).×");
+  });
+
+  test("must-fail: signed out, the complaint stays in the box and says how to send it", async () => {
+    const el = await mount(topBar());
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("/api/discovery/resolve") ? Response.json({ error: "sign_in_required" }, { status: 401 }) : real(input, init)) as typeof fetch;
+    try {
+      await type(el, "wrong: it says reached");
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(el.querySelector("textarea")?.value).toBe("wrong: it says reached");
+    expect(el.textContent).toContain("Not sent yet: sign in with your key, then send it again.");
   });
 
   test("must-fail: with a run waiting, a complaint is a complaint, not the answer", async () => {
     const el = await mount(topBar({ context: box.boxContext(question, "Where should it look?", null) }));
     await type(el, "wrong: the question makes no sense");
-    expect(filed().map((c) => c.body["kind"])).toEqual(["wrong"]);
+    expect(filed().map((r) => r["what"])).toEqual(["wrong: the question makes no sense"]);
     expect(calls.some((c) => c.body["type"] === "solicitationResponse_write" || c.url.includes("/api/participation"))).toBe(false);
   });
 
   test("must-fail: on the questions page, the complaint is about the open question, and the act is reported", async () => {
     const el = await mount(topBar({ complaintRegion: "solicitation-s-9" }));
     await type(el, "hard to see: the options run together");
-    expect(filed()[0]?.body).toEqual({ panel_id: "solicitation-s-9", kind: "hard_to_see", value: "the options run together" });
+    expect(filed()[0]).toEqual({ shape: "world_changed", what: "hard to see: the options run together (about question solicitation-s-9)", input_refs: [] });
     const act = calls.find((c) => c.url.includes("/api/observations") && c.body["outcome"] === "complained");
     expect(act?.body).toMatchObject({ obs_type: "exposure_outcome", panel_id: "solicitation-s-9" });
   });
@@ -119,7 +135,7 @@ describe("the box files a complaint", () => {
   test("anything else is not a complaint", async () => {
     const el = await mount(topBar());
     await type(el, "the dates — hard to see: everything");
-    expect(filed()).toEqual([]);
+    expect(fedGap()).toBe(false);
     expect(calls.find((c) => c.url.includes("/api/discovery/resolve"))?.body).toEqual({ pointer: { type: "record_write", row: { shape: "world_changed", what: "the dates — hard to see: everything", input_refs: [] } } });
   });
 });

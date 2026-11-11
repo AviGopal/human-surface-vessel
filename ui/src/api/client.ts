@@ -223,6 +223,16 @@ export function writeAsk(what: string): Promise<RowWrite> {
   return writeRow({ shape: "world_changed", what, input_refs: [] });
 }
 
+/**
+ * A person's complaint about what is on screen: a `world_changed` row with their words, as
+ * typed, and what it is about. It goes where an ask goes, so the walk takes it up from its
+ * pool. A question on this surface is not a records row, so it is named in the words, not
+ * cited in `input_refs`.
+ */
+export function writeComplaint(text: string, about: string | null): Promise<RowWrite> {
+  return writeRow({ shape: "world_changed", what: about ? `${text} (about question ${about})` : text, input_refs: [] });
+}
+
 /** A report's answer, or why there is none. `answer` is what the producer returned, uninterpreted. */
 export type ReportAnswer = { readonly ok: true; readonly shape: string; readonly answer: unknown } | { readonly ok: false; readonly reason: string };
 

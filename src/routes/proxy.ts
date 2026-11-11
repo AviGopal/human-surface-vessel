@@ -527,15 +527,6 @@ proxyRouter.get("/api/gaps", async (c) => {
   );
 });
 
-// ─── human feedback (browser write) ─────────────────────────────────────────
-
-/**
- * A complaint about this surface, from the person looking at it.
- *
- * It self-posts the `uiFeedback` SHAPE rather than calling the store directly,
- * so a complaint travels the same path a complaint from anywhere else would —
- * one code path, one place for the gap-filing side effect to live.
- */
 /**
  * One gap by id, from whichever vessel serves `substrateGap`: `{found, gap}`,
  * or null when no vessel serving it answered.
@@ -615,29 +606,6 @@ proxyRouter.get("/api/gaps/:id", async (c) => {
   return c.json({ gap: null, error: "no vessel serving substrateGap answered" }, 502, corsHeaders(origin));
 });
 
-proxyRouter.post("/api/feedback", requireCaller("/api/feedback"), async (c) => {
-  const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
-  if (!body || typeof body["panel_id"] !== "string" || !body["value"]) {
-    return c.json(
-      { error: "panel_id and value are required" },
-      400,
-      corsHeaders(c.req.header("Origin")),
-    );
-  }
-  return resolveHere(
-    {
-      type: "uiFeedback",
-      panel_id: body["panel_id"],
-      value: body["value"],
-      kind: "reaction",
-      complaint_kind: body["kind"] ?? "wrong",
-      visibility: "public",
-    },
-    admittedCaller(c),
-    c.req.header("Origin"),
-  );
-});
-
 // ─── exposure record (browser write) ────────────────────────────────────────
 
 /**
@@ -647,8 +615,7 @@ proxyRouter.post("/api/feedback", requireCaller("/api/feedback"), async (c) => {
  * 404: the record was already produced by the browser and dropped on the floor,
  * and a learner with no evidence source can only confirm its own ranking.
  *
- * It self-posts the `interactorObservation` SHAPE exactly as /api/feedback
- * self-posts `uiFeedback`, so a record from the browser travels the same single
+ * It self-posts the `interactorObservation` SHAPE, so a record from the browser travels the same single
  * path a record from anywhere else does — which is also why the learner's
  * trigger lives at that one shape case and not here.
  *
