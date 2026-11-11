@@ -4,22 +4,6 @@
  * as records rows, drawn generically.
  */
 
-/** Raw provenance entry, straight off the wire. Normalize before rendering. */
-export interface RawProvenance {
-  readonly shape?: unknown;
-  /** Slice V4: dispatch-unique pool id, the producing execution, and the ids actually bound as inputs. */
-  readonly id?: unknown;
-  readonly producerExecutionId?: unknown;
-  readonly consumedIds?: unknown;
-  readonly goalSignature?: unknown;
-  readonly producedBy?: unknown;
-  /** ABSENT when the impulse carried no content. Never assume a string. */
-  readonly contentPreview?: unknown;
-  readonly chars?: unknown;
-  /** ABSENT when the impulse carried no content. Never assume a boolean. */
-  readonly truncated?: unknown;
-}
-
 export interface SurfaceChange {
   readonly field: string;
   readonly from: string;

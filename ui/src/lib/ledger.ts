@@ -1,23 +1,17 @@
 /**
- * The evidence ledger: what a walk actually put in the pool.
+ * How a value is drawn: its form, detected from the content.
  *
- * Two rules are enforced here rather than in the components, because a rule
+ * The rules are enforced here rather than in the components, because a rule
  * enforced in a component is a rule the next component forgets.
  *
- * 1. The empty-content case is a SEPARATE VARIANT, not a missing field.
- *    goal-host omits `contentPreview` and `truncated` entirely when an impulse
- *    carried nothing, so `entry.truncated === false` is never true for an empty
- *    impulse — it is `undefined`. Normalizing into a discriminated union makes
- *    the empty case impossible to render by accident as a blank content block.
- *
- * 2. Rendering dispatches on the FORM of the content, never on the shape name
+ * 1. Rendering dispatches on the FORM of the content, never on the shape name
  *    (rule P9). The registry advertises hundreds of shapes and the set is open
  *    and ragged — two live entries are entire prose sentences registered as
  *    shape names. Content, though, arrives in a small closed set of forms. The
  *    shape is a badge; the form drives the renderer; and the verbatim branch is
  *    the designed common case, not the error case.
  *
- * 3. The ENVELOPE PRE-PASS decides WHICH content is drawn, and it is therefore
+ * 2. The ENVELOPE PRE-PASS decides WHICH content is drawn, and it is therefore
  *    a transform here rather than a form. Making it a form would let a human
  *    pin `shellResult` to "envelope" and get a permanent double-render, and it
  *    would collide with the payload's own form; it has no renderer of its own,
@@ -36,77 +30,6 @@ import {
   NON_PINNABLE_FORMS,
   type ContentForm,
 } from "@avigopal/design-tokens";
-import type { RawProvenance } from "../api/types";
-
-/** goal-host caps `contentPreview`; `chars` is the TRUE length. */
-export const PREVIEW_CAP = 2000;
-
-export type LedgerEntry =
-  | {
-      readonly kind: "content";
-      readonly shape: string;
-      readonly goalSignature: string | null;
-      readonly producedBy: string | null;
-      readonly preview: string;
-      readonly chars: number;
-      readonly truncated: boolean;
-    }
-  | {
-      readonly kind: "empty";
-      readonly shape: string;
-      readonly goalSignature: string | null;
-      readonly producedBy: string | null;
-    };
-
-function asString(v: unknown): string | null {
-  return typeof v === "string" ? v : null;
-}
-
-/**
- * Turn one wire entry into something safe to render, or null if it is not an
- * entry at all.
- */
-export function normalizeProvenance(raw: RawProvenance | unknown): LedgerEntry | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const r = raw as RawProvenance;
-  const shape = asString(r.shape);
-  if (!shape) return null;
-
-  const goalSignature = asString(r.goalSignature);
-  const producedBy = asString(r.producedBy);
-  const preview = asString(r.contentPreview);
-  const chars = typeof r.chars === "number" && Number.isFinite(r.chars) ? r.chars : 0;
-
-  // The empty branch: no preview key at all, or a preview that is only
-  // whitespace. Both mean the same thing to a reader and both must be NAMED.
-  if (preview === null || preview.trim().length === 0) {
-    return { kind: "empty", shape, goalSignature, producedBy };
-  }
-
-  // `truncated` is absent on the empty branch and can be absent on older
-  // records. Derive it rather than trusting the key to exist.
-  const truncated = typeof r.truncated === "boolean" ? r.truncated : chars > PREVIEW_CAP;
-
-  return {
-    kind: "content",
-    shape,
-    goalSignature,
-    producedBy,
-    preview,
-    chars: Math.max(chars, preview.length),
-    truncated,
-  };
-}
-
-export function normalizeLedger(raw: readonly unknown[] | undefined): readonly LedgerEntry[] {
-  if (!Array.isArray(raw)) return [];
-  const out: LedgerEntry[] = [];
-  for (const item of raw) {
-    const entry = normalizeProvenance(item);
-    if (entry) out.push(entry);
-  }
-  return out;
-}
 
 /* ─────────────────────────────── form detection ──────────────────────────── */
 
