@@ -1,8 +1,8 @@
 /**
  * A row a person wrote, read by a viewer who has not signed in, names "a person" as its writer,
  * not the person's key id: the surface's read route unnames it before the answer leaves the
- * server, so the page cannot draw it and the browser never receives it. Signed in, the row is
- * as records wrote it (test/person-writer-unnamed.test.ts, at the route). Through the real
+ * server, so the page cannot draw it and the browser never receives it. Signed in, only the
+ * person's own rows name them (test/person-writer-unnamed.test.ts, at the route). Through the real
  * route, mounted in the page as the browser calls it.
  *
  * Shape: one node 11-11. On the live landing, opening "details" under a person's ask showed

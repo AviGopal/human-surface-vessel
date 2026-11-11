@@ -379,19 +379,20 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
 const A_PERSON = "a person";
 
 /**
- * A row a person wrote, read by a viewer who has not signed in, names "a person" as its writer
- * and not the person's key id: whoever can open the page is not thereby someone the person told
- * who they are. Which rows are a person's is records' `role`, stamped from the writer's key.
+ * A row a person wrote names "a person" as its writer, not the person's key id, to every viewer
+ * but that person: whoever can open the page is not thereby someone the person told who they
+ * are. `own` is the signed-in viewer's key id (a key sign-in's userId, the id records stamps as
+ * the writer), or null. Which rows are a person's is records' `role`, stamped from the writer's key.
  */
-function unnamePeople(v: unknown): unknown {
-  if (Array.isArray(v)) return v.map(unnamePeople);
+function unnamePeople(v: unknown, own: string | null): unknown {
+  if (Array.isArray(v)) return v.map((x) => unnamePeople(x, own));
   if (typeof v !== "object" || v === null) return v;
-  const o = Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, unnamePeople(x)]));
-  return o["role"] === "person" && "writer" in o ? { ...o, writer: A_PERSON } : o;
+  const o = Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, unnamePeople(x, own)]));
+  return o["role"] === "person" && "writer" in o && o["writer"] !== own ? { ...o, writer: A_PERSON } : o;
 }
 
-/** A read's answer with every person's writer unnamed; an answer that is not JSON passes as it came. */
-async function unnamed(res: Response): Promise<Response> {
+/** A read's answer with every other person's writer unnamed; an answer that is not JSON passes as it came. */
+async function unnamed(res: Response, own: string | null): Promise<Response> {
   const text = await res.text();
   let body: unknown;
   try {
@@ -399,7 +400,7 @@ async function unnamed(res: Response): Promise<Response> {
   } catch {
     return new Response(text, { status: res.status, headers: res.headers });
   }
-  return new Response(JSON.stringify(unnamePeople(body)), { status: res.status, headers: res.headers });
+  return new Response(JSON.stringify(unnamePeople(body, own)), { status: res.status, headers: res.headers });
 }
 
 /**
@@ -423,7 +424,7 @@ proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve
   }
   if (!isWritePointerType(type)) {
     const read = await passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin") });
-    return sessionOf(c.req.header("Cookie")) ? read : unnamed(read);
+    return unnamed(read, sessionOf(c.req.header("Cookie"))?.userId ?? null);
   }
   const person = sessionOf(c.req.header("Cookie"));
   if (!person?.apiKey) {

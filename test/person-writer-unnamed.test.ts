@@ -1,7 +1,7 @@
 /**
- * The surface's read route, for a viewer who has not signed in, answers with every row a person
- * wrote naming "a person" as its writer; the browser never holds the key id. A row the system
- * wrote, and any row read by a signed-in viewer, is as records wrote it. Without happy-dom, whose
+ * The surface's read route answers every viewer with each row a person wrote naming "a person" as
+ * its writer, except the person who wrote it, signed in; no other browser holds the key id. A row
+ * the system wrote is as records wrote it. Without happy-dom, whose
  * Request drops a Cookie header as a browser would (the page is drawn in
  * person-writer-unnamed-dom.test.ts).
  */
@@ -30,7 +30,13 @@ const app = new Hono();
 app.route("/", proxyRouter);
 const own = `http://127.0.0.1:${PORT + 10_000}`;
 
-describe("the read route, for a viewer who has not signed in", () => {
+/** A key sign-in's session cookie, its userId the key id records stamps as a writer. */
+function signedInAs(keyId: string): string {
+  return openSession({ apiKey: "test-only-key", userId: keyId, orgId: null, email: null, name: null, expiresAt: Date.now() + 900_000 }).cookie.split(";")[0]!;
+}
+const read = (cookie: string) => app.request(`${own}/api/discovery/resolve`, { method: "POST", body: JSON.stringify({ pointer: { type: "record_read", shape: "world_changed" } }), headers: { "Content-Type": "application/json", ...testAuth(), Cookie: cookie } });
+
+describe("the read route names a person only to themselves", () => {
   test("must-fail: the route's answer itself carries no key id, so the browser never holds it", async () => {
     const r = await app.request(`${own}/api/discovery/resolve`, { method: "POST", body: JSON.stringify({ pointer: { type: "record_read", shape: "world_changed" } }), headers: { "Content-Type": "application/json", ...testAuth() } });
     const text = await r.text();
@@ -44,10 +50,15 @@ describe("the read route, for a viewer who has not signed in", () => {
     expect(JSON.parse(await r.text()).body[1].writer).toBe("described-shape-vessel");
   });
 
-  test("control: signed in, the row is as records wrote it", async () => {
-    const s = openSession({ apiKey: "test-only-key", userId: "user:person-a", orgId: null, email: null, name: null, expiresAt: Date.now() + 900_000 });
-    const cookie = s.cookie.split(";")[0]!;
-    const r = await app.request(`${own}/api/discovery/resolve`, { method: "POST", body: JSON.stringify({ pointer: { type: "record_read", shape: "world_changed" } }), headers: { "Content-Type": "application/json", ...testAuth(), Cookie: cookie } });
+  test("must-fail: signed in as someone else, a person's row still names no key id", async () => {
+    const r = await read(signedInAs("key__test-other"));
+    const text = await r.text();
+    expect(text).not.toContain(KEY_ID);
+    expect(JSON.parse(text).body[0].writer).toBe("a person");
+  });
+
+  test("control: signed in as the person who wrote it, their own row names them", async () => {
+    const r = await read(signedInAs(KEY_ID));
     expect(JSON.parse(await r.text()).body[0].writer).toBe(KEY_ID);
   });
 });
