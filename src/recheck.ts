@@ -49,7 +49,14 @@ export const DEFAULT_RECHECK: Recheck = {
   frameTtlMs: 1_800_000,
 };
 
-/** The guard: the least and most each key may be, in milliseconds. */
+/**
+ * The guard: the least and most each key may be, in milliseconds.
+ *
+ * Debts, named: these bounds are the guard's own numbers. A reader's floor exists because each
+ * read costs its producer, so its right source is the producer's own advertised cost or rate,
+ * read through discovery, not a surface constant. And no learning activity writes `recheck`
+ * yet: it is shaped, but unlearned.
+ */
 export const RECHECK_RANGES: Readonly<Record<RecheckKey, readonly [number, number]>> = {
   liveMs: [500, 600_000],
   streamFallbackMs: [5_000, 3_600_000],
