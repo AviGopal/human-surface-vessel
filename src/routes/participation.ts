@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { impulsesRouter } from "./impulses.ts";
 import { admittedCaller, carry, requireCaller, type Caller } from "../inbound-auth.ts";
+import { sessionOf } from "../person-session.ts";
+import { unnamed } from "../unname.ts";
 
 /** Browser adapter for the existing shapes. No private question/answer store. */
 export const participationRouter = new Hono();
@@ -13,7 +15,8 @@ async function resolve(pointer: Record<string, unknown>, caller?: Caller): Promi
   }, caller ? carry(caller) : undefined);
 }
 
-participationRouter.get("/api/questions", () => resolve({ type: "uiQuestion" }));
+// Who answered or asked is named only to that person signed in (unname.ts).
+participationRouter.get("/api/questions", async (c) => unnamed(await resolve({ type: "uiQuestion" }), sessionOf(c.req.header("Cookie"))?.userId ?? null));
 
 /** A reply is a sentence or a short paste; the cap bounds what one contribution adds to the journal. */
 export const PARTICIPATION_MAX_VALUE_CHARS = 20_000;

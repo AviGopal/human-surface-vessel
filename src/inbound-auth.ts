@@ -81,11 +81,19 @@ function browserAllowed(route: string): boolean {
 
 const OPERATOR_SCOPES = ["operator:direct", "admin"];
 
+const KEY_LABEL = "key:";
+const SCOPES_LABEL = `${KEY_LABEL}scopes=`;
+
 /** The label a downstream record may carry for a validated key: never the key or its digest. */
 function keyLabel(cred: CallerCredential): string {
   if (isNodeSelfCredential(cred)) return "node-self";
-  if (cred.keyId) return `key:${cred.keyId}`;
-  return `key:scopes=${cred.scopes.length > 0 ? cred.scopes.join("+") : "none"}`;
+  if (cred.keyId) return `${KEY_LABEL}${cred.keyId}`;
+  return `${SCOPES_LABEL}${cred.scopes.length > 0 ? cred.scopes.join("+") : "none"}`;
+}
+
+/** The key id a stamped label names (keyLabel's `key:<id>`), or null when it names none. */
+export function labelKeyId(label: string): string | null {
+  return label.startsWith(KEY_LABEL) && !label.startsWith(SCOPES_LABEL) && label.length > KEY_LABEL.length ? label.slice(KEY_LABEL.length) : null;
 }
 
 const issued = new WeakSet<Caller>();

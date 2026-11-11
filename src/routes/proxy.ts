@@ -25,6 +25,7 @@ import { isWritePointerType } from "../caller-credential.ts";
 import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, recentSurfaceIntents, recordObservation, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
+import { unnamed } from "../unname.ts";
 import { arrivedOverTls, closeSession, keySignInAvailable, loginAllowed, noteLoginFailure, openSession, sessionOf, signInWithKey, viewOf } from "../person-session.ts";
 import { VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
 import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
@@ -374,34 +375,6 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
     headers: { "Content-Type": "application/json", ...corsHeaders(c.req.header("Origin")) },
   });
 });
-
-/** What a row a person wrote names as its writer, to a viewer who has not signed in. */
-const A_PERSON = "a person";
-
-/**
- * A row a person wrote names "a person" as its writer, not the person's key id, to every viewer
- * but that person: whoever can open the page is not thereby someone the person told who they
- * are. `own` is the signed-in viewer's key id (a key sign-in's userId, the id records stamps as
- * the writer), or null. Which rows are a person's is records' `role`, stamped from the writer's key.
- */
-function unnamePeople(v: unknown, own: string | null): unknown {
-  if (Array.isArray(v)) return v.map((x) => unnamePeople(x, own));
-  if (typeof v !== "object" || v === null) return v;
-  const o = Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, unnamePeople(x, own)]));
-  return o["role"] === "person" && "writer" in o && o["writer"] !== own ? { ...o, writer: A_PERSON } : o;
-}
-
-/** A read's answer with every other person's writer unnamed; an answer that is not JSON passes as it came. */
-async function unnamed(res: Response, own: string | null): Promise<Response> {
-  const text = await res.text();
-  let body: unknown;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    return new Response(text, { status: res.status, headers: res.headers });
-  }
-  return new Response(JSON.stringify(unnamePeople(body, own)), { status: res.status, headers: res.headers });
-}
 
 /**
  * A lookup through this node's discovery, which asks its peers itself when it has no producer
