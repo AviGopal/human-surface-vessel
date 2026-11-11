@@ -23,7 +23,7 @@ import {
   parseDisposition,
   type DispositionVerb,
 } from "../ui/src/lib/disposition";
-import { feedbackGapId, impulsesRouter } from "../src/routes/impulses.ts";
+import { impulsesRouter } from "../src/routes/impulses.ts";
 
 const READER = new URL("../../development-vessel/src/resolvers/escalation-disposition-apply.ts", import.meta.url).pathname;
 const MIRROR = new URL("../ui/src/lib/disposition.ts", import.meta.url).pathname;
@@ -129,15 +129,14 @@ describe("outcome read back from the gap", () => {
   });
 });
 
-describe("a filed complaint names its issue", () => {
-  test("feedbackGapId keys complaints the way the legibility detector does", () => {
-    expect(feedbackGapId("the surface", "wrong")).toBe("ui-feedback-the-surface-wrong");
-    expect(feedbackGapId("needs-human-a/b", "hard_to_see")).toBe("ui-feedback-needs-human-a-b-hard_to_see");
-  });
-
-  test("the uiFeedback response carries filed_gap_id for a complaint and not for an answer", async () => {
+describe("a complaint is not a gap this surface files", () => {
+  test("must-fail: uiFeedback refuses complaint_kind by name and files nothing", async () => {
     const original = globalThis.fetch;
-    globalThis.fetch = (async () => new Response("{}")) as unknown as typeof fetch;
+    const outbound: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      outbound.push(`${String(input)} ${String(init?.body ?? "")}`);
+      return new Response("{}");
+    }) as unknown as typeof fetch;
     try {
       const post = (pointer: Record<string, unknown>) =>
         impulsesRouter.request("/v2/impulses/resolve", {
@@ -145,9 +144,12 @@ describe("a filed complaint names its issue", () => {
           headers: { "content-type": "application/json", ...testAuth() },
           body: JSON.stringify({ impulse: { pointer } }),
         });
-      const complaint = await (await post({ type: "uiFeedback", panel_id: "the surface", response_id: crypto.randomUUID(), value: "unreadable", kind: "reaction", complaint_kind: "wrong" })).json();
-      expect(complaint.body.filed_gap_id).toBe("ui-feedback-the-surface-wrong");
+      const complaint = await post({ type: "uiFeedback", panel_id: "the surface", response_id: crypto.randomUUID(), value: "unreadable", kind: "reaction", complaint_kind: "wrong" });
+      expect(complaint.status).toBe(422);
+      expect((await complaint.json()).error).toContain("world_changed");
+      expect(outbound.filter((o) => o.includes("substrateGap"))).toEqual([]);
       const plain = await (await post({ type: "uiFeedback", panel_id: "the surface", response_id: crypto.randomUUID(), value: "fine", kind: "reaction" })).json();
+      expect(plain.success).toBe(true);
       expect(plain.body.filed_gap_id).toBeUndefined();
     } finally {
       globalThis.fetch = original;

@@ -380,65 +380,6 @@ function visibleSliceSizePatch(
   return undefined;
 }
 
-/**
- * The gap id a complaint on `panelId` of `complaintKind` is filed under — the same
- * `ui-feedback-<region>-<kind>` keyspace the substrate's legibility detector uses.
- * Returned to the caller so a person can be shown the issue their report became.
- */
-export function feedbackGapId(panelId: string, complaintKind: string): string {
-  const slug = String(panelId)
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-  return `ui-feedback-${slug}-${complaintKind}`;
-}
-
-/**
- * File a human complaint as a substrateGap, keyed exactly as the substrate's own
- * legibility detector keys its findings.
- *
- * `source: "human_reported"` is the only field that distinguishes it, and it is
- * load-bearing: the detector is permitted to CLOSE its own findings on
- * re-observation, and must never close a human's, because the human saw
- * something the detector's rules cannot express.
- */
-async function fileFeedbackGap(entry: {
-  panelId: string;
-  kind: string;
-  complaintKind: string;
-  value: unknown;
-}): Promise<void> {
-  const text = typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value);
-  // Through discovery, which places the write wherever a gap store runs.
-  await fetch(`${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(METABOB_API_KEY ? { Authorization: `ApiKey ${METABOB_API_KEY}` } : {}),
-    },
-    body: JSON.stringify({
-      pointer: {
-        type: "substrateGap_write",
-        gap: {
-          id: feedbackGapId(entry.panelId, entry.complaintKind),
-          category: "ui_legibility",
-          source: "human_reported",
-          status: "open",
-          summary: `UI feedback (${entry.complaintKind}) on ${entry.panelId}: ${text}`,
-          detected_at: new Date().toISOString(),
-          classification_metadata: {
-            surface: "human-surface-vessel",
-            region: entry.panelId,
-            kind: entry.complaintKind,
-            interaction: entry.kind,
-          },
-        },
-      },
-    }),
-    signal: AbortSignal.timeout(8_000),
-  });
-}
-
 export const impulsesRouter = new Hono();
 
 /** The shapes this route answers without a caller: they read, and write nothing. */
@@ -695,6 +636,19 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
     }
 
     case "uiFeedback": {
+      // A complaint about the interface is the person's own row (`world_changed`, under their
+      // key), not a gap this surface files under its own. Refused by name rather than ignored.
+      if (pointer["complaint_kind"] !== undefined) {
+        return c.json(
+          {
+            resolved: false,
+            success: false,
+            shape: type,
+            error: "complaint_kind is not read: a complaint is a world_changed row written under the person's own key",
+          },
+          422,
+        );
+      }
       const panelId = optStr(pointer, "panel_id") ?? optStr(pointer, "panelId");
       if (!panelId) {
         return c.json(
@@ -738,31 +692,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         }
         throw error;
       }
-      // ONE FUNNEL. A human complaint about this surface is filed into the SAME
-      // keyspace the substrate's own `ui_legibility_scan` files into —
-      // `ui-feedback-<region>-<kind>` — differing only in `source`. That is the
-      // whole point of the shared key: a detector that files into its own
-      // private list can never be compared against what humans actually notice,
-      // and agreement or disagreement between the two is the only signal that
-      // says whether the detector's rules match the thing people complain about.
-      //
-      // Fire-and-forget: a gap-store outage must not lose the complaint, and the
-      // in-memory record above has already succeeded.
-      // The complaint CATEGORY is distinct from the store's interaction enum.
-      // `Feedback.kind` is answer|reaction|dismiss — what the human DID with an
-      // ask. A complaint category is hard_to_see|hard_to_understand|wrong — what
-      // is WRONG. Collapsing them keyed every complaint about a region as
-      // `...-answer`, so two different problems with the same region collided on
-      // one gap id and the second silently overwrote the first.
-      const complaintKind = optStr(pointer, "complaint_kind");
-      // Answering or declining a question is not a complaint about the interface.
-      if (complaintKind) void fileFeedbackGap({ ...entry, complaintKind }).catch(() => {});
-      return c.json({
-        resolved: true,
-        success: true,
-        shape: type,
-        body: complaintKind ? { ...entry, filed_gap_id: feedbackGapId(entry.panelId, complaintKind) } : entry,
-      });
+      return c.json({ resolved: true, success: true, shape: type, body: entry });
     }
 
     case "interactorObservation": {
