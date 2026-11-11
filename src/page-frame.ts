@@ -10,6 +10,7 @@
  * so a document cannot be fetched by guessing its content or from another session.
  */
 import { randomBytes } from "node:crypto";
+import { getRenderPolicy } from "./store.ts";
 
 /** The frame's whole policy: nothing fetched, no script, sandboxed even when opened alone. */
 export const FRAME_POLICY = [
@@ -28,7 +29,6 @@ export const FRAME_PATH = /^\/api\/page-frame\/[0-9a-f]{64}$/;
 export const FRAME_COOKIE = "sf_frame";
 export const FRAME_MAX_BYTES = 2 * 1024 * 1024;
 const FRAME_MAX_ENTRIES = 64;
-const FRAME_TTL_MS = 30 * 60_000;
 
 export function pageDocument(source: string): string {
   return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${META_POLICY}"><meta name="referrer" content="no-referrer">${source}`;
@@ -45,7 +45,7 @@ interface Entry {
 const entries = new Map<string, Entry>();
 
 function sweep(now: number): void {
-  for (const [id, e] of entries) if (now - e.at > FRAME_TTL_MS) entries.delete(id);
+  for (const [id, e] of entries) if (now - e.at > getRenderPolicy().recheck.frameTtlMs) entries.delete(id);
   while (entries.size > FRAME_MAX_ENTRIES) {
     const oldest = entries.keys().next().value;
     if (oldest === undefined) break;

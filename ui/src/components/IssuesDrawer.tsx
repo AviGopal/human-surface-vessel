@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
 import { useLiveControls } from "../state/liveControls";
 import { streamAwareInterval, useStreamConnected } from "../state/stream";
+import { useRecheck } from "../state/recheck";
 import { fromText } from "../lib/content";
 import { ComplaintChips } from "./ComplainButton";
 import { Rendered } from "./Rendered";
@@ -63,11 +64,12 @@ const SOURCE_LABEL: Record<string, string> = {
 export function useInterfaceGaps() {
   const { paused, intervalMs } = useLiveControls();
   const live = useStreamConnected();
+  const recheck = useRecheck();
   return useQuery({
     queryKey: ["interfaceGaps"],
     queryFn: fetchGaps,
     enabled: !paused,
-    refetchInterval: !paused ? streamAwareInterval(Math.max(intervalMs, 15000), live) : false,
+    refetchInterval: !paused ? streamAwareInterval(Math.max(intervalMs, recheck.issuesMinMs), live, recheck.streamFallbackMs) : false,
     refetchOnWindowFocus: false,
     placeholderData: (previous) => previous,
   });

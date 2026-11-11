@@ -16,6 +16,7 @@ import { sortRuns } from "../lib/sort";
 import { FOLDED, classifyQuestion } from "../lib/questionClass";
 import { useLiveControls } from "./liveControls";
 import { streamAwareInterval, useStreamConnected } from "./stream";
+import { useRecheck } from "./recheck";
 
 export interface QuestionGroup {
   readonly kind: string;
@@ -125,11 +126,12 @@ export function waitingCount(questions: readonly Question[]): number {
 export function QuestionsProvider({ children }: { children: ReactNode }): ReactNode {
   const { paused, intervalMs } = useLiveControls();
   const live = useStreamConnected();
+  const recheck = useRecheck();
   const query = useQuery({
     queryKey: ["humanQuestions"],
     queryFn: fetchQuestions,
     enabled: !paused,
-    refetchInterval: !paused ? streamAwareInterval(Math.max(intervalMs, 5000), live) : false,
+    refetchInterval: !paused ? streamAwareInterval(Math.max(intervalMs, recheck.questionsMinMs), live, recheck.streamFallbackMs) : false,
     refetchOnWindowFocus: false,
     retry: false,
   });

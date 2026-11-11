@@ -7,6 +7,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRecheck } from "../state/recheck";
 
 export interface SessionPerson {
   readonly userId: string;
@@ -47,9 +48,10 @@ export async function signOut(): Promise<void> {
   await fetch("/api/session/logout", { method: "POST", credentials: "same-origin" });
 }
 
-/** The session as last read; re-read each minute so an expired one shows as signed out. */
+/** The session as last read; re-read on the policy's cadence so an expired one shows as signed out. */
 export function useSession() {
-  return useQuery({ queryKey: SESSION_KEY, queryFn: fetchSession, refetchInterval: 60_000, refetchOnWindowFocus: true, retry: false });
+  const recheck = useRecheck();
+  return useQuery({ queryKey: SESSION_KEY, queryFn: fetchSession, refetchInterval: recheck.sessionMs, refetchOnWindowFocus: true, retry: false });
 }
 
 export function useSignIn() {

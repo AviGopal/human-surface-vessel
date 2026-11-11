@@ -20,6 +20,7 @@
 import { appendParticipation, readParticipation } from "./participation-journal.ts";
 import { isSolicitation } from "./solicitation.ts";
 import { DEFAULT_IMPORTANCE_WEIGHTS, type ImportanceWeights } from "./importance.ts";
+import { DEFAULT_RECHECK, recheckOf, type Recheck } from "./recheck.ts";
 
 export type AskType = "text" | "choice" | "number";
 export type Visibility = "public" | "operator_only";
@@ -767,6 +768,12 @@ export interface RenderPolicy {
    */
   readonly visibleSliceSize: number | null;
   /**
+   * How often the surface looks again (src/recheck.ts): the live cadence, each reader's
+   * floor and each cache's lifetime. Populated, never null, for the same reason as the
+   * weights: a reader must see the values in force. A patch merges key by key.
+   */
+  readonly recheck: Recheck;
+  /**
    * Who assigned THIS revision — an operator id, an activity name, or null when
    * the author was not stated. Describes this write only and is NEVER inherited
    * from the previous revision: attribution copied onto a revision its named
@@ -811,6 +818,7 @@ export const RENDER_POLICY_PATCH_KEYS = [
   "presentation",
   "importanceWeights",
   "visibleSliceSize",
+  "recheck",
   "note",
   "assignedBy",
   "reason",
@@ -839,6 +847,8 @@ const RENDER_POLICY_CONTENT_FIELDS = [
   // field" — which is precisely how a learner's write would vanish.
   "importanceWeights",
   "visibleSliceSize",
+  // CONTENT: a new cadence changes when a person sees a change.
+  "recheck",
   "note",
 ] as const satisfies readonly (keyof RenderPolicy)[];
 
@@ -863,6 +873,7 @@ let renderPolicy: RenderPolicy = {
   presentation: "onepage",
   importanceWeights: DEFAULT_IMPORTANCE_WEIGHTS,
   visibleSliceSize: DEFAULT_VISIBLE_SLICE_SIZE,
+  recheck: DEFAULT_RECHECK,
   assignedBy: null,
   reason: null,
   revision: 0,
@@ -992,6 +1003,8 @@ export function writeRenderPolicy(patch: {
    */
   importanceWeights?: Partial<ImportanceWeights>;
   visibleSliceSize?: number | null;
+  /** Key by key: a key the patch does not name keeps the value in force. */
+  recheck?: Partial<Recheck>;
   note?: string | null;
   assignedBy?: string | null;
   reason?: string | null;
@@ -1019,6 +1032,7 @@ export function writeRenderPolicy(patch: {
     // ranked solicitation"), and `??` would silently turn it into the default.
     visibleSliceSize:
       patch.visibleSliceSize === undefined ? renderPolicy.visibleSliceSize : patch.visibleSliceSize,
+    recheck: patch.recheck ? { ...renderPolicy.recheck, ...patch.recheck } : renderPolicy.recheck,
     // NOT `?? renderPolicy.assignedBy` — see the field comment: this write's
     // author, or null. Never the previous author's name on someone else's edit.
     assignedBy: patch.assignedBy ?? null,
@@ -1124,6 +1138,7 @@ for (const raw of readParticipation("renderPolicy_write")) {
     // missing or non-numeric value falls back to the documented default.
     visibleSliceSize:
       p.visibleSliceSize === null ? null : (finite(p.visibleSliceSize) ?? DEFAULT_VISIBLE_SLICE_SIZE),
+    recheck: recheckOf(p.recheck),
     assignedBy: typeof p.assignedBy === "string" ? p.assignedBy : null,
     reason: typeof p.reason === "string" ? p.reason : null,
     revision: p.revision as number,

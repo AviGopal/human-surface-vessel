@@ -145,6 +145,8 @@ export interface RenderPolicy {
   readonly ledgerDefaultExpanded: boolean;
   /** Repertoire variant chosen through the impulse; adopted at page load only. */
   readonly presentation?: "onepage" | "stacked";
+  /** How often the page looks again (src/recheck.ts); absent on older policies. */
+  readonly recheck?: Readonly<Record<string, number>>;
   readonly revision: number;
   readonly updatedAt: number;
   readonly note: string | null;

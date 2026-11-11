@@ -35,11 +35,9 @@ export function useStreamConnected(): boolean {
   );
 }
 
-/** The safety cadence used while events are arriving. */
-export const STREAM_FALLBACK_MS = 60_000;
-
-export function streamAwareInterval(intervalMs: number, isConnected: boolean): number {
-  return isConnected ? Math.max(intervalMs, STREAM_FALLBACK_MS) : intervalMs;
+/** While events are arriving, a reader falls back to the policy's safety cadence (recheck.streamFallbackMs). */
+export function streamAwareInterval(intervalMs: number, isConnected: boolean, fallbackMs: number): number {
+  return isConnected ? Math.max(intervalMs, fallbackMs) : intervalMs;
 }
 
 /** Which queries each store event makes stale. */

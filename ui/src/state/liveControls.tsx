@@ -20,6 +20,7 @@ import {
   type FocusEvent,
   type ReactNode,
 } from "react";
+import { useRecheck } from "./recheck";
 
 export const INTERVAL_OPTIONS = [
   { ms: 1000, label: "1s" },
@@ -28,8 +29,6 @@ export const INTERVAL_OPTIONS = [
   { ms: 15000, label: "15s" },
   { ms: 60000, label: "60s" },
 ] as const;
-
-export const DEFAULT_INTERVAL_MS = 2000;
 
 interface LiveControlsValue {
   readonly paused: boolean;
@@ -42,7 +41,10 @@ const LiveControlsContext = createContext<LiveControlsValue | null>(null);
 
 export function LiveControlsProvider({ children }: { children: ReactNode }): ReactNode {
   const [paused, setPaused] = useState(false);
-  const [intervalMs, setIntervalMs] = useState<number>(DEFAULT_INTERVAL_MS);
+  // The policy's live cadence until the person picks one; their pick then holds.
+  const [chosen, setIntervalMs] = useState<number | null>(null);
+  const recheck = useRecheck();
+  const intervalMs = chosen ?? recheck.liveMs;
   const value = useMemo<LiveControlsValue>(
     () => ({ paused, setPaused, intervalMs, setIntervalMs }),
     [paused, intervalMs],

@@ -1,33 +1,36 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { streamAwareInterval, useStreamConnected } from "../state/stream";
+import { RENDER_POLICY_KEY, useRecheck } from "../state/recheck";
 import { fetchGap, fetchRenderPolicy, fetchReport, fetchUiView } from "./client";
 import type { GapRecord, RenderPolicy, ReportAnswer, ReportPointer, UiViewState } from "./client";
 
 export const queryKeys = {
-  renderPolicy: ["renderPolicy"] as const,
+  renderPolicy: RENDER_POLICY_KEY,
 };
 
 /**
- * One report the landing names, on the page's live cadence (the render policy's) but never
- * more often than once a minute: a report is a summary, not a feed, and each read costs its producer.
+ * One report the landing names, on the page's live cadence but never more often than the
+ * policy's report floor: a report is a summary, not a feed, and each read costs its producer.
  */
 export function useReport(pointer: ReportPointer, opts: { enabled: boolean; intervalMs: number }): UseQueryResult<ReportAnswer> {
+  const recheck = useRecheck();
   return useQuery({
     queryKey: ["report", JSON.stringify(pointer)],
     queryFn: () => fetchReport(pointer),
     enabled: opts.enabled,
-    refetchInterval: opts.enabled ? Math.max(opts.intervalMs, 60_000) : false,
+    refetchInterval: opts.enabled ? Math.max(opts.intervalMs, recheck.reportMinMs) : false,
     refetchOnWindowFocus: false,
   });
 }
 
 /** A region's view, on the live cadence; a failed read keeps the last view drawn. */
 export function useUiView(region: string, opts: { enabled: boolean; intervalMs: number }): UseQueryResult<UiViewState> {
+  const recheck = useRecheck();
   return useQuery({
     queryKey: ["uiView", region],
     queryFn: () => fetchUiView(region),
     enabled: opts.enabled,
-    refetchInterval: opts.enabled ? Math.max(opts.intervalMs, 5000) : false,
+    refetchInterval: opts.enabled ? Math.max(opts.intervalMs, recheck.viewMinMs) : false,
     refetchOnWindowFocus: false,
     placeholderData: (previous) => previous,
     retry: false,
@@ -44,11 +47,12 @@ export function useRenderPolicy(opts: {
   intervalMs: number;
 }): UseQueryResult<RenderPolicy> {
   const live = useStreamConnected();
+  const recheck = useRecheck();
   return useQuery({
     queryKey: queryKeys.renderPolicy,
     queryFn: fetchRenderPolicy,
     enabled: opts.enabled,
-    refetchInterval: opts.enabled ? streamAwareInterval(opts.intervalMs, live) : false,
+    refetchInterval: opts.enabled ? streamAwareInterval(opts.intervalMs, live, recheck.streamFallbackMs) : false,
     refetchOnWindowFocus: false,
     staleTime: 0,
     placeholderData: (previous) => previous,
