@@ -20,6 +20,9 @@ const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { Entries } = await import("../ui/src/components/Reports");
 const { ContentRender } = await import("../ui/src/components/ContentRender");
+const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
+const { QuestionsProvider } = await import("../ui/src/state/questions");
+const { TopBar } = await import("../ui/src/components/TopBar");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
@@ -70,5 +73,23 @@ describe("the page draws as much as the policy's limits say", () => {
       [...(await draw(limits, plan("rows", WIDE))).querySelectorAll("[title]")].map((t) => t.getAttribute("title")!.length);
     expect(Math.max(...(await titles({ cellTitleChars: 100 })))).toBe(100);
     expect(Math.max(...(await titles(null)))).toBeGreaterThan(500);
+  });
+
+  test("must-fail: the box grows to the policy's boxLines, then scrolls", async () => {
+    // The suite's DOM does no layout: give the box a tall content height, and the line
+    // height falls back to 20px.
+    Object.defineProperty(window.HTMLTextAreaElement.prototype, "scrollHeight", { configurable: true, get: () => 1000 });
+    const height = async (limits: Record<string, number> | null) => {
+      const el = await draw(limits, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null,
+        React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false }))));
+      const t = el.querySelector("textarea")!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!.call(t, "a\nb\nc\nd");
+        t.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      return t.style.height;
+    };
+    expect(await height({ boxLines: 3 })).toBe(`${20 * 3 + 16}px`);
+    expect(await height(null)).toBe(`${20 * 8 + 16}px`);
   });
 });

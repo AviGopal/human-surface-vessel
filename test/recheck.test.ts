@@ -134,3 +134,19 @@ describe("no behaviour constant outside the named lists", () => {
     expect(fixed).toEqual([]);
   });
 });
+
+/**
+ * Hollow fields, named: written to the render policy and read by nothing on the page. The
+ * test holds the statement true; a reader added (or the field removed, 3.3) updates the list.
+ * maxPreviewChars: written by the sentence parser (surfaceIntent); its fix moves with 3.3.
+ */
+const HOLLOW_POLICY_FIELDS = ["maxPreviewChars"];
+
+describe("hollow policy fields are named", () => {
+  test("each named hollow field is still unread on the page", () => {
+    for (const field of HOLLOW_POLICY_FIELDS) {
+      const readers = sources(join(root, "ui/src")).filter((f) => !f.endsWith("api/client.ts") && readFileSync(f, "utf8").includes(field));
+      expect(readers).toEqual([]);
+    }
+  });
+});
