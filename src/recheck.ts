@@ -4,14 +4,13 @@
  * by the server and the page alike, so the system can change it by writing the policy and a
  * trace can see the value in force (law 1). The numbers below are the bootstrap defaults.
  *
- * A patch merges key by key: a key it does not name keeps the value in force. Every key is a
- * plain number, so there is no inner map whose keys a merge could fail to remove. A value
- * outside its range is not read, and the write says so.
+ * Read and merged as every bounded group is (src/bounded-group.ts).
  *
  * Kept out: the event stream's keepalive (it must stay under the server's idle timeout, a
  * bootstrap value) and credential lifetimes (a typed sentence reaches `renderPolicy_write`,
  * and must not be able to loosen sign-in).
  */
+import { boundedGroup } from "./bounded-group.ts";
 
 export const RECHECK_KEYS = [
   /** The page's live cadence until the person picks one. */
@@ -69,40 +68,10 @@ export const RECHECK_RANGES: Readonly<Record<RecheckKey, readonly [number, numbe
   frameTtlMs: [60_000, 86_400_000],
 };
 
-function inRange(key: RecheckKey, v: unknown): v is number {
-  const [lo, hi] = RECHECK_RANGES[key];
-  return typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
-}
+export const RECHECK = boundedGroup("recheck", DEFAULT_RECHECK, RECHECK_RANGES);
 
-/**
- * The keys of a `recheck` patch this guard reads. Each refused key or value is named in
- * `rejected`; undefined when the patch carries nothing to read.
- */
-export function recheckPatch(raw: unknown, rejected: string[]): Partial<Recheck> | undefined {
-  if (raw === undefined) return undefined;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    rejected.push("recheck must be an object of millisecond values");
-    return undefined;
-  }
-  const out: Partial<Record<RecheckKey, number>> = {};
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!(RECHECK_KEYS as readonly string[]).includes(k)) {
-      rejected.push(`recheck.${k} is not read; the keys are ${RECHECK_KEYS.join(", ")}`);
-      continue;
-    }
-    const key = k as RecheckKey;
-    if (!inRange(key, v)) {
-      const [lo, hi] = RECHECK_RANGES[key];
-      rejected.push(`recheck.${key} must be an integer from ${lo} to ${hi}`);
-      continue;
-    }
-    out[key] = v;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
+/** The keys of a `recheck` patch this guard reads; each refused one is named in `rejected`. */
+export const recheckPatch = (raw: unknown, rejected: string[]): Partial<Recheck> | undefined => RECHECK.patch(raw, rejected);
 
 /** A whole recheck from whatever was stored or served: each missing or junk key is its default. */
-export function recheckOf(raw: unknown): Recheck {
-  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return Object.fromEntries(RECHECK_KEYS.map((k) => [k, inRange(k, r[k]) ? r[k] : DEFAULT_RECHECK[k]])) as Recheck;
-}
+export const recheckOf = (raw: unknown): Recheck => RECHECK.of(raw);
