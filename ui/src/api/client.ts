@@ -206,6 +206,8 @@ export type ViewEntry = {
   readonly thread?: ViewEntry;
   /** Draw the rows `show` kept in reverse of the producer's order. */
   readonly newest?: true;
+  /** Draw the entry closed under its title and its row count. */
+  readonly folded?: true;
 };
 
 /** What a person's row write came to: its record number and id, or why it was not recorded. */

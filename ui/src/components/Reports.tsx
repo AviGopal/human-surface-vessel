@@ -298,6 +298,20 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
   if (!a) inner = <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>;
   else if (!a.ok) inner = <p className="sf-muted sf-report-note">no answer: {a.reason}</p>;
   else inner = <Drawn entry={entry} answer={a.answer} reading={reading} />;
+  if (entry.folded) {
+    // Folded, but counted: the summary says how many rows the read holds before anyone opens it.
+    const got = a?.ok && entry.form !== "fields" ? rowsOf(a.answer, entry) : null;
+    const count = got && "total" in got ? got.total : null;
+    return (
+      <details className="sf-report sf-report-folded" data-report={pointer.type} data-form={entry.form} aria-label={title}>
+        <summary className="sf-report-title">
+          {title}
+          {count !== null ? <span className="sf-report-count" data-count={count}>{count}</span> : null}
+        </summary>
+        {inner}
+      </details>
+    );
+  }
   return (
     <section className="sf-report" data-report={pointer.type} data-form={entry.form} aria-label={title}>
       <h2 className="sf-report-title">{title}</h2>
