@@ -184,10 +184,11 @@ export type ViewEntry = {
   readonly field?: string;
   readonly show?: number;
   readonly judge?: "outcome";
+  readonly empty?: string;
 };
 
-/** What a person's row write came to: its record number, or why it was not recorded. */
-export type RowWrite = { ok: true; seq: number | null } | { ok: false; reason: string; signedOut?: true };
+/** What a person's row write came to: its record number and id, or why it was not recorded. */
+export type RowWrite = { ok: true; seq: number | null; id: string | null } | { ok: false; reason: string; signedOut?: true };
 
 /**
  * A row a person writes to records, through discovery. The surface sends it under the
@@ -211,7 +212,11 @@ async function writeRow(row: Record<string, unknown>): Promise<RowWrite> {
   const said = [body["error"], body["reason"], body["detail"], inner?.["error"], inner?.["detail"]].filter((x): x is string => typeof x === "string" && x.length > 0);
   if (res.status === 401 && body["error"] === "sign_in_required") return { ok: false, reason: "you are no longer signed in", signedOut: true };
   if (!res.ok || said.length > 0 || body["success"] === false) return { ok: false, reason: [...new Set(said)].join(": ") || `not recorded (${res.status})` };
-  return { ok: true, seq: typeof inner?.["seq"] === "number" ? (inner["seq"] as number) : null };
+  return {
+    ok: true,
+    seq: typeof inner?.["seq"] === "number" ? (inner["seq"] as number) : null,
+    id: typeof inner?.["id"] === "string" ? (inner["id"] as string) : null,
+  };
 }
 
 /** A person's verdict on a row: an outcome row citing exactly that row. */

@@ -22,6 +22,7 @@ import { useQuestions } from "../state/questions";
 import { SignIn } from "./SignIn";
 import { SESSION_KEY } from "../api/session";
 import { useLimits } from "../state/limits";
+import { Entries } from "./Reports";
 
 
 /** The echo for a reply delivered to a waiting run. */
@@ -106,10 +107,12 @@ export function TopBar({
   const [goal, setGoal] = useState("");
   const limits = useLimits();
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
-  const { paused, setPaused } = useLiveControls();
+  const { paused, setPaused, intervalMs } = useLiveControls();
   const { recordReceipt } = useQuestions();
   const onScreen = useOnScreen();
   const [echo, setEcho] = useState<string | null>(null);
+  // The ask just written, followed under its echo by the rows that cite it, while that echo stands.
+  const [asked, setAsked] = useState<{ id: string; seq: number | null; echo: string } | null>(null);
   const [reshaped, setReshaped] = useState<DispatchOutcome | null>(null);
   const answer = useMutation({
     retry: false,
@@ -267,7 +270,9 @@ export function TopBar({
         }
         const got = r.got;
         if (got.ok) {
-          setEcho(`Asked${got.seq !== null ? ` (record #${got.seq})` : ""}. What the system does with it appears below as it happens.`);
+          const said = `Asked${got.seq !== null ? ` (record #${got.seq})` : ""}. What the system does with it appears below.`;
+          setEcho(said);
+          setAsked(got.id ? { id: got.id, seq: got.seq, echo: said } : null);
           cleared();
           return;
         }
@@ -400,7 +405,25 @@ export function TopBar({
           </button>
         </div>
       ) : null}
+      {asked && echo === asked.echo ? <AskFollow asked={asked} enabled={!paused} intervalMs={intervalMs} /> : null}
       {reshaped ? <OutcomeLine outcome={reshaped} onSuggest={(t) => put(t, false)} onDismiss={() => setReshaped(null)} /> : null}
     </header>
+  );
+}
+
+/**
+ * What the system has done with an ask: the rows that cite it, read from records as any
+ * entry is. Before anything cites it, the read says so in plain words, so a silent page is
+ * never mistaken for work under way.
+ */
+function AskFollow({ asked, enabled, intervalMs }: { asked: { id: string; seq: number | null }; enabled: boolean; intervalMs: number }): ReactNode {
+  const name = asked.seq !== null ? `#${asked.seq}` : "your ask";
+  return (
+    <Entries
+      entries={[{ pointer: { type: "record_read", refs_to: asked.id }, form: "rows", title: `What cites ${name}`, empty: `No row cites ${name} yet.` }]}
+      enabled={enabled}
+      intervalMs={intervalMs}
+      onOpenQuestion={() => undefined}
+    />
   );
 }

@@ -82,6 +82,8 @@ describe("uiView_write", () => {
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", show: 0 }] }, "bad_entry", "show: 1..200"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", field: "a b" }] }, "bad_entry", "field"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", title: "" }] }, "bad_entry", "title"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", empty: " " }] }, "bad_entry", "empty: 1 to 160"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", empty: 3 }] }, "bad_entry", "empty: 1 to 160"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", colour: "red" }] }, "bad_entry", "colour"],
       [{ region: "landing", entries: [load, { ...load, form: "rows" }] }, "bad_entry", "named twice"],
     ];
@@ -156,7 +158,7 @@ describe("uiView_write", () => {
   });
 
   test("must-fail: an entry is stored as written, and only its pointer is a pointer", async () => {
-    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered" };
+    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered", empty: "The walk has answered nothing yet." };
     const w = await write({ region: "landing", entries: [entry, load] });
     expect(w.json.body.view.entries).toEqual([entry, load]);
   });

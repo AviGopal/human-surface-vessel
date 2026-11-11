@@ -47,7 +47,8 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * the field of the answer that holds its rows, when the rows are not the answer itself.
  * `show` draws only the last n rows, in the order the producer returned them.
  * `judge: "outcome"` offers a person's verdict on each row, written as an outcome row
- * citing it under the person's own key.
+ * citing it under the person's own key. `empty` is what the entry says when the read answers
+ * with no rows, so an empty read carries its reason rather than a bare "no rows".
  */
 export type ViewEntry = {
   readonly pointer: ReportPointer;
@@ -56,6 +57,7 @@ export type ViewEntry = {
   readonly field?: string;
   readonly show?: number;
   readonly judge?: "outcome";
+  readonly empty?: string;
 };
 
 /** How many entries one view may name, and how many rows `show` may ask for. */
@@ -99,10 +101,10 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome"}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
-    `judge "outcome" (rows only) offers a person's verdict on each row`;
+    `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows`;
   const defaults = contract.regions
     .map((r) => `default ${r}: ${(contract.defaults[r]?.entries ?? []).map((e) => e.title ?? e.pointer.type).join(", ")}`)
     .join(". ");
@@ -233,8 +235,8 @@ function load(): void {
 /** One entry as written, or why it is not one. */
 function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
   if (typeof e !== "object" || e === null || Array.isArray(e)) return { detail: "each entry is {pointer, form}" };
-  const { pointer, form, title, field, show, judge, ...rest } = e as Record<string, unknown>;
-  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show and judge only` };
+  const { pointer, form, title, field, show, judge, empty, ...rest } = e as Record<string, unknown>;
+  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge and empty only` };
   const got = pointerOf(pointer);
   if ("detail" in got) return got;
   if (typeof form !== "string" || !(ENTRY_FORMS as readonly string[]).includes(form)) return { detail: `form: ${ENTRY_FORMS.join(", ")}` };
@@ -243,6 +245,7 @@ function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
   if (show !== undefined && (typeof show !== "number" || !Number.isInteger(show) || show < 1 || show > MAX_SHOW)) return { detail: `show: 1..${MAX_SHOW}` };
   if (judge !== undefined && judge !== "outcome") return { detail: `judge: "outcome"` };
   if (judge !== undefined && form !== "rows") return { detail: `judge needs form "rows": a verdict is on a row` };
+  if (empty !== undefined && (typeof empty !== "string" || !empty.trim() || empty.length > 160)) return { detail: "empty: 1 to 160 characters" };
   return {
     entry: {
       pointer: got.pointer,
@@ -251,6 +254,7 @@ function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
       ...(typeof field === "string" ? { field } : {}),
       ...(typeof show === "number" ? { show } : {}),
       ...(judge === "outcome" ? { judge } : {}),
+      ...(typeof empty === "string" ? { empty: empty.trim() } : {}),
     },
   };
 }

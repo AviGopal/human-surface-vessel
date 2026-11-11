@@ -214,7 +214,7 @@ function Drawn({ entry, answer, onOpenQuestion }: { entry: ViewEntry; answer: un
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
-  if (got.rows.length === 0) return <p className="sf-muted sf-report-note">answered with no rows</p>;
+  if (got.rows.length === 0) return <p className="sf-muted sf-report-note">{entry.empty ?? "answered with no rows"}</p>;
   return (
     <>
       {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the last {got.rows.length} of {got.total}</p> : null}
