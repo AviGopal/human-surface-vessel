@@ -136,9 +136,9 @@ export interface UiViewReport {
   /** The questions rail: what is asked of people here, how it is presented, and what they did with it. */
   asks: AsksView;
   /**
-   * The view in force per region (src/ui-views.ts): which blocks it names, in order,
-   * with their limits, and the revision. Revision 0 is the default. This is the view
-   * the page draws; a block with nothing to show is left out when it is drawn.
+   * The view in force per region (src/ui-views.ts): its entries in draw order and the
+   * revision. Revision 0 is the default. This is the view the page draws, and `not_drawn`
+   * names a newer stored view it passed over, with the reason.
    */
   views: Record<string, RegionView>;
   /** New panels and questions refused for carrying nothing, per shape, since `since` (src/write-refusals.ts). */
@@ -148,10 +148,10 @@ export interface UiViewReport {
 export interface RegionView {
   id: string;
   revision: number;
-  blocks: readonly string[];
-  limits: Readonly<Record<string, number>>;
-  /** What the reports block reads, in draw order. */
-  reports: readonly Readonly<Record<string, unknown>>[];
+  /** What the region draws, in order: each a pointer and its form. */
+  entries: readonly Readonly<Record<string, unknown>>[];
+  /** A newer stored view that is not drawn, and why; null when the newest is in force. */
+  not_drawn: { id: string; refusal: string; detail: string } | null;
   written_by: string | null;
   /** The run the write named: dispatch, execution and template ids, as the writer claimed them. */
   run: { dispatch_id: string | null; execution_id: string | null; template_id: string | null } | null;
@@ -161,9 +161,9 @@ export interface RegionView {
 
 function buildViews(): Record<string, RegionView> {
   const out: Record<string, RegionView> = {};
-  for (const region of Object.keys(VIEW_REGIONS) as ViewRegion[]) {
+  for (const region of VIEW_REGIONS) {
     const v = currentView(region);
-    out[region] = { id: v.id, revision: v.revision, blocks: v.blocks, limits: v.limits, reports: v.reports, written_by: v.writtenBy, run: v.run ? { dispatch_id: v.run.dispatchId, execution_id: v.run.executionId, template_id: v.run.templateId } : null, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf };
+    out[region] = { id: v.id, revision: v.revision, entries: v.entries, not_drawn: v.notDrawn, written_by: v.writtenBy, run: v.run ? { dispatch_id: v.run.dispatchId, execution_id: v.run.executionId, template_id: v.run.templateId } : null, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf };
   }
   return out;
 }

@@ -1,19 +1,23 @@
 /**
- * The reports a view names, each read by shape through discovery and drawn as it was
- * answered. The surface does not interpret a report: it shows a report's plain values
- * and the size of its lists, and says plainly when nothing answered and why. Which
- * reports appear is the view's (src/ui-views.ts), so the system changes this screen
- * by writing a view, not by a rebuild.
+ * The entries a view names, each read by shape through discovery and drawn in the form the
+ * entry names. The surface does not interpret an answer and names no section: the title is
+ * the view writer's, or the shape's name. Every entry is drawn, and one with no answer says
+ * why. Which entries appear is the view's (src/ui-views.ts), so the system changes this
+ * screen by writing a view, not by a rebuild.
  *
- * A view may ask for a report's rows in full (`form: "rows"`): each row with every field as
- * records wrote it, nothing chosen or reordered by the surface. With `judge: "outcome"` each
- * row offers a person's verdict, written as an outcome row citing it under their own key.
+ * `fields`: an answer's plain values, and each list as its size and first items.
+ * `rows`: each row with every field as the producer wrote it, nothing chosen or reordered by
+ * the surface; with `judge: "outcome"` each row offers a person's verdict, written as an
+ * outcome row citing it under their own key.
+ * `questions`: each row is a question this surface holds, opened on selection.
  */
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { formOfItem, writeOutcome, type ReportAnswer, type ReportForm, type ReportItem } from "../api/client";
+import { writeOutcome, type ReportAnswer, type ViewEntry } from "../api/client";
 import { useReport } from "../api/queries";
 import { SESSION_KEY, useSession } from "../api/session";
+import type { Question } from "../api/participation";
+import { questionRowSubject } from "../state/questions";
 
 /** How many plain values a report shows before "and N more". */
 const FIELDS_SHOWN = 8;
@@ -126,9 +130,19 @@ function Judge({ rowId }: { rowId: string }): ReactNode {
   );
 }
 
-function Rows({ answer, judge }: { answer: unknown; judge: boolean }): ReactNode {
-  const rows = Array.isArray(answer) ? answer : [answer];
-  if (rows.length === 0) return <p className="sf-muted sf-report-note">answered with nothing</p>;
+/**
+ * The rows an entry draws: the answer, or the field of it the entry names, and with `show`
+ * only the last n in the order the producer returned them. Null when there are no rows to
+ * draw, with what was found instead.
+ */
+export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show">): { rows: readonly unknown[]; total: number } | { missing: string } {
+  const at = entry.field === undefined ? answer : typeof answer === "object" && answer !== null && !Array.isArray(answer) ? (answer as Record<string, unknown>)[entry.field] : undefined;
+  if (at === undefined || at === null) return { missing: entry.field === undefined ? "answered with nothing" : `the answer has no ${entry.field}` };
+  const all = Array.isArray(at) ? at : [at];
+  return { rows: entry.show === undefined ? all : all.slice(-entry.show), total: all.length };
+}
+
+function Rows({ rows, judge }: { rows: readonly unknown[]; judge: boolean }): ReactNode {
   return (
     <ol className="sf-rows">
       {rows.map((row, i) => {
@@ -152,50 +166,97 @@ function Rows({ answer, judge }: { answer: unknown; judge: boolean }): ReactNode
   );
 }
 
-function Report({ entry, enabled, intervalMs }: { entry: ReportForm; enabled: boolean; intervalMs: number }): ReactNode {
+function Questions({ rows, onOpen }: { rows: readonly unknown[]; onOpen: (id: string) => void }): ReactNode {
+  return (
+    <ul className="sf-landing-list">
+      {rows.map((row, i) => {
+        const id = typeof row === "object" && row !== null && typeof (row as Record<string, unknown>)["id"] === "string" ? ((row as Record<string, unknown>)["id"] as string) : null;
+        // A row here is a question this surface holds, so it is named as the questions rail names it.
+        const name = id ? questionRowSubject(row as Question) || itemName(row) : itemName(row);
+        return (
+          <li key={id ?? i}>
+            {id ? (
+              <button type="button" className="sf-landing-row" onClick={() => onOpen(id)}>
+                <span className="sf-landing-text">{name}</span>
+              </button>
+            ) : (
+              <span className="sf-landing-text">{name}</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Fields({ answer }: { answer: unknown }): ReactNode {
+  const rows = reportRows(answer);
+  const shown = rows.slice(0, FIELDS_SHOWN);
+  if (rows.length === 0) return <p className="sf-muted sf-report-note">answered with nothing</p>;
+  return (
+    <>
+      <dl className="sf-report-fields">
+        {shown.map((r) => (
+          <div key={r.label} className="sf-report-field">
+            <dt>{r.label}</dt>
+            <dd>
+              {r.value}
+              {r.items && r.items.length > 0 ? <span className="sf-report-items">{r.items.join(" · ")}</span> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {rows.length > shown.length ? <p className="sf-muted sf-report-note">and {rows.length - shown.length} more</p> : null}
+    </>
+  );
+}
+
+/** The answer drawn in the entry's form, or what was found instead of rows. */
+function Drawn({ entry, answer, onOpenQuestion }: { entry: ViewEntry; answer: unknown; onOpenQuestion: (id: string) => void }): ReactNode {
+  if (entry.form === "fields") return <Fields answer={answer} />;
+  const got = rowsOf(answer, entry);
+  if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
+  if (got.rows.length === 0) return <p className="sf-muted sf-report-note">answered with no rows</p>;
+  return (
+    <>
+      {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the last {got.rows.length} of {got.total}</p> : null}
+      {entry.form === "questions" ? <Questions rows={got.rows} onOpen={onOpenQuestion} /> : <Rows rows={got.rows} judge={entry.judge === "outcome"} />}
+    </>
+  );
+}
+
+function Entry({ entry, enabled, intervalMs, onOpenQuestion }: { entry: ViewEntry; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void }): ReactNode {
   const pointer = entry.pointer;
   const q = useReport(pointer, { enabled, intervalMs });
-  const title = reportTitle(pointer.type);
+  const title = entry.title ?? reportTitle(pointer.type);
   const a: ReportAnswer | undefined = q.data;
   let inner: ReactNode;
   if (!a) inner = <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>;
   else if (!a.ok) inner = <p className="sf-muted sf-report-note">no answer: {a.reason}</p>;
-  else if (entry.form === "rows") inner = <Rows answer={a.answer} judge={entry.judge === "outcome"} />;
-  else {
-    const rows = reportRows(a.answer);
-    const shown = rows.slice(0, FIELDS_SHOWN);
-    inner = rows.length === 0 ? (
-      <p className="sf-muted sf-report-note">answered with nothing</p>
-    ) : (
-      <>
-        <dl className="sf-report-fields">
-          {shown.map((r) => (
-            <div key={r.label} className="sf-report-field">
-              <dt>{r.label}</dt>
-              <dd>
-                {r.value}
-                {r.items && r.items.length > 0 ? <span className="sf-report-items">{r.items.join(" · ")}</span> : null}
-              </dd>
-            </div>
-          ))}
-        </dl>
-        {rows.length > shown.length ? <p className="sf-muted sf-report-note">and {rows.length - shown.length} more</p> : null}
-      </>
-    );
-  }
+  else inner = <Drawn entry={entry} answer={a.answer} onOpenQuestion={onOpenQuestion} />;
   return (
-    <section className="sf-report" data-report={pointer.type} aria-label={title}>
-      <h3 className="sf-report-title">{title}</h3>
+    <section className="sf-report" data-report={pointer.type} data-form={entry.form} aria-label={title}>
+      <h2 className="sf-report-title">{title}</h2>
       {inner}
     </section>
   );
 }
 
-export function Reports({ pointers, enabled, intervalMs }: { pointers: readonly ReportItem[]; enabled: boolean; intervalMs: number }): ReactNode {
+export function Entries({
+  entries,
+  enabled,
+  intervalMs,
+  onOpenQuestion,
+}: {
+  entries: readonly ViewEntry[];
+  enabled: boolean;
+  intervalMs: number;
+  onOpenQuestion: (id: string) => void;
+}): ReactNode {
   return (
     <div className="sf-reports">
-      {pointers.map((p) => (
-        <Report key={JSON.stringify(p)} entry={formOfItem(p)} enabled={enabled} intervalMs={intervalMs} />
+      {entries.map((e) => (
+        <Entry key={JSON.stringify(e.pointer)} entry={e} enabled={enabled} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} />
       ))}
     </div>
   );

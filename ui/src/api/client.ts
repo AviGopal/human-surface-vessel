@@ -160,25 +160,27 @@ export async function fetchRenderPolicy(): Promise<RenderPolicy> {
   return (await res.json()) as RenderPolicy;
 }
 
-/** The view a region draws (src/ui-views.ts): its blocks in order, and their limits. */
+/** The view a region draws (src/ui-views.ts): its entries in order, and a newer view passed over. */
 export interface UiViewState {
   readonly region: string;
   readonly revision: number;
   readonly id: string;
-  readonly blocks: readonly string[];
-  readonly limits: Readonly<Record<string, number>>;
-  /** What the reports block reads: pointers, each with its shape in `type`. Absent from a server that predates them. */
-  readonly reports?: readonly ReportItem[];
+  readonly entries: readonly ViewEntry[];
+  readonly writtenBy?: string | null;
+  /** A newer stored view that is not drawn, and why; null when the newest is in force. */
+  readonly notDrawn?: { readonly id: string; readonly refusal: string; readonly detail: string } | null;
 }
 
 export type ReportPointer = Readonly<Record<string, string | number | boolean>> & { readonly type: string };
-/** A pointer with how its answer is drawn (src/ui-views.ts ReportForm). Only the pointer is sent. */
-export type ReportForm = { readonly pointer: ReportPointer; readonly form?: "rows"; readonly judge?: "outcome" };
-export type ReportItem = ReportPointer | ReportForm;
-
-export function formOfItem(item: ReportItem): ReportForm {
-  return typeof (item as { pointer?: unknown }).pointer === "object" && (item as { pointer?: unknown }).pointer !== null ? (item as ReportForm) : { pointer: item as ReportPointer };
-}
+/** One thing a view draws (src/ui-views.ts ViewEntry): a pointer and its form. Only the pointer is sent. */
+export type ViewEntry = {
+  readonly pointer: ReportPointer;
+  readonly form: "fields" | "rows" | "questions";
+  readonly title?: string;
+  readonly field?: string;
+  readonly show?: number;
+  readonly judge?: "outcome";
+};
 
 /** What a person's row write came to: its record number, or why it was not recorded. */
 export type RowWrite = { ok: true; seq: number | null } | { ok: false; reason: string; signedOut?: true };

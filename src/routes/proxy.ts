@@ -705,7 +705,7 @@ proxyRouter.get("/api/render-policy", (c) =>
 /** The view a region draws now (src/ui-views.ts): read by the page at use time, as the policy is. */
 proxyRouter.get("/api/ui-view", (c) => {
   const region = c.req.query("region") ?? "";
-  if (!Object.hasOwn(VIEW_REGIONS, region)) return c.json({ error: "unknown_region" }, 404);
+  if (!(VIEW_REGIONS as readonly string[]).includes(region)) return c.json({ error: "unknown_region" }, 404);
   return c.json(currentView(region as ViewRegion), 200, corsHeaders(c.req.header("Origin")));
 });
 

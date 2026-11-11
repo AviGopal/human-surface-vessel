@@ -1,8 +1,8 @@
 /**
  * The whole page, mounted through its router: with a view written for the landing,
- * the first screen draws that view's blocks in order. Nothing here imports the
+ * the first screen draws that view's entries in order. Nothing here imports the
  * landing component, so at a build without views it fails on what the page draws.
- * No run is drawn and no goal-host shape is read: the landing has no such block.
+ * No run is drawn and no goal-host shape is read.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -17,8 +17,17 @@ const decision = {
 const goalHostReads: string[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
-  if (url.includes("/api/ui-view")) return Response.json({ region: "landing", revision: 4, id: "landing@4", blocks: ["reports", "needs_you"], limits: {}, reports: [{ type: "system_load_report" }] });
-  if (url.includes("/api/discovery/resolve")) return Response.json({ success: true, shape: "systemLoadReport", body: { load_avg_1m: 2.61, cpu_cores: 16 } });
+  if (url.includes("/api/ui-view")) {
+    return Response.json({ region: "landing", revision: 4, id: "landing@4", notDrawn: null, entries: [
+      { pointer: { type: "system_load_report" }, form: "fields" },
+      { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you" },
+    ] });
+  }
+  if (url.includes("/api/discovery/resolve")) {
+    const pointer = JSON.parse(String(init?.body)).pointer as { type: string };
+    if (pointer.type === "uiQuestion") return Response.json({ success: true, shape: "uiQuestion", body: { questions: [decision] } });
+    return Response.json({ success: true, shape: "systemLoadReport", body: { load_avg_1m: 2.61, cpu_cores: 16 } });
+  }
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [decision] } });
   if (url.includes("/api/resolve")) goalHostReads.push(JSON.parse(String(init?.body ?? "{}")).type);
   return Response.json({});
@@ -40,7 +49,7 @@ afterAll(async () => {
 });
 
 describe("the first screen follows the landing's view", () => {
-  test("must-fail: the view's blocks are drawn in its order, not the newest run", async () => {
+  test("must-fail: the view's entries are drawn in its order, not the newest run", async () => {
     const el = document.createElement("div");
     document.body.appendChild(el);
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -49,9 +58,11 @@ describe("the first screen follows the landing's view", () => {
     });
     for (let i = 0; i < 8; i++) await act(async () => { await new Promise((r) => setTimeout(r, 40)); });
     const main = el.querySelector("main")!;
-    const blocks = [...main.querySelectorAll("[data-block]")].map((b) => b.getAttribute("data-block"));
-    expect(blocks).toEqual(["reports", "needs_you"]);
-    expect(main.textContent).toContain("Reach gap docs align tick");
+    const entries = [...main.querySelectorAll("[data-report]")].map((b) => b.getAttribute("data-report"));
+    expect(entries).toEqual(["system_load_report", "uiQuestion"]);
+    expect(main.textContent).toContain("Showing view landing@4.");
+    expect(main.querySelector("[data-report=uiQuestion]")?.textContent).toContain("Waiting on you");
+    expect(main.querySelector("[data-report=uiQuestion] button")?.textContent).toContain("Reach gap docs align tick");
     expect(main.querySelector("[data-report=system_load_report]")?.textContent).toContain("2.61");
     expect(main.querySelector(".sf-run")).toBeNull();
     expect(goalHostReads.filter((t) => /^goalWalk/.test(t))).toEqual([]);

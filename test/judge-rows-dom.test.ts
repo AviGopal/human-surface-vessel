@@ -52,7 +52,7 @@ const { createRoot: rawCreateRoot } = await import(Bun.resolveSync("react-dom/cl
 const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCreateRoot(...a));
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
-const { Reports } = await import("../ui/src/components/Reports");
+const { Entries } = await import("../ui/src/components/Reports");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
@@ -74,7 +74,7 @@ async function mount(items: unknown[]): Promise<HTMLElement> {
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
-    createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(Reports, { pointers: items as never, enabled: true, intervalMs: 60_000 })));
+    createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(Entries, { entries: items as never, enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} })));
   });
   await settle();
   return el;
@@ -130,7 +130,7 @@ describe("rows drawn in full, with a person's verdict", () => {
     expect(button(el, "Right").disabled).toBe(true);
   });
 
-  test("a bare pointer, or rows without judge, offers no verdict", async () => {
+  test("rows without judge offer no verdict", async () => {
     const el = await mount([{ pointer: { type: "record_read", shape: "answer" }, form: "rows" }]);
     expect(el.querySelector('[data-row="01ca30b1"]')).not.toBeNull();
     expect([...el.querySelectorAll("button")].length).toBe(0);

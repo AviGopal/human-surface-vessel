@@ -9,16 +9,14 @@ import { impulsesRouter } from "../src/routes/impulses.ts";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { REGISTRATION_PAYLOAD } from "../src/discovery-registration.ts";
 
-/** The reports block always names at least one report, so a write that names none gets one. */
-const withReport = (p: Record<string, unknown>) =>
-  Array.isArray(p["blocks"]) && (p["blocks"] as unknown[]).includes("reports") && !("reports" in p) ? { ...p, reports: [{ type: "system_load_report" }] } : p;
+const load = { pointer: { type: "system_load_report" }, form: "fields" };
+const asked = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows" };
 
 async function write(pointer: Record<string, unknown>, auth = true) {
   const res = await impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST",
     headers: { "content-type": "application/json", ...(auth ? testAuth() : {}) },
-    // A reports block names what it reads; writes about other things name one report.
-    body: JSON.stringify({ pointer: { type: "uiView_write", ...withReport(pointer) } }),
+    body: JSON.stringify({ pointer: { type: "uiView_write", ...pointer } }),
   });
   return { status: res.status, json: (await res.json().catch(() => ({}))) as any };
 }
@@ -31,16 +29,16 @@ describe("a region's view through the routes", () => {
   test("must-fail: a valid view is stored and the page reads it back", async () => {
     const before = await read();
     expect(before.status).toBe(200);
-    const w = await write({ region: "landing", blocks: ["reports", "needs_you"], limits: { needs_you: 3 } });
+    const w = await write({ region: "landing", entries: [asked, load] });
     expect(w.status).toBe(200);
     const after = await read();
     expect(after.json.revision).toBe(before.json.revision + 1);
-    expect(after.json.blocks).toEqual(["reports", "needs_you"]);
+    expect(after.json.entries).toEqual([asked, load]);
   });
 
   test("must-fail: an unknown region is refused by name and stores nothing", async () => {
     const before = await read();
-    const w = await write({ region: "run", blocks: ["reports"] });
+    const w = await write({ region: "run", entries: [load] });
     expect(w.status).toBe(422);
     expect(w.json.refusal).toBe("unknown_region");
     expect((await read()).json.revision).toBe(before.json.revision);
@@ -60,16 +58,16 @@ describe("a region's view through the routes", () => {
       });
       return ((await res.json()) as any).body.views.landing;
     };
-    await write({ region: "landing", blocks: ["reports", "needs_you"], dispatch_id: "d-teach", execution_id: "exec-teach", template_id: "activity:view-landing" });
+    await write({ region: "landing", entries: [load, asked], dispatch_id: "d-teach", execution_id: "exec-teach", template_id: "activity:view-landing" });
     expect((await report()).run).toEqual({ dispatch_id: "d-teach", execution_id: "exec-teach", template_id: "activity:view-landing" });
-    await write({ region: "landing", blocks: ["reports"] });
+    await write({ region: "landing", entries: [load] });
     expect((await report()).run).toBeNull();
   });
 
   test("must-fail: a write naming exactly the view in force succeeds as unchanged and writes no revision", async () => {
-    await write({ region: "landing", blocks: ["reports", "needs_you"], limits: { needs_you: 4 } });
+    await write({ region: "landing", entries: [load, { ...asked, show: 4 }] });
     const before = await read();
-    const again = await write({ region: "landing", blocks: ["reports", "needs_you"], limits: { needs_you: 4 } });
+    const again = await write({ region: "landing", entries: [load, { ...asked, show: 4 }] });
     expect(again.status).toBe(200);
     expect(again.json).toMatchObject({ resolved: true, success: true, body: { unchanged: true, revision: before.json.revision } });
     expect((await read()).json.revision).toBe(before.json.revision);
@@ -77,7 +75,7 @@ describe("a region's view through the routes", () => {
 
   test("control: a write that changes the view still gets a new revision", async () => {
     const before = await read();
-    const changed = await write({ region: "landing", blocks: ["needs_you", "reports"], limits: { needs_you: 4 } });
+    const changed = await write({ region: "landing", entries: [{ ...asked, show: 4 }, load] });
     expect(changed.status).toBe(200);
     expect(changed.json.body.unchanged).toBeUndefined();
     expect((await read()).json.revision).toBe(before.json.revision + 1);

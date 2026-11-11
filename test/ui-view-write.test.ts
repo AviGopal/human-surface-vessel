@@ -1,10 +1,12 @@
 /**
  * A region's view is written through `uiView_write`, checked against a closed
  * vocabulary, kept per region with a revision log, and read by the page at use
- * time. A refusal names its reason and stores nothing; "undo" restores the view in
- * force before; the views survive a restart. The surface serves `uiView_write` and
- * never advertises `uiView`, so a learned activity that writes views is that shape's
- * only producer and is not refused as a duplicate of the surface.
+ * time. A view is a list of entries, each a pointer and the form its answer is drawn
+ * in; no section is named. A refusal names its reason and stores nothing; "undo"
+ * restores the view in force before; the views survive a restart, and a stored view
+ * refused today is named as passed over, not silently skipped. The surface serves
+ * `uiView_write` and never advertises `uiView`, so a learned activity that writes views
+ * is that shape's only producer and is not refused as a duplicate of the surface.
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { appendFileSync } from "node:fs";
@@ -14,18 +16,16 @@ import { impulsesRouter } from "../src/routes/impulses.ts";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { DISCOVERY_SHAPES } from "../src/config.ts";
 import { REGISTRATION_PAYLOAD } from "../src/discovery-registration.ts";
-import { currentView, pointerOfItem, resetViewsForTest, type ReportItem } from "../src/ui-views.ts";
+import { currentView, resetViewsForTest } from "../src/ui-views.ts";
 
-/** The reports block always names at least one report, so a write that names none gets one. */
-const withReport = (p: Record<string, unknown>) =>
-  Array.isArray(p["blocks"]) && (p["blocks"] as unknown[]).includes("reports") && !("reports" in p) ? { ...p, reports: [{ type: "system_load_report" }] } : p;
+const load = { pointer: { type: "system_load_report" }, form: "fields" };
+const asked = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", show: 10, title: "What people asked" };
 
 async function write(pointer: Record<string, unknown>, auth = true) {
   const res = await impulsesRouter.request("/v2/impulses/resolve", {
     method: "POST",
     headers: { "content-type": "application/json", ...(auth ? testAuth() : {}) },
-    // A reports block names what it reads; writes about other things name one report.
-    body: JSON.stringify({ pointer: { type: "uiView_write", ...withReport(pointer) } }),
+    body: JSON.stringify({ pointer: { type: "uiView_write", ...pointer } }),
   });
   return { status: res.status, json: (await res.json()) as any };
 }
@@ -39,132 +39,131 @@ beforeEach(forgetViews);
 afterAll(forgetViews);
 
 describe("uiView_write", () => {
-  test("with nothing written, the landing draws its default: open questions and the read-only reports", async () => {
+  test("with nothing written, the landing draws its default: what waits on a person, what changed, how the system is", async () => {
     const r = await read("landing");
     expect(r.status).toBe(200);
-    expect(r.json).toMatchObject({ region: "landing", revision: 0, id: "landing@0", blocks: ["needs_you", "reports"] });
-    expect(r.json.reports.map((p: ReportItem) => pointerOfItem(p).type)).toEqual(["record_read", "trace_failure_pattern_report", "failure_count_report", "execution_trace", "system_load_report"]);
+    expect(r.json).toMatchObject({ region: "landing", revision: 0, id: "landing@0", notDrawn: null });
+    expect(r.json.entries.map((e: any) => [e.pointer.type, e.pointer.shape ?? null])).toEqual([
+      ["uiQuestion", null],
+      ["record_read", "world_changed"],
+      ["record_read", "answer"],
+      ["record_read", "failure"],
+      ["record_read", "outcome"],
+      ["posterior", null],
+    ]);
   });
 
   test("must-fail: a valid view is stored, advances the revision, names its writer, and the page reads it", async () => {
-    const w = await write({ region: "landing", blocks: ["reports", "needs_you"], limits: { needs_you: 3 } });
+    const w = await write({ region: "landing", entries: [load, asked] });
     expect(w.status).toBe(200);
     expect(w.json).toMatchObject({ resolved: true, shape: "uiView_write", body: { region: "landing", revision: 1 } });
     expect(w.json.body.view.writtenBy).toBeTruthy();
     const r = await read("landing");
-    expect(r.json).toMatchObject({ revision: 1, id: "landing@1", blocks: ["reports", "needs_you"], limits: { needs_you: 3 } });
+    expect(r.json).toMatchObject({ revision: 1, id: "landing@1", entries: [load, asked] });
   });
 
   test("must-fail: each refusal is named, answers 422, and stores nothing", async () => {
-    const cases: [Record<string, unknown>, string][] = [
-      [{ region: "run", blocks: ["reports"] }, "unknown_region"],
-      [{ region: "landing", blocks: ["reports", "weather"] }, "unknown_block"],
-      // The run blocks went with goal-host, the only producer of what they drew.
-      [{ region: "landing", blocks: ["latest_run"] }, "unknown_block"],
-      [{ region: "landing", blocks: ["needs_you", "changed"] }, "unknown_block"],
-      [{ region: "landing", blocks: ["health"] }, "unknown_block"],
-      [{ region: "landing", blocks: ["reports", "reports"] }, "duplicate_block"],
-      [{ region: "landing", blocks: [] }, "empty_blocks"],
-      [{ region: "landing", blocks: ["needs_you"], limits: { changed: 2 } }, "unknown_limit"],
-      [{ region: "landing", blocks: ["needs_you"], limits: { needs_you: 0 } }, "limit_out_of_range"],
-      [{ region: "landing", blocks: ["needs_you"], limits: { needs_you: 2.5 } }, "limit_out_of_range"],
+    const cases: [Record<string, unknown>, string, string][] = [
+      [{ region: "run", entries: [load] }, "unknown_region", "regions"],
+      // The earlier form is refused by name, so its writer learns the form in force.
+      [{ region: "landing", blocks: ["needs_you"] }, "unknown_field", "blocks: a view is {region, entries"],
+      [{ region: "landing", entries: [load], reports: [{ type: "system_load_report" }] }, "unknown_field", "reports"],
+      [{ region: "landing", entries: [load], limits: {} }, "unknown_field", "limits"],
+      [{ region: "landing", entries: [] }, "bad_entry", "entries: 1 to 8"],
+      [{ region: "landing", entries: Array.from({ length: 9 }, (_, i) => ({ pointer: { type: `r${i}` }, form: "fields" })) }, "bad_entry", "entries: 1 to 8"],
+      [{ region: "landing", entries: [{ pointer: { type: "substrateGap_write" }, form: "rows" }] }, "bad_entry", "a view only reads"],
+      [{ region: "landing", entries: [{ type: "system_load_report" }] }, "bad_entry", "pointer, form, title"],
+      [{ region: "landing", entries: ["system_load_report"] }, "bad_entry", "{pointer, form}"],
+      [{ region: "landing", entries: [{ pointer: { limit: 3 }, form: "fields" }] }, "bad_entry", "type"],
+      [{ region: "landing", entries: [{ pointer: { type: "x", where: { a: 1 } }, form: "fields" }] }, "bad_entry", "plain values"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" } }] }, "bad_entry", "form: fields, rows, questions"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "table" }] }, "bad_entry", "form: fields, rows, questions"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "fields", judge: "outcome" }] }, "bad_entry", "judge needs form"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", judge: "label" }] }, "bad_entry", 'judge: "outcome"'],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", show: 0 }] }, "bad_entry", "show: 1..200"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", field: "a b" }] }, "bad_entry", "field"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", title: "" }] }, "bad_entry", "title"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", colour: "red" }] }, "bad_entry", "colour"],
+      [{ region: "landing", entries: [load, { ...load, form: "rows" }] }, "bad_entry", "named twice"],
     ];
-    for (const [pointer, refusal] of cases) {
+    for (const [pointer, refusal, why] of cases) {
       const w = await write(pointer);
       expect(w.status).toBe(422);
       expect(w.json.refusal).toBe(refusal);
+      expect(w.json.error).toContain(why);
     }
     expect((await read("landing")).json.revision).toBe(0);
   });
 
   test("must-fail: a write with no caller is refused and stores nothing", async () => {
-    const w = await write({ region: "landing", blocks: ["reports"] }, false);
+    const w = await write({ region: "landing", entries: [load] }, false);
     expect(w.status).toBe(401);
     expect((await read("landing")).json.revision).toBe(0);
   });
 
   test("must-fail: undo restores the view in force before, as a new revision; undoing the first restores the default", async () => {
     expect((await write({ region: "landing", undo: true })).json.refusal).toBe("nothing_to_undo");
-    await write({ region: "landing", blocks: ["reports", "needs_you"] });
-    await write({ region: "landing", blocks: ["reports"] });
+    await write({ region: "landing", entries: [load, asked] });
+    await write({ region: "landing", entries: [load] });
     const u1 = await write({ region: "landing", undo: true });
-    expect(u1.json.body.view).toMatchObject({ revision: 3, blocks: ["reports", "needs_you"], undoOf: 1 });
+    expect(u1.json.body.view).toMatchObject({ revision: 3, entries: [load, asked], undoOf: 1 });
     const u2 = await write({ region: "landing", undo: true });
-    expect(u2.json.body.view).toMatchObject({ revision: 4, blocks: ["reports"], undoOf: 2 });
+    expect(u2.json.body.view).toMatchObject({ revision: 4, entries: [load], undoOf: 2 });
     await forgetViews();
-    await write({ region: "landing", blocks: ["reports"] });
+    await write({ region: "landing", entries: [load] });
     const u3 = await write({ region: "landing", undo: true });
-    expect(u3.json.body.view).toMatchObject({ revision: 2, blocks: ["needs_you", "reports"], undoOf: 0 });
-    expect(u3.json.body.view.reports.length).toBe(5);
+    expect(u3.json.body.view).toMatchObject({ revision: 2, undoOf: 0 });
+    expect(u3.json.body.view.entries.length).toBe(6);
   });
 
-  test("must-fail: an identical view is unchanged, whatever its limits' order or note, and writes no revision", async () => {
-    await write({ region: "landing", blocks: ["reports", "needs_you"], limits: { needs_you: 3 } });
-    const same = await write({ region: "landing", blocks: ["reports", "needs_you"], limits: { needs_you: 3 }, note: "a different note" });
+  test("must-fail: an identical view is unchanged, whatever its note, and writes no revision", async () => {
+    await write({ region: "landing", entries: [load, asked] });
+    const same = await write({ region: "landing", entries: [load, asked], note: "a different note" });
     expect(same.status).toBe(200);
     expect(same.json.body).toMatchObject({ unchanged: true, revision: 1 });
-    const reordered = await write({ region: "landing", blocks: ["needs_you", "reports"], limits: { needs_you: 3 } });
+    const reordered = await write({ region: "landing", entries: [asked, load] });
     expect(reordered.json.body).toMatchObject({ revision: 2 });
     expect(reordered.json.body.unchanged).toBeUndefined();
-    const relimited = await write({ region: "landing", blocks: ["needs_you", "reports"], limits: { needs_you: 2 } });
-    expect(relimited.json.body.revision).toBe(3);
-    // undo still restores, and the default counts as a view in force
-    expect((await write({ region: "landing", undo: true })).json.body.view).toMatchObject({ revision: 4, blocks: ["needs_you", "reports"], limits: { needs_you: 3 } });
+    const reshown = await write({ region: "landing", entries: [{ ...asked, show: 5 }, load] });
+    expect(reshown.json.body.revision).toBe(3);
     await forgetViews();
-    expect((await write({ region: "landing", blocks: ["needs_you", "reports"], reports: currentView("landing").reports })).json.body).toMatchObject({ unchanged: true, revision: 0 });
+    expect((await write({ region: "landing", entries: currentView("landing").entries })).json.body).toMatchObject({ unchanged: true, revision: 0 });
   });
 
-  test("must-fail: views survive a restart, and a stored line outside the vocabulary is not replayed", async () => {
-    await write({ region: "landing", blocks: ["reports", "needs_you"] });
+  test("must-fail: views survive a restart, and a newer stored view refused today is passed over by name", async () => {
+    await write({ region: "landing", entries: [load, asked] });
     const file = join(process.env.WORKSPACE_ROOT!, "state", "human-surface", "ui-views.jsonl");
-    appendFileSync(file, JSON.stringify({ region: "landing", revision: 2, id: "landing@2", blocks: ["weather"], limits: {} }) + "\n");
+    // A view in the earlier form, as one node holds it (landing@2, blocks ["needs_you"]).
+    appendFileSync(file, JSON.stringify({ region: "landing", revision: 2, id: "landing@2", blocks: ["needs_you"], limits: {}, reports: [] }) + "\n");
     resetViewsForTest();
-    expect(currentView("landing")).toMatchObject({ revision: 1, blocks: ["reports", "needs_you"] });
+    const v = currentView("landing");
+    expect(v).toMatchObject({ revision: 1, entries: [load, asked] });
+    expect(v.notDrawn).toMatchObject({ id: "landing@2", refusal: "unknown_field" });
+    expect(v.notDrawn!.detail).toContain("blocks");
+    // The next write goes past every stored line, drawn or not, and clears the notice.
+    const w = await write({ region: "landing", entries: [load] });
+    expect(w.json.body.revision).toBe(3);
+    expect(currentView("landing").notDrawn).toBeNull();
   });
 
-  test("must-fail: a view names the reports its reports block reads, and they are read back as written", async () => {
-    const w = await write({ region: "landing", blocks: ["reports"], reports: [{ type: "substrateGap", status: "open", limit: 5 }, { type: "system_load_report" }] });
-    expect(w.status).toBe(200);
-    expect((await read("landing")).json).toMatchObject({ revision: 1, blocks: ["reports"], reports: [{ type: "substrateGap", status: "open", limit: 5 }, { type: "system_load_report" }] });
-    // Other reports are a different view, so a revision.
-    expect((await write({ region: "landing", blocks: ["reports"], reports: [{ type: "system_load_report" }] })).json.body.revision).toBe(2);
+  test("must-fail: a view whose only stored revision is refused today draws the default and says so", async () => {
+    const file = join(process.env.WORKSPACE_ROOT!, "state", "human-surface", "ui-views.jsonl");
+    await write({ region: "landing", entries: [load] });
+    await forgetViews();
+    appendFileSync(file, JSON.stringify({ region: "landing", revision: 2, id: "landing@2", blocks: ["needs_you"], limits: {}, reports: [] }) + "\n");
+    resetViewsForTest();
+    const r = await read("landing");
+    expect(r.json).toMatchObject({ revision: 0, id: "landing@0", notDrawn: { id: "landing@2", refusal: "unknown_field" } });
   });
 
-  test("must-fail: a report that is a write, or not a pointer, is refused and stores nothing", async () => {
-    const cases: [Record<string, unknown>, string][] = [
-      [{ blocks: ["reports"], reports: [{ type: "substrateGap_write" }] }, "a write is not a report"],
-      [{ blocks: ["reports"], reports: ["system_load_report"] }, "pointer object"],
-      [{ blocks: ["reports"], reports: [{ limit: 3 }] }, "type"],
-      [{ blocks: ["reports"], reports: [{ type: "x", where: { a: 1 } }] }, "plain values"],
-      [{ blocks: ["reports"], reports: [] }, "at least one report"],
-      [{ blocks: ["needs_you"], reports: [{ type: "system_load_report" }] }, "only by the reports block"],
-      [{ blocks: ["reports"], reports: [{ type: "a" }, { type: "a" }] }, "named twice"],
-      [{ blocks: ["reports"], reports: Array.from({ length: 9 }, (_, i) => ({ type: `r${i}` })) }, "at most 8"],
-      [{ blocks: ["reports"], reports: [{ pointer: { type: "record_write" }, form: "rows" }] }, "a write is not a report"],
-      [{ blocks: ["reports"], reports: [{ pointer: { type: "record_read" }, form: "table" }] }, 'form: "rows"'],
-      [{ blocks: ["reports"], reports: [{ pointer: { type: "record_read" }, judge: "outcome" }] }, "judge needs form"],
-      [{ blocks: ["reports"], reports: [{ pointer: { type: "record_read" }, form: "rows", judge: "label" }] }, 'judge: "outcome"'],
-      [{ blocks: ["reports"], reports: [{ pointer: { type: "record_read" }, form: "rows", colour: "red" }] }, "pointer, form and judge only"],
-      [{ blocks: ["reports"], reports: [{ type: "record_read" }, { pointer: { type: "record_read" }, form: "rows" }] }, "named twice"],
-    ];
-    for (const [pointer, why] of cases) {
-      const w = await write({ region: "landing", ...pointer });
-      expect(w.status).toBe(422);
-      expect(w.json.refusal).toBe("bad_report");
-      expect(w.json.error).toContain(why);
-    }
-    expect((await read("landing")).json.revision).toBe(0);
+  test("must-fail: an entry is stored as written, and only its pointer is a pointer", async () => {
+    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered" };
+    const w = await write({ region: "landing", entries: [entry, load] });
+    expect(w.json.body.view.entries).toEqual([entry, load]);
   });
 
-  test("must-fail: an entry's form is kept beside its pointer, and the pointer is stored as written", async () => {
-    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome" };
-    const w = await write({ region: "landing", blocks: ["reports"], reports: [entry, { type: "system_load_report" }] });
-    expect(w.json.body.view.reports).toEqual([entry, { type: "system_load_report" }]);
-    expect(pointerOfItem(w.json.body.view.reports[0])).toEqual({ type: "record_read", shape: "answer" });
-  });
-
-  test("must-fail: the default view's reports only read: none is a write, a tick or a scan", () => {
-    for (const p of currentView("landing").reports) expect(pointerOfItem(p).type).not.toMatch(/_write$|tick|scan|observer/);
+  test("must-fail: the default view's pointers only read: none is a write, a tick or a scan", () => {
+    for (const e of currentView("landing").entries) expect(e.pointer.type).not.toMatch(/_write$|tick|scan|observer/);
   });
 
   test("must-fail: the surface advertises uiView_write and never uiView", () => {
@@ -185,16 +184,16 @@ describe("human_surface:ui_view names the view each region draws", () => {
   }
 
   test("with nothing written, the report names the default", async () => {
-    expect((await report()).views.landing).toMatchObject({ id: "landing@0", revision: 0, blocks: ["needs_you", "reports"], written_by: null, written_at: null });
-    expect((await report()).views.landing.reports.length).toBe(5);
+    expect((await report()).views.landing).toMatchObject({ id: "landing@0", revision: 0, written_by: null, written_at: null, not_drawn: null });
+    expect((await report()).views.landing.entries.length).toBe(6);
   });
 
-  test("must-fail: after a write and an undo, the report names each revision, its blocks, limits and writer", async () => {
-    await write({ region: "landing", blocks: ["needs_you", "reports"], limits: { needs_you: 3 } });
+  test("must-fail: after a write and an undo, the report names each revision, its entries and writer", async () => {
+    await write({ region: "landing", entries: [load] });
     const after = (await report()).views.landing;
-    expect(after).toMatchObject({ id: "landing@1", revision: 1, blocks: ["needs_you", "reports"], limits: { needs_you: 3 }, undo_of: null });
+    expect(after).toMatchObject({ id: "landing@1", revision: 1, entries: [load], undo_of: null });
     expect(after.written_by).toBeTruthy();
     await write({ region: "landing", undo: true });
-    expect((await report()).views.landing).toMatchObject({ id: "landing@2", revision: 2, blocks: ["needs_you", "reports"], undo_of: 0 });
+    expect((await report()).views.landing).toMatchObject({ id: "landing@2", revision: 2, undo_of: 0 });
   });
 });

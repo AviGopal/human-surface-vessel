@@ -1,7 +1,7 @@
 /**
  * The surface tells discovery what its view shapes do in the words of the contract a
- * view is checked against (src/ui-views.ts): region names, block names, what the
- * order of blocks means, the limits and the default. Goal recall matches goals against
+ * view is checked against (src/ui-views.ts): region names, the entry and its forms, what
+ * the order of entries means, and the default. Goal recall matches goals against
  * these descriptions, so a shape advertised with no words for regions or order is never
  * offered for a goal about arranging the surface. Derived, not written per shape: a
  * different contract yields a different description.
@@ -15,20 +15,20 @@ const advertised = (): Record<string, string> =>
   ((REGISTRATION_PAYLOAD as unknown as { shape_descriptions?: Record<string, string> }).shape_descriptions ?? {});
 
 describe("view shape descriptions come from the view contract", () => {
-  test("uiView_write is advertised with every region and block, and what order means", () => {
+  test("uiView_write is advertised with every region and form, and what order means", () => {
     const d = advertised()["uiView_write"] ?? "";
-    for (const [region, blocks] of Object.entries(views.VIEW_REGIONS)) {
-      expect(d).toContain(`region ${region}`);
-      for (const b of blocks) expect(d).toContain(b);
-    }
-    expect(d).toContain("in what order");
+    for (const region of views.VIEW_REGIONS) expect(d).toContain(region);
+    for (const form of views.ENTRY_FORMS) expect(d).toContain(form);
+    expect(d).toContain("{region, entries, note?}");
+    expect(d).toContain("in list order");
     expect(d).toContain("succeeds as unchanged");
-    expect(d).toContain("block");
+    expect(d).not.toContain("block");
   });
 
-  test("human_surface:ui_view is advertised with the regions it reports", () => {
+  test("human_surface:ui_view is advertised with the regions it reports, and the view it passed over", () => {
     const d = advertised()["human_surface:ui_view"] ?? "";
-    for (const region of Object.keys(views.VIEW_REGIONS)) expect(d).toContain(`region ${region}`);
+    for (const region of views.VIEW_REGIONS) expect(d).toContain(region);
+    expect(d).toContain("not drawn");
   });
 
   test("a different contract gives a different description", () => {
@@ -37,13 +37,13 @@ describe("view shape descriptions come from the view contract", () => {
       | undefined;
     expect(typeof gen).toBe("function");
     const out = gen!({
-      regions: { margin: ["alpha_box", "beta_box"] },
-      limits: { margin: { beta_box: { min: 2, max: 7 } } },
-      defaults: { margin: { blocks: ["beta_box"] } },
+      regions: ["margin"],
+      defaults: { margin: { entries: [{ pointer: { type: "tide_table" }, form: "fields", title: "Tides" }, { pointer: { type: "moon_phase" }, form: "fields" }] } },
     });
-    expect(out["uiView_write"]).toContain("region margin: blocks alpha_box, beta_box; beta_box lists 2 to 7 items; default beta_box");
-    expect(out["uiView_write"]).not.toContain("needs_you");
-    expect(out["human_surface:ui_view"]).toContain("region margin");
+    expect(out["uiView_write"]).toContain("(margin)");
+    expect(out["uiView_write"]).toContain("default margin: Tides, moon_phase");
+    expect(out["uiView_write"]).not.toContain("landing");
+    expect(out["human_surface:ui_view"]).toContain("(margin)");
   });
 
   test("control: only the shapes the contract serves are described, and all are advertised", () => {

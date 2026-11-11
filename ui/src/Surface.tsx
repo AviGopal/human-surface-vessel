@@ -103,7 +103,7 @@ function Workbench(): ReactNode {
         ) : (
           <Landing
             view={landingView.data}
-            ordered={questions.ordered}
+            viewError={landingView.isError ? landingView.error.message : null}
             live={!paused}
             intervalMs={intervalMs}
             onOpenQuestion={openQuestion}

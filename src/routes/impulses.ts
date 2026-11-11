@@ -595,6 +595,8 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         // answer it.
         .filter(pn => isSolicitation(pn) && (!wanted || pn.id === wanted))
         .map(questionView)
+        // `open: true`: only what waits on a person (an ask not answered or set aside).
+        .filter((q) => pointer["open"] !== true || (!q.answered && !q.declined && classifyQuestion(q) === "ask"))
         // The status of the gap each one asks about, as last read. Unknown stays
         // unknown: only a status the gap store gave can fold a question as settled.
         .map((view) => {
@@ -998,14 +1000,14 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
     }
 
     case "uiView_write": {
-      // A WRITE, by anything that can author an impulse: which blocks a region draws, in
-      // what order. Checked against the closed vocabulary; a refusal names its reason and
+      // A WRITE, by anything that can author an impulse: what a region draws, in what order.
+      // Checked against the closed vocabulary; a refusal names its reason and
       // stores nothing. `undo: true` restores the view in force before the current one.
       const region = pointer["region"];
       const run = runOf(pointer);
       const write = pointer["undo"] === true
         ? undoView(region, caller?.label ?? null, Date.now(), run)
-        : writeView({ region, blocks: pointer["blocks"], limits: pointer["limits"], reports: pointer["reports"], note: pointer["note"] }, caller?.label ?? null, Date.now(), run);
+        : writeView({ region, entries: pointer["entries"], blocks: pointer["blocks"], limits: pointer["limits"], reports: pointer["reports"], note: pointer["note"] }, caller?.label ?? null, Date.now(), run);
       if (!write.ok) {
         return c.json({ resolved: false, success: false, shape: type, refusal: write.refusal, error: `${write.refusal}: ${write.detail}` }, 422);
       }
