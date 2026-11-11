@@ -151,8 +151,6 @@ function upstreamHeaders(withJsonBody: boolean): Record<string, string> {
  * surface knowing. The only other outbound calls are to identity (key and
  * sign-in checks) and discovery's own register/deregister.
  */
-const DISCOVERY_RESOLVE_TIMEOUT_MS = 10_000;
-
 async function viaDiscovery(
   pointer: Record<string, unknown>,
   opts: { timeoutMs?: number; authorization?: string } = {},
@@ -163,7 +161,7 @@ async function viaDiscovery(
     method: "POST",
     headers,
     body: JSON.stringify({ pointer }),
-    signal: AbortSignal.timeout(opts.timeoutMs ?? DISCOVERY_RESOLVE_TIMEOUT_MS),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? getRenderPolicy().timeouts.resolveMs),
   });
 }
 
@@ -329,13 +327,11 @@ proxyRouter.options("/api/*", (c) =>
  * SAY WHETHER IT ANSWERED: `registries` records it, so an unread registry is
  * never shown as an empty vocabulary.
  */
-const SHAPES_TIMEOUT_MS = 10_000;
-
 async function readShapesFrom(base: string): Promise<readonly string[] | null> {
   try {
     const res = await fetch(`${base.replace(/\/+$/, "")}/registry/shapes`, {
       headers: upstreamHeaders(false),
-      signal: AbortSignal.timeout(SHAPES_TIMEOUT_MS),
+      signal: AbortSignal.timeout(getRenderPolicy().timeouts.shapesMs),
     });
     if (!res.ok) return null;
     const body = (await res.json().catch(() => null)) as null | { shapes?: unknown };
@@ -517,7 +513,7 @@ proxyRouter.get("/api/page-frame/:id", (c) => {
  */
 proxyRouter.get("/api/gaps", async (c) => {
   // By shape, through discovery, which places the read wherever a gap store runs.
-  const answer = await readViaDiscovery({ type: "substrateGap", category: "ui_legibility", limit: 40 }, 8_000);
+  const answer = await readViaDiscovery({ type: "substrateGap", category: "ui_legibility", limit: 40 }, getRenderPolicy().timeouts.issuesMs);
   if (answer && Array.isArray(answer["gaps"])) return c.json({ gaps: answer["gaps"] }, 200, corsHeaders(c.req.header("Origin")));
 
   return c.json(
@@ -532,7 +528,7 @@ proxyRouter.get("/api/gaps", async (c) => {
  * or null when no vessel serving it answered.
  */
 export async function readGapById(id: string): Promise<{ found: boolean; gap: unknown } | null> {
-  const answer = await readViaDiscovery({ type: "substrateGap", id, limit: 1 }, 4_000);
+  const answer = await readViaDiscovery({ type: "substrateGap", id, limit: 1 }, getRenderPolicy().timeouts.gapStatusMs);
   const gaps = Array.isArray(answer?.["gaps"]) ? (answer["gaps"] as unknown[]) : null;
   if (!gaps) return null;
   const gap = gaps.find((g) => (g as { id?: unknown })?.id === id) ?? null;

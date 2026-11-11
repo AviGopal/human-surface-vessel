@@ -101,8 +101,8 @@ const DEBT_SURFACE_STATE = new Set(["MAX_HISTORY"]);
 const GUARD = new Set([
   "PARTICIPATION_MAX_VALUE_CHARS", "SURFACE_INTENT_MAX_CHARS", "FRAME_MAX_BYTES", "FRAME_MAX_ENTRIES", "MAX_ENTRIES", "MAX_SHOW",
 ]);
-/** The 2.3 group not yet shaped: read timeouts. */
-const PENDING = new Set(["DISCOVERY_RESOLVE_TIMEOUT_MS", "SHAPES_TIMEOUT_MS"]);
+/** Every 2.3 group is shaped; nothing is pending. */
+const PENDING = new Set<string>();
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -125,6 +125,14 @@ describe("no behaviour constant outside the named lists", () => {
     const named = [BOOTSTRAP, DEBT_AUTH, DEBT_LEARNERS, DEBT_SURFACE_STATE, GUARD, PENDING];
     const unnamed = [...found].filter((n) => !named.some((list) => list.has(n)));
     expect(unnamed).toEqual([]);
+  });
+
+  test("must-fail: no read waits on a number of its own", () => {
+    // The identity check's wait is the one left, with the other auth limits (DEBT_AUTH).
+    const fixed = files.flatMap((f) =>
+      [...readFileSync(f, "utf8").matchAll(/AbortSignal\.timeout\(\s*[\d_]+/g)].map((m) => `${f.slice(root.length)}: ${m[0]}`),
+    );
+    expect(fixed).toEqual(["src/caller-credential.ts: AbortSignal.timeout(5000"]);
   });
 
   test("must-fail: no reader polls on a number of its own", () => {

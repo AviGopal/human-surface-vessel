@@ -47,6 +47,7 @@ import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
 import { recheckPatch } from "../recheck.ts";
 import { LIMITS } from "../limits.ts";
+import { TIMEOUTS } from "../timeouts.ts";
 import { runOf, undoView, writeView } from "../ui-views.ts";
 import { countEmptyRefusal } from "../write-refusals.ts";
 import { admitCaller, type Caller } from "../inbound-auth.ts";
@@ -999,6 +1000,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const visibleSliceSize = visibleSliceSizePatch(pointer, rejected);
       const recheck = recheckPatch(pointer["recheck"], rejected);
       const limits = LIMITS.patch(pointer["limits"], rejected);
+      const timeouts = TIMEOUTS.patch(pointer["timeouts"], rejected);
       const write = writeRenderPolicy({
         ...(tokenOverrides ? { tokenOverrides } : {}),
         ...(formByShape ? { formByShape } : {}),
@@ -1011,6 +1013,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         ...(visibleSliceSize !== undefined ? { visibleSliceSize } : {}),
         ...(recheck ? { recheck } : {}),
         ...(limits ? { limits } : {}),
+        ...(timeouts ? { timeouts } : {}),
         ...(typeof pointer["note"] === "string" ? { note: pointer["note"] as string } : {}),
         ...(assignedBy ? { assignedBy } : {}),
         ...(assignmentReason ? { reason: assignmentReason } : {}),

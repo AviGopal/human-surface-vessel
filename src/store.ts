@@ -22,6 +22,7 @@ import { isSolicitation } from "./solicitation.ts";
 import { DEFAULT_IMPORTANCE_WEIGHTS, type ImportanceWeights } from "./importance.ts";
 import { DEFAULT_RECHECK, recheckOf, type Recheck } from "./recheck.ts";
 import { DEFAULT_LIMITS, LIMITS, type Limits } from "./limits.ts";
+import { DEFAULT_TIMEOUTS, TIMEOUTS, type Timeouts } from "./timeouts.ts";
 
 export type AskType = "text" | "choice" | "number";
 export type Visibility = "public" | "operator_only";
@@ -776,6 +777,8 @@ export interface RenderPolicy {
   readonly recheck: Recheck;
   /** How much the surface draws and asks of a producer at once (src/limits.ts). Same reading as `recheck`. */
   readonly limits: Limits;
+  /** How long the surface waits on a read (src/timeouts.ts). Same reading as `recheck`. */
+  readonly timeouts: Timeouts;
   /**
    * Who assigned THIS revision — an operator id, an activity name, or null when
    * the author was not stated. Describes this write only and is NEVER inherited
@@ -823,6 +826,7 @@ export const RENDER_POLICY_PATCH_KEYS = [
   "visibleSliceSize",
   "recheck",
   "limits",
+  "timeouts",
   "note",
   "assignedBy",
   "reason",
@@ -855,6 +859,8 @@ const RENDER_POLICY_CONTENT_FIELDS = [
   "recheck",
   // CONTENT: a new limit changes what a person is shown.
   "limits",
+  // CONTENT: a new wait changes whether a person sees an answer or a timeout.
+  "timeouts",
   "note",
 ] as const satisfies readonly (keyof RenderPolicy)[];
 
@@ -881,6 +887,7 @@ let renderPolicy: RenderPolicy = {
   visibleSliceSize: DEFAULT_VISIBLE_SLICE_SIZE,
   recheck: DEFAULT_RECHECK,
   limits: DEFAULT_LIMITS,
+  timeouts: DEFAULT_TIMEOUTS,
   assignedBy: null,
   reason: null,
   revision: 0,
@@ -1014,6 +1021,8 @@ export function writeRenderPolicy(patch: {
   recheck?: Partial<Recheck>;
   /** Key by key, as `recheck`. */
   limits?: Partial<Limits>;
+  /** Key by key, as `recheck`. */
+  timeouts?: Partial<Timeouts>;
   note?: string | null;
   assignedBy?: string | null;
   reason?: string | null;
@@ -1043,6 +1052,7 @@ export function writeRenderPolicy(patch: {
       patch.visibleSliceSize === undefined ? renderPolicy.visibleSliceSize : patch.visibleSliceSize,
     recheck: patch.recheck ? { ...renderPolicy.recheck, ...patch.recheck } : renderPolicy.recheck,
     limits: patch.limits ? { ...renderPolicy.limits, ...patch.limits } : renderPolicy.limits,
+    timeouts: patch.timeouts ? { ...renderPolicy.timeouts, ...patch.timeouts } : renderPolicy.timeouts,
     // NOT `?? renderPolicy.assignedBy` — see the field comment: this write's
     // author, or null. Never the previous author's name on someone else's edit.
     assignedBy: patch.assignedBy ?? null,
@@ -1150,6 +1160,7 @@ for (const raw of readParticipation("renderPolicy_write")) {
       p.visibleSliceSize === null ? null : (finite(p.visibleSliceSize) ?? DEFAULT_VISIBLE_SLICE_SIZE),
     recheck: recheckOf(p.recheck),
     limits: LIMITS.of(p.limits),
+    timeouts: TIMEOUTS.of(p.timeouts),
     assignedBy: typeof p.assignedBy === "string" ? p.assignedBy : null,
     reason: typeof p.reason === "string" ? p.reason : null,
     revision: p.revision as number,

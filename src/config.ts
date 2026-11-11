@@ -20,6 +20,20 @@ function envInt(name: string, fallback: number): number {
 export const PORT = envInt("PORT", 8310);
 export const HOST = process.env.HOST ?? "0.0.0.0";
 
+/**
+ * Stated explicitly rather than left to Bun's ~10s default, because a route's
+ * error path is only reachable if the handler outlives its own upstream budget.
+ *
+ * Measured: `/api/gaps` fans out sequentially with a per-candidate timeout. When
+ * those summed past the default, the connection was closed mid-handler and the
+ * caller got an EMPTY REPLY — never the route's honest 502. The bug read as
+ * "the gaps panel is broken" when the panel was correct and unable to speak.
+ *
+ * This is the ceiling; the per-route budgets are what keep handlers under it.
+ * Raising this to paper over a slow route would re-hide exactly that failure.
+ */
+export const SERVER_IDLE_TIMEOUT_S = 30;
+
 /** The self-address this vessel registers with discovery (its unit sets it). */
 export const VESSEL_ENDPOINT = process.env.VESSEL_ENDPOINT ?? `http://127.0.0.1:${PORT}`;
 
