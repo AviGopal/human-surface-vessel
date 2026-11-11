@@ -367,11 +367,8 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
 });
 
 /**
- * A lookup in the registry: this node's discovery, which asks its peers itself
- * when it has no producer for a capability.
- */
-/**
- * A READ goes under this node's key. A WRITE goes only under the signed-in person's own key,
+ * A lookup through this node's discovery, which asks its peers itself when it has no producer
+ * for a shape. A READ goes under this node's key. A WRITE goes only under the signed-in person's own key,
  * so the row records the person as its writer; with no person signed in with a key, it is
  * refused here and nothing is sent. A write under the node's key would be the node writing,
  * whatever the row claims, so the page never sends one.
