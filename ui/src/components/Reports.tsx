@@ -6,9 +6,12 @@
  * screen by writing a view, not by a rebuild.
  *
  * `fields`: an answer's plain values, and each list as its size and first items.
- * `rows`: each row with every field as the producer wrote it, nothing chosen or reordered by
- * the surface; with `judge: "outcome"` each row offers a person's verdict, written as an
- * outcome row citing it under their own key.
+ * `rows`: each row as its words, every field as the producer wrote it folded under "details",
+ * nothing chosen or reordered by the surface. Which fields are the words is declared, never
+ * guessed (src/row-words.ts): the owner's `shape_description` row for the row's shape, else the
+ * entry's `words`; with neither the row shows its shape and time. With `judge: "outcome"`
+ * each row offers a person's verdict, outside the fold, written as an outcome row citing it
+ * under their own key.
  * `questions`: each row is a question this surface holds, opened on selection.
  */
 import { useState, type ReactNode } from "react";
@@ -19,6 +22,10 @@ import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
 import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
+import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
+
+/** Where the owners' declarations of a row's words are read: records' `shape_description` rows. */
+const DECLARATIONS = { type: "record_read", shape: "shape_description" } as const;
 
 /** The fields that name an item, in the order tried. */
 const NAME_FIELDS = ["summary", "title", "name", "goal", "unit", "activity_id", "id"] as const;
@@ -139,22 +146,49 @@ export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show">
   return { rows: entry.show === undefined ? all : all.slice(-entry.show), total: all.length };
 }
 
-function Rows({ rows, judge }: { rows: readonly unknown[]; judge: boolean }): ReactNode {
+/** A row's time as the person's clock reads it; the producer's text when it is not a time. */
+function when(t: unknown): string | null {
+  if (typeof t !== "string") return null;
+  const d = new Date(t);
+  return Number.isNaN(d.getTime()) ? t : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** One declared field as words: text as written; any other value with its field's name. */
+function word(k: string, v: unknown): string {
+  return typeof v === "string" ? v : `${k.replace(/_/g, " ")} ${fieldText(v)}`;
+}
+
+function Rows({ rows, judge, entryWords, declared }: { rows: readonly unknown[]; judge: boolean; entryWords: readonly string[] | undefined; declared: ReadonlyMap<string, readonly string[]> }): ReactNode {
   return (
     <ol className="sf-rows">
       {rows.map((row, i) => {
         const o: Record<string, unknown> = typeof row === "object" && row !== null && !Array.isArray(row) ? (row as Record<string, unknown>) : { value: row };
         const id = typeof o["id"] === "string" ? (o["id"] as string) : null;
+        const words = rowWords(o, wordsFor(o["shape"], declared, entryWords)).map((w) => word(w.field, w.value));
+        const time = when(o["t"]);
         return (
           <li key={id ?? i} className="sf-row" data-row={id ?? undefined}>
-            <dl className="sf-row-fields">
-              {Object.entries(o).map(([k, v]) => (
-                <div key={k} className="sf-row-field">
-                  <dt>{k.replace(/_/g, " ")}</dt>
-                  <dd>{fieldText(v)}</dd>
-                </div>
-              ))}
-            </dl>
+            {words.length > 0 ? (
+              words.map((w, j) => (
+                <p key={j} className="sf-row-words">
+                  {w}
+                </p>
+              ))
+            ) : (
+              <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
+            )}
+            {time ? <p className="sf-muted sf-row-time">{time}</p> : null}
+            <details className="sf-row-details">
+              <summary>details</summary>
+              <dl className="sf-row-fields">
+                {Object.entries(o).map(([k, v]) => (
+                  <div key={k} className="sf-row-field">
+                    <dt>{k.replace(/_/g, " ")}</dt>
+                    <dd>{fieldText(v)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
             {judge && id ? <Judge rowId={id} /> : null}
           </li>
         );
@@ -216,7 +250,7 @@ function emptyReasonOf(answer: unknown): string | null {
 }
 
 /** The answer drawn in the entry's form, or what was found instead of rows. */
-function Drawn({ entry, answer, onOpenQuestion }: { entry: ViewEntry; answer: unknown; onOpenQuestion: (id: string) => void }): ReactNode {
+function Drawn({ entry, answer, declared, onOpenQuestion }: { entry: ViewEntry; answer: unknown; declared: ReadonlyMap<string, readonly string[]>; onOpenQuestion: (id: string) => void }): ReactNode {
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
@@ -224,12 +258,12 @@ function Drawn({ entry, answer, onOpenQuestion }: { entry: ViewEntry; answer: un
   return (
     <>
       {got.total > got.rows.length ? <p className="sf-muted sf-report-note">the last {got.rows.length} of {got.total}</p> : null}
-      {entry.form === "questions" ? <Questions rows={got.rows} onOpen={onOpenQuestion} /> : <Rows rows={got.rows} judge={entry.judge === "outcome"} />}
+      {entry.form === "questions" ? <Questions rows={got.rows} onOpen={onOpenQuestion} /> : <Rows rows={got.rows} judge={entry.judge === "outcome"} entryWords={entry.words} declared={declared} />}
     </>
   );
 }
 
-function Entry({ entry, enabled, intervalMs, onOpenQuestion }: { entry: ViewEntry; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void }): ReactNode {
+function Entry({ entry, declared, enabled, intervalMs, onOpenQuestion }: { entry: ViewEntry; declared: ReadonlyMap<string, readonly string[]>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void }): ReactNode {
   const pointer = entry.pointer;
   const q = useReport(pointer, { enabled, intervalMs });
   const title = entry.title ?? reportTitle(pointer.type);
@@ -237,7 +271,7 @@ function Entry({ entry, enabled, intervalMs, onOpenQuestion }: { entry: ViewEntr
   let inner: ReactNode;
   if (!a) inner = <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>;
   else if (!a.ok) inner = <p className="sf-muted sf-report-note">no answer: {a.reason}</p>;
-  else inner = <Drawn entry={entry} answer={a.answer} onOpenQuestion={onOpenQuestion} />;
+  else inner = <Drawn entry={entry} answer={a.answer} declared={declared} onOpenQuestion={onOpenQuestion} />;
   return (
     <section className="sf-report" data-report={pointer.type} data-form={entry.form} aria-label={title}>
       <h2 className="sf-report-title">{title}</h2>
@@ -257,10 +291,13 @@ export function Entries({
   intervalMs: number;
   onOpenQuestion: (id: string) => void;
 }): ReactNode {
+  // Read on the entries' cadence, so a declaration an owner writes later moves what is shown with no reload.
+  const declarations = useReport(DECLARATIONS, { enabled, intervalMs }).data;
+  const declared = declarations?.ok ? declaredWords(declarations.answer) : new Map<string, readonly string[]>();
   return (
     <div className="sf-reports">
       {entries.map((e) => (
-        <Entry key={JSON.stringify(e.pointer)} entry={e} enabled={enabled} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} />
+        <Entry key={JSON.stringify(e.pointer)} entry={e} declared={declared} enabled={enabled} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} />
       ))}
     </div>
   );

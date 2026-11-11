@@ -20,6 +20,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { FIELD_NAME, MAX_WORDS, wordFields } from "./row-words.ts";
 
 /**
  * The regions a view can be written for. `ask` is what follows a person's ask under the box:
@@ -54,6 +55,9 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * `judge: "outcome"` offers a person's verdict on each row, written as an outcome row
  * citing it under the person's own key. `empty` is what the entry says when the read answers
  * with no rows, so an empty read carries its reason rather than a bare "no rows".
+ * `words` names the fields that hold a row's words, in order, for a row whose shape has no
+ * `shape_description` row declaring them (the owner's declaration comes first); a row with
+ * neither is drawn as its shape and time, every field folded.
  */
 export type ViewEntry = {
   readonly pointer: ReportPointer;
@@ -63,13 +67,13 @@ export type ViewEntry = {
   readonly show?: number;
   readonly judge?: "outcome";
   readonly empty?: string;
+  readonly words?: readonly string[];
 };
 
 /** How many entries one view may name, and how many rows `show` may ask for. */
 const MAX_ENTRIES = 8;
 const MAX_SHOW = 200;
 const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_:.-]{0,79}$/;
-const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 
 /**
  * What a region draws with no view written, in the order the person needs it: what waits on
@@ -82,10 +86,10 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
   landing: {
     entries: [
       { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you" },
-      { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", show: 10, title: "What people asked" },
-      { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, judge: "outcome", title: "What the walk answered" },
+      { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", show: 10, title: "What people asked", words: ["what"] },
+      { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, judge: "outcome", title: "What the walk answered", words: ["text"] },
       { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, title: "What failed" },
-      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, title: "Verdicts and outcomes" },
+      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, title: "Verdicts and outcomes", words: ["r"] },
     ],
   },
   ask: {
@@ -109,10 +113,12 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names]}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
-    `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows. ` +
+    `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows; ` +
+    `words names the fields drawn as a row's words when its shape's shape_description row (records, written by the owner) names none in its own words field; ` +
+    `a row with neither is drawn as its shape and time, every other field folded under details. ` +
     `region ask is drawn under the box after a person's ask; there a pointer argument "${ASK_BINDING}" is replaced by the id of that ask's row`;
   const defaults = contract.regions
     .map((r) => `default ${r}: ${(contract.defaults[r]?.entries ?? []).map((e) => e.title ?? e.pointer.type).join(", ")}`)
@@ -244,8 +250,8 @@ function load(): void {
 /** One entry as written, or why it is not one. */
 function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
   if (typeof e !== "object" || e === null || Array.isArray(e)) return { detail: "each entry is {pointer, form}" };
-  const { pointer, form, title, field, show, judge, empty, ...rest } = e as Record<string, unknown>;
-  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge and empty only` };
+  const { pointer, form, title, field, show, judge, empty, words, ...rest } = e as Record<string, unknown>;
+  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge, empty and words only` };
   const got = pointerOf(pointer);
   if ("detail" in got) return got;
   if (typeof form !== "string" || !(ENTRY_FORMS as readonly string[]).includes(form)) return { detail: `form: ${ENTRY_FORMS.join(", ")}` };
@@ -255,6 +261,8 @@ function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
   if (judge !== undefined && judge !== "outcome") return { detail: `judge: "outcome"` };
   if (judge !== undefined && form !== "rows") return { detail: `judge needs form "rows": a verdict is on a row` };
   if (empty !== undefined && (typeof empty !== "string" || !empty.trim() || empty.length > 160)) return { detail: "empty: 1 to 160 characters" };
+  if (words !== undefined && !wordFields(words)) return { detail: `words: 1 to ${MAX_WORDS} field names` };
+  if (words !== undefined && form !== "rows") return { detail: `words needs form "rows": words are a row's` };
   return {
     entry: {
       pointer: got.pointer,
@@ -264,6 +272,7 @@ function entryOf(e: unknown): { entry: ViewEntry } | { detail: string } {
       ...(typeof show === "number" ? { show } : {}),
       ...(judge === "outcome" ? { judge } : {}),
       ...(typeof empty === "string" ? { empty: empty.trim() } : {}),
+      ...(words !== undefined ? { words: words as string[] } : {}),
     },
   };
 }

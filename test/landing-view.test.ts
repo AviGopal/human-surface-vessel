@@ -104,7 +104,8 @@ describe("the landing drawn from its view", () => {
     expect(el.querySelector("[data-report=reach_rate_scan]")!.textContent).toContain("no answer: forward_failed: The operation timed out.");
     expect(el.querySelector("[data-report=substrateGap]")!.textContent).toContain("no answer: unauthorized: absent");
     // Only the pointer is sent; drawing is a read.
-    expect(reportPointers).toEqual([{ type: "system_load_report" }, { type: "reach_rate_scan" }, { type: "substrateGap", limit: 2 }]);
+    // With the owners' declarations of a row's words, read once for every entry (R.2).
+    expect(reportPointers).toEqual([{ type: "system_load_report" }, { type: "reach_rate_scan" }, { type: "substrateGap", limit: 2 }, { type: "record_read", shape: "shape_description" }]);
     expect(posts).toEqual([]);
   });
 

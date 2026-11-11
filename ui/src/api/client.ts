@@ -193,6 +193,8 @@ export type ViewEntry = {
   readonly show?: number;
   readonly judge?: "outcome";
   readonly empty?: string;
+  /** The fields that hold a row's words when the owner declares none (src/row-words.ts). */
+  readonly words?: readonly string[];
 };
 
 /** What a person's row write came to: its record number and id, or why it was not recorded. */

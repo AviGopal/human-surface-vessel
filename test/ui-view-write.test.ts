@@ -85,6 +85,12 @@ describe("uiView_write", () => {
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", empty: " " }] }, "bad_entry", "empty: 1 to 160"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", empty: 3 }] }, "bad_entry", "empty: 1 to 160"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", colour: "red" }] }, "bad_entry", "colour"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", words: [] }] }, "bad_entry", "words: 1 to 4 field names"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", words: "what" }] }, "bad_entry", "words: 1 to 4 field names"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", words: ["a", "b", "c", "d", "e"] }] }, "bad_entry", "words: 1 to 4 field names"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", words: ["what", "what"] }] }, "bad_entry", "words: 1 to 4 field names"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", words: ["a b"] }] }, "bad_entry", "words: 1 to 4 field names"],
+      [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "fields", words: ["what"] }] }, "bad_entry", "words needs form"],
       [{ region: "landing", entries: [load, { ...load, form: "rows" }] }, "bad_entry", "named twice"],
     ];
     for (const [pointer, refusal, why] of cases) {
@@ -158,7 +164,7 @@ describe("uiView_write", () => {
   });
 
   test("must-fail: an entry is stored as written, and only its pointer is a pointer", async () => {
-    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered", empty: "The walk has answered nothing yet." };
+    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered", empty: "The walk has answered nothing yet.", words: ["text"] };
     const w = await write({ region: "landing", entries: [entry, load] });
     expect(w.json.body.view.entries).toEqual([entry, load]);
   });

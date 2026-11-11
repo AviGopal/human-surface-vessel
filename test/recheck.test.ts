@@ -99,7 +99,7 @@ const DEBT_SURFACE_STATE = new Set(["MAX_HISTORY"]);
  * and a policy any node-key caller writes must not be able to raise it. Its own numbers, named.
  */
 const GUARD = new Set([
-  "PARTICIPATION_MAX_VALUE_CHARS", "SURFACE_INTENT_MAX_CHARS", "FRAME_MAX_BYTES", "FRAME_MAX_ENTRIES", "MAX_ENTRIES", "MAX_SHOW",
+  "PARTICIPATION_MAX_VALUE_CHARS", "SURFACE_INTENT_MAX_CHARS", "FRAME_MAX_BYTES", "FRAME_MAX_ENTRIES", "MAX_ENTRIES", "MAX_SHOW", "MAX_WORDS",
 ]);
 /** Every 2.3 group is shaped; nothing is pending. */
 const PENDING = new Set<string>();

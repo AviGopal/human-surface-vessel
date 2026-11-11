@@ -1,6 +1,6 @@
 /**
- * A view entry with form "rows" draws each row with every field in full, in the order records
- * returned them; with judge "outcome" each row offers a verdict. The verdict is an outcome row
+ * A view entry with form "rows" draws each row with every field in full under its details, in the
+ * order records returned them; with judge "outcome" each row offers a verdict. The verdict is an outcome row
  * citing exactly the judged row ({shape:"outcome", r, input_refs:[id]}, the form the walk's fold
  * counts), sent through the page's discovery path. Only the pointer is ever sent to the producer.
  *
@@ -82,13 +82,15 @@ async function mount(items: unknown[]): Promise<HTMLElement> {
 const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement;
 
 describe("rows drawn in full, with a person's verdict", () => {
-  test("must-fail: every field is shown in full, text as written; only the pointer is sent", async () => {
+  test("must-fail: every field is in the row's details in full, text as written; only the pointer is sent", async () => {
     const el = await mount([ENTRY]);
     const row = el.querySelector('[data-row="01ca30b1"]')!;
     expect([...row.querySelectorAll("dt")].map((d) => d.textContent)).toEqual(["input refs", "text", "shape", "selection ref", "producer", "seq", "writer", "role", "id"]);
     expect(row.textContent).toContain(ANSWER.text);
     expect(row.textContent).toContain("b32f0f17, 8b85c87c");
-    expect(sent).toEqual([{ type: "record_read", shape: "answer" }]);
+    // The entry's pointer, and the owners' declarations of which fields are a row's words.
+    expect(sent).toEqual(expect.arrayContaining([{ type: "record_read", shape: "answer" }, { type: "record_read", shape: "shape_description" }]));
+    expect(sent.length).toBe(2);
   });
 
   test("must-fail: a verdict is an outcome row citing exactly the judged row", async () => {
