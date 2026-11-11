@@ -2048,6 +2048,13 @@ body { overflow: hidden; }
 
 /* The landing: the blocks its view names, in order (components/Landing.tsx). */
 .sf-landing { display: flex; flex-direction: column; }
+.sf-mark { align-self: flex-end; margin: var(--sf-space-1) var(--sf-space-2) 0; font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
+.sf-mark > summary { list-style: none; cursor: help; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid var(--sf-rule-strong); border-radius: 50%; font-weight: 600; }
+.sf-mark > summary::-webkit-details-marker { display: none; }
+.sf-mark[data-fell-back] > summary { color: var(--sf-waiting); background: var(--sf-waiting-bg); border-color: var(--sf-waiting); }
+.sf-mark[open] { align-self: stretch; }
+.sf-mark[open] > summary { margin-left: auto; display: flex; }
+.sf-mark-body { margin-top: var(--sf-space-1); padding: var(--sf-space-2); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); background: var(--sf-panel); overflow-wrap: anywhere; }
 .sf-landing-block { display: flex; flex-direction: column; gap: var(--sf-space-2); padding: var(--sf-space-6) var(--sf-space-6) 0; max-width: 920px; box-sizing: border-box; }
 .sf-landing-head { margin: 0; font-size: var(--sf-text-xs); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; color: var(--sf-ink-3); font-weight: 600; }
 .sf-landing-list { list-style: none; margin: 0; padding: 0; background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); }

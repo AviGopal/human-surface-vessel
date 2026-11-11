@@ -81,6 +81,13 @@ async function mount(props: Record<string, unknown>, calls: string[] = []): Prom
 
 const drawn = (el: HTMLElement): string[] => [...el.querySelectorAll("[data-report]")].map((b) => b.getAttribute("data-report")!);
 
+/** What is in view with every closed fold closed: the element's text without the bodies of closed details. */
+function inView(node: Element): string {
+  const copy = node.cloneNode(true) as Element;
+  copy.querySelectorAll("details:not([open]) > :not(summary)").forEach((n) => n.remove());
+  return copy.textContent ?? "";
+}
+
 describe("the landing drawn from its view", () => {
   test("must-fail: with no view read, the page draws no list of its own and says why", async () => {
     const reading = await mount({});
@@ -134,6 +141,29 @@ describe("the landing drawn from its view", () => {
     }) });
     expect(el.querySelector("[data-view-line]")!.textContent).toBe("Showing the default view (landing@0).");
     expect(el.querySelector("[data-view-not-drawn]")!.textContent).toContain("View landing@2 was not drawn: unknown field (blocks:");
+  });
+
+  test("must-fail: which view is drawn is a mark opened by hover or tap, not a line; a fallback's mark differs (R.3)", async () => {
+    const fellBack = await mount({ view: view([{ pointer: { type: "system_load_report" }, form: "fields" }], 0, {
+      id: "landing@0",
+      notDrawn: { id: "landing@2", refusal: "unknown_field", detail: "blocks: a view is {region, entries: [{pointer, form, ...}]}" },
+    }) });
+    const mark = fellBack.querySelector("details.sf-mark")!;
+    expect(mark.hasAttribute("open")).toBe(false);
+    expect(mark.hasAttribute("data-fell-back")).toBe(true);
+    const summary = mark.querySelector("summary")!;
+    expect(summary.getAttribute("aria-label")).toBe("A newer layout for this page was not used");
+    expect(summary.getAttribute("title")).toContain("View landing@2 was not drawn");
+    expect(mark.querySelector("[data-view-line]")).not.toBeNull();
+    expect(mark.querySelector("[data-view-not-drawn]")).not.toBeNull();
+    // What is in view with the mark closed names no view, refusal or field.
+    expect(inView(fellBack.querySelector(".sf-landing")!)).not.toMatch(/landing@|was not drawn|unknown field|blocks:|default view/);
+
+    const plain = await mount({ view: view([{ pointer: { type: "system_load_report" }, form: "fields" }], 3, { writtenBy: "operator:qa" }) });
+    const quiet = plain.querySelector("details.sf-mark")!;
+    expect(quiet.hasAttribute("data-fell-back")).toBe(false);
+    expect(quiet.querySelector("summary")!.getAttribute("aria-label")).toBe("About this page's layout");
+    expect(inView(plain.querySelector(".sf-landing")!)).not.toMatch(/landing@|operator:qa|Showing/);
   });
 
   test("must-fail: show draws the last n rows as the producer ordered them, and says how many there were", async () => {
