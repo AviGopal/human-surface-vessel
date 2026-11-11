@@ -10,7 +10,6 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
 import { readSurfaceIntent, readViewIntent } from "../src/surface-intent.ts";
 import type { RenderPolicy } from "../src/store.ts";
-import type { GoalWalkState } from "../ui/src/api/types";
 
 const framePosts: string[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -123,18 +122,5 @@ describe("how much of a page is drawn", () => {
   test("must-fail: without the run's report, completeness is unknown, never whole", async () => {
     const el = await drawn(fromText("svg", SVG));
     expect(el.querySelector(".sf-page-cut")?.textContent).toBe("Completeness unknown");
-  });
-});
-
-describe("a page drawn from the answer's basis record", () => {
-  test("must-fail: a cut basis record says it is cut, and invents no total", async () => {
-    const { basisContent } = await import("../ui/src/components/Answer");
-    // The basis kept the record cut: it doesn't parse, and the run reports no total for it.
-    const cut = `{"shape":"http_fetch","body":{"bodyText":"<html><body><p>${"y".repeat(300)}`;
-    const content = basisContent(`# Fetch it\nreached\n## Basis\n\n${cut}`, "Fetch it", "d1", ["http_fetch"]);
-    expect(content?.state).toBe("truncated");
-    expect(content?.size).toBeUndefined();
-    const el = await mount(React.createElement(Rendered, { content, density: "full", header: false, region: "run_answer", lead: true }));
-    expect(el.querySelector(".sf-page-cut")?.textContent).toBe("Cut off");
   });
 });

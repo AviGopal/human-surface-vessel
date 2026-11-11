@@ -2,8 +2,8 @@
  * A person signs in with their own key, and a row they write through the page's discovery
  * path is sent under that key, so records names them as its writer. The node's own key is
  * never a person's: it is refused at sign-in, and no write from the page is sent under it.
- * Reads still go under the node's key. Signed out, or signed in without a key, a write is
- * refused and nothing is sent.
+ * Reads still go under the node's key. Signed out, a write is refused and nothing is sent.
+ * Whether sign-in is offered depends on identity alone.
  *
  * The verdict row is the form the walk's fold counts: {shape:"outcome", r, input_refs:[answer id]}.
  */
@@ -12,7 +12,7 @@ import { restoreNativeGlobals } from "./setup.ts";
 await restoreNativeGlobals();
 import { Hono } from "hono";
 import { proxyRouter } from "../src/routes/proxy.ts";
-import { openSession, resetPersonSessions } from "../src/person-session.ts";
+import { resetPersonSessions } from "../src/person-session.ts";
 import { __resetCredentialCacheForTests } from "../src/caller-credential.ts";
 import { recentObservations } from "../src/store.ts";
 
@@ -54,6 +54,12 @@ beforeEach(() => {
 });
 
 describe("signing in with a person's own key", () => {
+  test("must-fail: sign-in is offered where identity is configured, and asks no other vessel whether to offer it", async () => {
+    const state = await (await app.request(`${ORIGIN}/api/session`, { headers: { Origin: ORIGIN } })).json();
+    expect(state).toEqual({ keySignIn: true, signedIn: false });
+    expect(calls).toEqual([]);
+  });
+
   test("must-fail: identity checks the key; the browser gets a cookie and the key id, never the key", async () => {
     const res = await post("/api/session/key", { key: PERSON_KEY });
     expect(res.status).toBe(200);
@@ -110,13 +116,6 @@ describe("the page's discovery path: reads under the node's key, writes under th
     expect(sent).toHaveLength(1);
     expect(sent[0]!.auth).toBe(`ApiKey ${PERSON_KEY}`);
     expect(sent[0]!.body).toEqual({ pointer: OUTCOME });
-  });
-
-  test("must-fail: signed in without a key (email and password), a write is still refused", async () => {
-    const { cookie } = openSession({ token: "eyJ.t.s", userId: "user:alex", orgId: null, email: null, name: "Alex", expiresAt: Date.now() + 60_000 });
-    const res = await post("/api/discovery/resolve", { pointer: OUTCOME }, cookie.split(";")[0]);
-    expect(res.status).toBe(401);
-    expect(toDiscovery()).toEqual([]);
   });
 
   test("a read goes under the node's key, signed in or not", async () => {

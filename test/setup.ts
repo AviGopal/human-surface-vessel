@@ -36,45 +36,14 @@ export async function restoreNativeGlobals(): Promise<void> {
   Object.assign(globalThis, NATIVE);
 }
 
-// THE SURFACE'S OWN-RUN RECORD (src/own-dispatches.ts) is a file under the one WORKSPACE_ROOT above plus a module
-// cache, so in ONE process the runs one file records are still there for the next. A file that records any (a keyless
-// same-origin /api/run-goal, or a backfill from its stubbed goal-host) calls this in an afterAll; otherwise a later
-// file that needs the record empty (own-dispatches-backfill) or exact (own-dispatches) reads the earlier file's rows.
-/** Remove the own-run record file and forget its cache. */
-export async function forgetOwnDispatches(): Promise<void> {
-  rmSync(join(process.env.WORKSPACE_ROOT ?? workspace, "state", "human-surface", "own-dispatches.jsonl"), { force: true });
-  rmSync(join(process.env.WORKSPACE_ROOT ?? workspace, "state", "human-surface", "own-outcomes.jsonl"), { force: true });
-  (await import("../src/own-dispatches.ts")).resetOwnDispatchesForTest();
-}
-
-// A SIGNED-IN PERSON (src/person-session.ts). Asking from the page needs one, and "Mine" is that person's asks, so a
-// test that asks or reads Mine opens a session and sends its cookie. Nothing reaches identity: the session is held
+// A SIGNED-IN PERSON (src/person-session.ts). A person's row (an ask, a verdict) needs one, so a test that writes
+// one opens a session and sends its cookie. Nothing reaches identity: the session is held
 // in this process only, as a sign-in would hold it.
 /** Open a person session; the Cookie header value that names it. */
 export async function signedInCookie(userId = "user:person-a", name: string | null = "Person A"): Promise<string> {
   const { openSession } = await import("../src/person-session.ts");
-  const { id } = openSession({ token: `test-token-${userId}`, userId, orgId: null, email: null, name, expiresAt: Date.now() + 900_000 });
+  const { id } = openSession({ apiKey: `test-key-${userId}`, userId, orgId: null, email: null, name, expiresAt: Date.now() + 900_000 });
   return `sf_person=${id}`;
-}
-
-// WHERE A SIGNED-IN PERSON'S LABEL GOES. A human verdict needs a signed-in person, and is then written as them: the
-// registry names this node's label writer and identity mints an on-behalf-of token for it. A test that grades stubs
-// both with this (null for any other call).
-export const TEST_LABEL_WRITER = "http://writer.local:8080";
-export const TEST_OBO = "eyJ.test-obo.sig";
-export function labelWriterStub(input: RequestInfo | URL, init?: RequestInit): Response | null {
-  const url = String(input);
-  if (url.endsWith("/v1/auth/on-behalf-of")) return Response.json({ success: true, data: { token: TEST_OBO, expires_at: new Date(Date.now() + 60_000).toISOString() } });
-  let body: { pointer?: { type?: unknown } } = {};
-  try {
-    body = JSON.parse(String(init?.body ?? "{}")) as typeof body;
-  } catch {
-    /* not json */
-  }
-  if (body.pointer?.type === "vesselRegistry") {
-    return Response.json({ content: { vessels: [{ vesselId: "activity-api", shapes: ["goal_verification_label_write"], endpoint: TEST_LABEL_WRITER, protocol: "http", origin: "local", metadata: { node: "node-a" } }] } });
-  }
-  return null;
 }
 
 // THE SURFACE'S VIEWS (src/ui-views.ts) are a file under the same WORKSPACE_ROOT plus a module cache, so a file that

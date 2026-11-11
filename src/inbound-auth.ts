@@ -3,8 +3,8 @@
  *
  * Before this, no route here validated a caller. The only write guard refused a foreign
  * Origin header (routes/proxy.ts refuseForeignOriginWrites, still the FIRST gate in
- * index.ts), so curl, any vessel and any in-process test wrote panels and started walks,
- * and /api/run-goal forwarded them to goal-host under this vessel's fleet key.
+ * index.ts), so curl, any vessel and any in-process test wrote panels and other rows
+ * under this vessel's fleet key.
  *
  * POLICY, by caller:
  *   1. `Authorization: ApiKey <key>` is validated by identity-vessel, the fleet's single
@@ -14,9 +14,8 @@
  *      src/lib/operator-direct.ts:45, isOperatorDirectCredential), "automated" otherwise,
  *      this vessel's own key included.
  *   2. A keyless request whose Origin is this vessel's own page is the browser. It is
- *      accepted ONLY where BROWSER_WRITE_ALLOWLIST names the route (and, on /api/resolve,
- *      the shape), or BROWSER_READ_ALLOWLIST names a read the page sends on such a route,
- *      as origin "browser-unverified". That is NOT authentication: Origin is a
+ *      accepted ONLY where BROWSER_WRITE_ALLOWLIST names the route, as origin
+ *      "browser-unverified". That is NOT authentication: Origin is a
  *      header, and a non-browser caller can send any value. It stays named as a residual
  *      until sign-in gives the browser a credential.
  *   3. Keyless with no Origin (curl, a vessel without a key, an in-process test) or with a
@@ -58,57 +57,28 @@ export interface Caller {
  * else. One list so it can be trimmed without touching the logic. Each entry cites the
  * ui/src call site; a route the UI does not call does not belong here.
  */
-export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string; readonly shapes?: readonly string[] }> = [
-  // ui/src/api/participation.ts:109 (an answer or a decline)
+export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string }> = [
+  // ui/src/api/participation.ts (an answer or a decline)
   { route: "/api/participation" },
-  // ui/src/api/client.ts:334 (a verdict on a run)
-  { route: "/api/grade" },
-  // ui/src/api/calibration.ts:47 (a calibration window's grade)
-  { route: "/api/calibration/grade" },
-  // ui/src/components/TopBar.tsx:162 (a complaint typed in the box)
+  // ui/src/components/TopBar.tsx (a complaint typed in the box)
   { route: "/api/feedback" },
-  // ui/src/api/exposure.ts:68, :78 (exposure ticks and outcomes)
+  // ui/src/api/exposure.ts (exposure ticks and outcomes)
   { route: "/api/observations" },
-  // ui/src/api/client.ts:107 (an instruction to change the interface)
+  // ui/src/api/client.ts trySurfaceIntent (an instruction to change the interface)
   { route: "/api/surface-intent" },
-  // ui/src/api/client.ts:154 (ask a goal)
-  { route: "/api/run-goal" },
-  // ui/src/api/session.ts (a person signing in and out; the credential goes to identity, never to a store)
-  { route: "/api/session/login" },
+  // ui/src/api/session.ts (a person signing in with their key and out; the key goes to identity, never to a store)
   { route: "/api/session/key" },
   { route: "/api/session/logout" },
-  // ui/src/api/client.ts:188 resolveShape, these WRITES only. They forward to goal-host and
-  // answer, extend or inject into a RUNNING walk, any walk, autonomous ones included:
-  // solicitationResponse_write (:243), solicitationHeartbeat_write (:252), poolImpulse_write
-  // (:266; ui/src/lib/interaction.ts:69). qa may cut them. The reads the page sends on the
-  // same route are BROWSER_READ_ALLOWLIST's.
-  {
-    route: "/api/resolve",
-    shapes: ["solicitationResponse_write", "solicitationHeartbeat_write", "poolImpulse_write"],
-  },
-  // ui/src/api/client.ts (fetchCapability, fetchReport: reads sent as a POST; a person's verdict row).
+  // ui/src/api/client.ts (reads sent as a POST; a person's row: an ask, a verdict).
   // A write on this route is forwarded only under the signed-in person's own key (routes/proxy.ts).
   { route: "/api/discovery/resolve" },
-  // ui/src/components/ContentRender.tsx:517 (a page drawn in its own frame). Its frame-session cookie is
+  // ui/src/components/ContentRender.tsx (a page drawn in its own frame). Its frame-session cookie is
   // handed to whoever loads "/", so it scopes which frames a session may read back, and names no caller.
   { route: "/api/page-frame" },
 ];
 
-/**
- * THE KEYLESS BROWSER READS on a route that also carries writes: what the page reads
- * through /api/resolve, kept apart from the writes so neither list can grow the other.
- * A read here writes nothing; it is admitted because the route is gated as a whole.
- */
-export const BROWSER_READ_ALLOWLIST: ReadonlyArray<{ readonly route: string; readonly shapes: readonly string[] }> = [
-  // ui/src/api/client.ts:202 fetchWalkState (goalWalkState), :207 fetchActiveDispatches (activeDispatches)
-  { route: "/api/resolve", shapes: ["goalWalkState", "activeDispatches"] },
-];
-
-function browserAllowed(route: string, shape: string | undefined): boolean {
-  const write = BROWSER_WRITE_ALLOWLIST.find((e) => e.route === route);
-  if (write && (!write.shapes || (shape !== undefined && write.shapes.includes(shape)))) return true;
-  const read = BROWSER_READ_ALLOWLIST.find((e) => e.route === route);
-  return read !== undefined && shape !== undefined && read.shapes.includes(shape);
+function browserAllowed(route: string): boolean {
+  return BROWSER_WRITE_ALLOWLIST.some((e) => e.route === route);
 }
 
 const OPERATOR_SCOPES = ["operator:direct", "admin"];
@@ -154,9 +124,7 @@ function reasonFor(why: string): RefusalReason {
 function callerHint(c: Context, keyed: boolean, shape: string | undefined): string {
   const claimed = (c.req.header("x-caller-vessel") ?? "").replace(/[^\w:.@\/-]/g, "").slice(0, 64);
   if (claimed) return `claimed:${claimed}`;
-  // human_input is posted only by goal-host's solicitHumanInput; the ui*_write panel writes by
-  // development-vessel's ui-write-passthrough. By shape, so a lead, not a fact.
-  if (shape === "human_input") return keyed ? "goal-host?" : "keyless";
+  // The ui*_write panel writes come from development-vessel's ui-write-passthrough. By shape, so a lead, not a fact.
   if (shape === "uiPanel_write" || shape === "uiQuestion_write") return keyed ? "development-vessel?" : "keyless";
   if (!keyed) return c.req.header("Origin") !== undefined ? "keyless-with-origin" : "keyless";
   return "keyed-unknown";
@@ -223,7 +191,7 @@ export async function admitCaller(
   const keyless = (await identityCredential(undefined, { xApiKeyPresented })).why ?? "no Authorization header";
   const origin = c.req.header("Origin");
   if (origin !== undefined && isOwnOrigin(origin, c.req.url)) {
-    if (browserAllowed(route, shape)) return { caller: BROWSER };
+    if (browserAllowed(route)) return { caller: BROWSER };
     return {
       refused: refuse(c, what, "keyless_not_allowlisted",
         `${keyless}; a keyless same-origin request is accepted only on the browser routes the page calls, and this is not one`,

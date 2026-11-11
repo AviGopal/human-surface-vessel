@@ -1,62 +1,8 @@
 /**
- * The wire contract, typed against what goal-host ACTUALLY serializes.
- *
- * The important thing in this file is what is OPTIONAL. goal-host's
- * goalWalkState serializer null-coalesces most fields but NOT all of them:
- * `goal`, `executionId`, `selectedTemplateId`, and `error` are written through
- * bare, so `JSON.stringify` drops the key entirely when the value is
- * undefined. Typing those as `string | null` would compile and then lie at
- * runtime — `state.executionId` is `undefined`, not `null`, and every
- * `=== null` guard written against it silently fails open.
- *
- * Same defect, worse consequences, in `poolProvenance`: the empty-content
- * branch omits `contentPreview` and `truncated` rather than emitting `false`.
- * That union is not represented here as an optional field — it is normalized
- * into a discriminated union in `lib/ledger.ts` before any component sees it.
+ * The wire contract for what the page reads and sends. The run model goal-host served
+ * (walk state, the board, run verdicts) went with goal-host; what a run produced is read
+ * as records rows, drawn generically.
  */
-
-/** "gone": goal-host no longer holds the run and the surface kept no outcome for it. */
-export type DispatchStatus = "running" | "completed" | "failed" | "gone";
-
-/**
- * What KIND of run this was. Use this, never `walkTier` — `walkTier` is a
- * legacy field that has been stripped and re-added and does not reliably
- * describe the path taken.
- */
-export type ExecutionPath =
-  | "learned_pathway"
-  | "satisfier"
-  | "universal_tool_fallback"
-  | "feature_compose"
-  | "fresh_derivation";
-
-export const EXECUTION_PATH_PROSE: Readonly<Record<ExecutionPath, string>> = {
-  learned_pathway: "ran a pathway it had learned before",
-  satisfier: "was satisfied directly, without a full walk",
-  universal_tool_fallback: "fell back to the general tool loop",
-  feature_compose: "went through the code-editing composer",
-  fresh_derivation: "derived a new path from the shape graph",
-};
-
-/** A walk log line. The wire has carried both strings and objects here. */
-export type WalkLogEntry = string | Record<string, unknown>;
-
-export interface WalkStep {
-  readonly shape?: string;
-  readonly templateId?: string;
-  readonly status?: string;
-  readonly [k: string]: unknown;
-}
-
-export interface PoolEvent {
-  readonly shape?: string;
-  readonly source?: string;
-  readonly at?: number;
-}
-
-export interface LearningConsequences {
-  readonly [k: string]: unknown;
-}
 
 /** Raw provenance entry, straight off the wire. Normalize before rendering. */
 export interface RawProvenance {
@@ -74,97 +20,6 @@ export interface RawProvenance {
   readonly truncated?: unknown;
 }
 
-export interface RouteAround {
-  readonly kind?: string;
-  readonly at?: number;
-  readonly missing_producer?: readonly string[];
-  readonly failed_producers?: readonly { readonly shape?: string; readonly producer?: string; readonly reason?: string }[];
-  readonly termination?: string;
-  readonly route_taken?: string;
-}
-
-export interface GoalWalkState {
-  readonly dispatchId: string;
-  /** Set when this run's reach waits for a person's verdict (see PersonVerdict). */
-  readonly personVerdict?: PersonVerdict | null;
-  readonly status: DispatchStatus;
-  readonly reached: boolean | null;
-  readonly goalReachReason: string | null;
-  readonly poolShapes: readonly string[];
-  readonly poolProvenance: readonly RawProvenance[];
-  readonly pendingTargets: readonly string[];
-  readonly poolEvents: readonly PoolEvent[];
-  readonly walkLog: readonly WalkLogEntry[];
-  readonly currentStep: WalkLogEntry | null;
-  readonly steps: readonly WalkStep[];
-  readonly executionPath: ExecutionPath | null;
-  readonly walkTier: string | null;
-  readonly attemptCount: number | null;
-  readonly grounded: boolean | null;
-  readonly learning: LearningConsequences | null;
-  readonly answerBody: string | null;
-  readonly operator: string | null;
-  readonly completionShapes: readonly string[] | null;
-  readonly humanGraded: boolean;
-  readonly humanReachNotes: string | null;
-  readonly trigger: string | null;
-  readonly requeueOf: string | null;
-  /** Slice V6: one record per stall — what was missing, what failed, the route taken. */
-  readonly routeArounds?: readonly RouteAround[];
-
-  /* ── serialized without a null coalesce: the KEY IS ABSENT ─────────────── */
-  readonly goal?: string;
-  readonly executionId?: string;
-  readonly selectedTemplateId?: string;
-  readonly error?: string;
-}
-
-/** A row on the board. `activeDispatches` is capped at 50 and pre-sorted. */
-export interface ActiveDispatch {
-  readonly dispatchId: string;
-  /** Sliced to 200 characters upstream, and null when the goal text was lost. */
-  readonly goal: string | null;
-  readonly status: DispatchStatus;
-  readonly reached: boolean | null;
-  readonly operator: string | null;
-  readonly trigger: string | null;
-  /** Has arrived as both an ISO string and an epoch number. Parse defensively. */
-  readonly startedAt: string | number | null;
-  readonly learning: LearningConsequences | null;
-  readonly answerBody: string | null;
-  readonly selectedTemplateId?: string;
-  readonly executionId?: string;
-  /** This surface asked it, by its own record of asks (never by an operator label). */
-  readonly own?: boolean;
-  /** The signed-in person who asked, from that record; null for an ask recorded before asks carried one. */
-  readonly person?: { readonly userId: string; readonly name: string | null } | null;
-  /** A judge-only reach waiting for a person's verdict (goal-host person-verdict.ts); null or absent otherwise. */
-  readonly personVerdict?: PersonVerdict | null;
-}
-
-/**
- * A reach the judge alone called reached, deferred to a person: only a signed-in
- * person's grade decides it (goal-host `personVerdict`, on `activeDispatches` rows
- * and `goalWalkState`). Times are ms epoch.
- */
-export interface PersonVerdict {
-  readonly executionId: string;
-  readonly state: "open" | "delivered" | "ungraded" | "expired" | "judge-fallback";
-  readonly deferredAt: number;
-  /** When the window ends: after it a self-goal falls back to the judge, any other run resolves ungraded. */
-  readonly expiresAt: number;
-  /** "system" for the system's own goal. */
-  readonly originator: "system" | "operator" | null;
-}
-
-/**
- * The four distinct outcomes of a dispatch.
- *
- * `refused` arrives as **200, not 202**, and is terminal — nothing ran. A poll
- * loop keyed on "did I get a 202" treats it as a live run and waits forever on
- * a dispatch that will never emit. Branch on the discriminant, never on the
- * HTTP status.
- */
 export interface SurfaceChange {
   readonly field: string;
   readonly from: string;
@@ -190,13 +45,7 @@ export interface UnparsedClause {
 }
 
 export type DispatchOutcome =
-  /**
-   * The instruction reshaped THIS SURFACE rather than dispatching a walk.
-   * It is a distinct outcome and not a kind of "accepted": nothing was
-   * dispatched, there is no dispatchId, and no run will appear on the board.
-   * Collapsing it into acceptance would be the same class of lie as reporting
-   * a status where a verdict belongs.
-   */
+  /** The instruction reshaped THIS SURFACE: nothing was asked and nothing written to records. */
   | {
       readonly kind: "reshaped";
       readonly changes: readonly SurfaceChange[];
@@ -206,23 +55,7 @@ export type DispatchOutcome =
   /** The output on screen redrawn in another form; nothing dispatched, nothing written. */
   | { readonly kind: "view"; readonly form: string }
   /** A reading about the output on screen that could not be applied ("as a page" on prose). */
-  | { readonly kind: "viewRefused"; readonly reason: string }
-  | { readonly kind: "accepted"; readonly dispatchId: string; readonly coalesced: boolean }
-  | { readonly kind: "refused"; readonly dispatchId: string; readonly reason: string | null }
-  | { readonly kind: "draining"; readonly message: string }
-  | { readonly kind: "rejected"; readonly message: string; readonly httpStatus: number }
-  /** Asking needs a signed-in person: nothing was dispatched. */
-  | { readonly kind: "signIn" };
-
-export interface DispatchRequest {
-  readonly goal: string;
-  readonly operator?: string;
-  readonly variables?: Record<string, unknown>;
-  readonly tags?: readonly string[];
-  readonly expected_output_shapes?: readonly string[];
-  /** What is on screen, for the box's presentation reading; never sent to the walk. */
-  readonly onScreen?: OnScreenReport | null;
-}
+  | { readonly kind: "viewRefused"; readonly reason: string };
 
 /** The output on screen as the surface's reader sees it. */
 export interface OnScreenReport {
@@ -231,37 +64,3 @@ export interface OnScreenReport {
   readonly markup: boolean;
   readonly region: string | null;
 }
-
-/** A human verdict, as the oracle corpus stores it. */
-export type OracleVerdict = "achieved" | "not_achieved" | "partial";
-
-export interface GradeSubmission {
-  readonly executionId: string;
-  readonly goal: string;
-  readonly verdict: OracleVerdict;
-  /** The verdict option, verbatim. The corpus keeps the granularity. */
-  readonly notes: string;
-  /** The run the verdict is about, so the surface can keep it on that run. */
-  readonly dispatchId?: string;
-  /** What the judge said, kept beside the person's verdict. */
-  readonly judgeReached?: boolean | null;
-  /** The result judged and where it came from: a grade confirms or questions that result. */
-  readonly about?: Readonly<Record<string, string>> | null;
-}
-
-/** A verdict kept on a run as an observation, whatever the learning corpus did with it. */
-export interface KeptVerdict {
-  readonly dispatch_id: string | null;
-  readonly verdict: OracleVerdict;
-  readonly note: string;
-  readonly source: string;
-  readonly judge_reached: boolean | null;
-  readonly about?: Readonly<Record<string, string>> | null;
-  /** The signed-in person who gave it, when one was; absent or null for a verdict given signed out. */
-  readonly by?: { readonly user_id: string; readonly name: string | null } | null;
-  readonly observedAt: number;
-  /** What upstream answered when this verdict was forwarded, kept beside it; absent when no answer was kept. */
-  readonly delivery?: { readonly recorded: boolean; readonly status: number | null; readonly reason: string | null };
-}
-
-export type SolicitationOutcome = "answered" | "declined" | "insufficient_context";

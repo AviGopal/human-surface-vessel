@@ -1,8 +1,7 @@
 /**
  * The box carries what "Show as" did (16f-1, user ruling 10-19). "show this as a
- * table" redraws the run's lead answer at once and posts the same form_choice
- * observation a click on "Show as" posted, marked as from the box. No output
- * draws a "Show as" group any more. An unrelated ask posts nothing and is sent
+ * table" redraws the lead answer on screen at once and posts the same form_choice
+ * observation a click on "Show as" posted, marked as from the box. An unrelated ask posts nothing and is sent
  * once; a reading the screen can't take is refused in a few words.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
@@ -10,7 +9,6 @@ GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
-import type { GoalWalkState } from "../ui/src/api/types";
 
 const posted: Record<string, unknown>[] = [];
 const goals: Record<string, unknown>[] = [];
@@ -49,7 +47,6 @@ const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { OnScreenProvider } = await import("../ui/src/state/onScreen");
-const { Chain } = await import("../ui/src/components/Chain");
 const { Rendered } = await import("../ui/src/components/Rendered");
 const { TopBar } = await import("../ui/src/components/TopBar");
 const { fromText } = await import("../ui/src/lib/content");
@@ -66,18 +63,6 @@ beforeEach(() => {
 });
 
 const record = JSON.stringify({ query: "last cutover", results: [{ title: "Cutover notes", url: "u1" }, { title: "Release log", url: "u2" }] });
-function walk(reached: boolean): GoalWalkState {
-  return {
-    dispatchId: "d", status: "completed", reached, goalReachReason: null, poolShapes: [], pendingTargets: [], poolEvents: [], walkLog: [],
-    currentStep: null, steps: [], executionPath: null, walkTier: null, attemptCount: null, grounded: null, learning: null, answerBody: null,
-    operator: null, completionShapes: null, humanGraded: false, humanReachNotes: null, trigger: null, requeueOf: null,
-    poolProvenance: [
-      { id: "g", shape: "goal", producedBy: "seed", contentPreview: "When was the last cutover?", chars: 26, consumedIds: [] },
-      { id: "s", shape: "webSearchResult", producedBy: "satisfier:webSearchResult", contentPreview: record, chars: record.length, consumedIds: ["g"] },
-    ],
-  } as unknown as GoalWalkState;
-}
-
 async function render(node: unknown): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
@@ -120,16 +105,6 @@ const lead = (el: HTMLElement) => el.querySelector("[aria-label='Answer'] .sf-re
 const statusLines = (el: HTMLElement) => [...el.querySelectorAll(".sf-outcome-line")].map((l) => l.textContent ?? "");
 
 describe("the box carries Show as", () => {
-  test("must-fail (F6): no output draws a Show as group, blind or not, open or as a row", async () => {
-    for (const reached of [true, false]) {
-      for (const blind of [false, true]) {
-        const el = await render(React.createElement(Chain, { walk: walk(reached), blind }));
-        expect(el.querySelector("[aria-label='Show as']")).toBeNull();
-        expect(el.querySelector(".sf-form-choice")).toBeNull();
-      }
-    }
-  });
-
   test("must-fail (F2, F7): \"show this as a table\" redraws the lead answer and records one choice, from the box", async () => {
     const el = await boxOverAnswer();
     const before = lead(el)?.getAttribute("data-form");

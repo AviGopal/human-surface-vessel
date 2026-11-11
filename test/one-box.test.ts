@@ -1,8 +1,7 @@
 /**
- * The one box reads a message by the context beside it. With the run on screen
- * waiting on the person, typing answers its question (the waiting run reads it);
- * otherwise it is a new ask. Shapes: a run asking through the surface's
- * human_input route (goal-host WS5), whose question carries its run link.
+ * The one box reads a message by the context beside it. With a question open and
+ * unanswered, typing answers it (recorded on the question); otherwise it is a new
+ * ask, written as a row. Shape: a question asked through the surface's human_input route.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -30,7 +29,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return new Response(JSON.stringify({ resolved: true, success: true, body: { id: body["response_id"], panelId: body["panel_id"], panelRevision: body["panel_revision"] } }), { status: 200 });
   }
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
-  if (url.includes("/api/grade")) return new Response(JSON.stringify({ error: "scope verdict:human required" }), { status: 403 });
   if (url.includes("/api/discovery/resolve")) return Response.json({ ok: true, seq: 300 });
   return new Response(JSON.stringify({ resolved: true, success: true, body: {} }), { status: 200 });
 }) as typeof fetch;
@@ -44,7 +42,7 @@ const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tans
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { TopBar } = await import("../ui/src/components/TopBar");
-const { boxContext, boxWords, NEW_ASK, readVerdictPhrase } = await import("../ui/src/lib/box");
+const { boxContext, boxWords, NEW_ASK } = await import("../ui/src/lib/box");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: { unmount: () => void }[] = [];
@@ -69,7 +67,7 @@ const question = {
   responses: [],
   answered: false,
   declined: false,
-  run: { dispatchId: "d-run", solicitationId: "s-1", deadlineAt: null, linked: true },
+  run: { dispatchId: "d-run", solicitationId: "s-1", deadlineAt: null, linked: false },
 } as never;
 
 async function mount(props: Record<string, unknown>): Promise<HTMLElement> {
@@ -100,7 +98,7 @@ async function type(el: HTMLElement, text: string): Promise<void> {
 }
 
 describe("one box", () => {
-  test("a run's open question becomes the context, unless the person set it aside", () => {
+  test("an open question becomes the context, unless the person set it aside", () => {
     expect(boxContext(null, "x", null)).toEqual(NEW_ASK);
     expect(boxContext(question, "Where is it raining?", "solicitation-s-1")).toEqual(NEW_ASK);
     const ctx = boxContext(question, "Where is it raining?", null);
@@ -108,14 +106,12 @@ describe("one box", () => {
     expect(boxWords(NEW_ASK).chip).toBe("New ask");
   });
 
-  test("must-fail: with the run waiting on the person, typing answers its question and starts no run", async () => {
+  test("must-fail: with a question open, typing answers it and asks nothing", async () => {
     const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
     expect(el.querySelector(".sf-box-chip")?.textContent).toContain("Answering “Where is it raining?”");
     await type(el, "Seattle");
-    const answer = calls.find((c) => c.body["type"] === "solicitationResponse_write");
-    expect(answer?.body).toMatchObject({ solicitationId: "s-1" });
-    expect(JSON.stringify(answer?.body)).toContain("Seattle");
-    expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(true);
+    const kept = calls.find((c) => c.url.includes("/api/participation"));
+    expect(kept?.body).toMatchObject({ panel_id: "solicitation-s-1", kind: "answer", value: "Seattle" });
     expect(wroteAnything()).toBe(false);
     expect(el.querySelector(".sf-outcome-line")?.textContent).toBe("Answer×");
     expect(el.querySelector("textarea")?.value).toBe("");
@@ -126,7 +122,7 @@ describe("one box", () => {
     expect(el.querySelector(".sf-box-chip")?.textContent).toBe("New ask");
     await type(el, "What time is it?");
     expect(asked("What time is it?")).toBe(true);
-    expect(calls.some((c) => c.body["type"] === "solicitationResponse_write")).toBe(false);
+    expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(false);
   });
 
   test("must-fail (G2, G3): \"not now\" declines and \"need more\" asks for more, and the record says it was read from those words", async () => {
@@ -137,8 +133,6 @@ describe("one box", () => {
       calls.length = 0;
       const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
       await type(el, text);
-      const answer = calls.find((c) => c.body["type"] === "solicitationResponse_write");
-      expect(answer?.body).toMatchObject({ solicitationId: "s-1", outcome });
       const kept = calls.find((c) => c.url.includes("/api/participation"));
       expect(kept?.body).toMatchObject({ kind, value: outcome, classified_by: "box-phrase", classified_phrase: text.toLowerCase().replace(/[.]$/, "") });
       expect(wroteAnything()).toBe(false);
@@ -151,14 +145,13 @@ describe("one box", () => {
       calls.length = 0;
       const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
       await type(el, text);
-      const answer = calls.find((c) => c.body["type"] === "solicitationResponse_write");
-      expect([text, answer?.body["outcome"]]).toEqual([text, "answered"]);
       const kept = calls.find((c) => c.url.includes("/api/participation"));
+      expect([text, kept?.body["kind"], kept?.body["value"]]).toEqual([text, "answer", text.trim()]);
       expect(kept?.body["classified_by"]).toBeUndefined();
     }
   });
 
-  test("G5: with a run waiting, the box offers \"not now\" and \"need more\"; choosing one fills the box and sends nothing", async () => {
+  test("G5: with a question open, the box offers \"not now\" and \"need more\"; choosing one fills the box and sends nothing", async () => {
     const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
     const chips = [...el.querySelectorAll(".sf-ask-suggest button")].map((b) => b.textContent);
     expect(chips).toEqual(["not now", "need more"]);
@@ -166,7 +159,7 @@ describe("one box", () => {
       ([...el.querySelectorAll(".sf-ask-suggest button")].find((b) => b.textContent === "not now") as HTMLButtonElement).click();
     });
     expect(el.querySelector("textarea")?.value).toBe("not now");
-    expect(calls.some((c) => c.body["type"] === "solicitationResponse_write" || c.url.includes("/api/participation"))).toBe(false);
+    expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(false);
   });
 
   test("× on the chip sets the question aside", async () => {
@@ -178,63 +171,23 @@ describe("one box", () => {
     expect(asideCalled).toBe(true);
   });
 
-  test("must-fail: a presentation phrase typed while a run waits changes the display and sends nothing to the run", async () => {
+  test("must-fail: a presentation phrase typed while a question is open changes the display and answers nothing", async () => {
     intentApplies = true;
     const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
     await type(el, "show search results as a table");
-    expect(calls.some((c) => c.body["type"] === "solicitationResponse_write")).toBe(false);
     expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(false);
     expect(el.textContent).toContain("formByShape.webSearchResult → rows · for every webSearchResult output");
     intentApplies = false;
   });
 
-  test("must-fail: with an input chosen to supply, the box adds it to that run and starts nothing else", async () => {
-    const el = await mount({ context: boxContext(null, null, null, { dispatchId: "d-run", shape: "human_input" }) });
-    expect(el.querySelector(".sf-box-chip")?.textContent).toContain("Supplying human_input to this run");
-    await type(el, "Seattle");
-    const added = calls.find((c) => c.body["type"] === "poolImpulse_write");
-    expect(added?.body).toMatchObject({ dispatchId: "d-run", shape: "human_input", content: "Seattle" });
-    expect(calls.some((c) => wroteAnything() || c.body["type"] === "solicitationResponse_write")).toBe(false);
-    expect(el.textContent).toContain("Read as human_input for this run · added to the run");
-  });
-
-  test("a run's open question comes before a chosen input", () => {
-    expect(boxContext(question, "g", null, { dispatchId: "d-run", shape: "human_input" }).kind).toBe("reply");
-  });
-
-  test("only a few exact phrases are verdicts", () => {
-    expect(readVerdictPhrase("That worked!")).toBe("achieved");
-    expect(readVerdictPhrase("correct")).toBe("achieved");
-    expect(readVerdictPhrase("Wrong answer.")).toBe("not_achieved");
-    expect(readVerdictPhrase("that didn't work")).toBe("not_achieved");
-    expect(readVerdictPhrase("is that right?")).toBeNull();
-    expect(readVerdictPhrase("what worked last time")).toBeNull();
-  });
-
-  const outcome = { dispatchId: "d-done", executionId: "e-done", goal: "Where is it raining?", judgeReached: true };
-
   test("must-fail: a complaint prefix with nothing after it is not sent; it stays in the box", async () => {
     for (const text of ["hard to understand:", "Hard to see:  ", "wrong:"]) {
       calls.length = 0;
-      const el = await mount({ context: boxContext(null, null, null, null, outcome) });
+      const el = await mount({});
       await type(el, text);
-      expect(wroteAnything() || calls.some((c) => c.url.includes("/api/feedback") || c.url.includes("/api/grade"))).toBe(false);
+      expect(wroteAnything() || calls.some((c) => c.url.includes("/api/feedback"))).toBe(false);
       expect(el.querySelector("textarea")!.value).toBe(text);
       expect(el.querySelector(".sf-outcome-line")?.textContent).toMatch(/^Say what's (hard to understand|hard to see|wrong)×$/);
     }
-  });
-
-  test("with a finished run on screen, anything else is still a new ask", async () => {
-    const el = await mount({ context: boxContext(null, null, null, null, outcome) });
-    await type(el, "What time is it in Bergen?");
-    expect(asked("What time is it in Bergen?")).toBe(true);
-    expect(calls.some((c) => c.url.includes("/api/grade"))).toBe(false);
-  });
-
-  test("must-fail: a verdict phrase on a finished run is not a verdict any more: it is asked like anything else", async () => {
-    const el = await mount({ context: boxContext(null, null, null, null, outcome) });
-    await type(el, "wrong answer");
-    expect(calls.some((c) => c.url.includes("/api/grade"))).toBe(false);
-    expect(asked("wrong answer")).toBe(true);
   });
 });

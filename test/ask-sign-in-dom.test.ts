@@ -22,7 +22,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   calls.push({ url, body });
   const person = { userId: "user:person-a", name: "Person A", email: "person-a@example.test", expiresAt: Date.now() + 900_000 };
-  if (url.endsWith("/api/session")) return Response.json({ available: false, keySignIn: true, signedIn, ...(signedIn ? { person } : {}) });
+  if (url.endsWith("/api/session")) return Response.json({ keySignIn: true, signedIn, ...(signedIn ? { person } : {}) });
   if (url.endsWith("/api/session/key")) {
     signedIn = true;
     return Response.json({ signedIn: true, person });
@@ -48,7 +48,6 @@ const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tans
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { TopBar } = await import("../ui/src/components/TopBar");
-const { boxContext } = await import("../ui/src/lib/box");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
@@ -67,10 +66,9 @@ async function mount(): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const outcome = null;
   await act(async () => {
     createRoot(el).render(
-      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false, context: boxContext(null, null, null, null, outcome) })))),
+      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false })))),
     );
   });
   await settle();

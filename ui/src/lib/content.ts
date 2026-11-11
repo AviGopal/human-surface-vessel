@@ -6,9 +6,6 @@
  * the page has one author and one recorded reason.
  */
 
-import type { RawProvenance, WalkLogEntry } from "../api/types";
-import { normalizeProvenance } from "./ledger";
-import { walkLogText } from "./walk";
 
 export type ContentState = "full" | "truncated" | "streaming" | "closed" | "failed" | "absent";
 export type ContentOrigin = "impulse" | "response" | "stream" | "panel" | "text";
@@ -27,8 +24,6 @@ export interface Content {
     readonly source?: string | null;
     readonly at?: number | null;
   };
-  /** Where the whole of a cut output can be read (goal-host's goalWalkOutput): its run and pool id. */
-  readonly whole?: { readonly dispatchId: string; readonly impulseId: string };
 }
 
 /** The text the planner reads. A parsed value is serialized once, compactly. */
@@ -40,27 +35,6 @@ export function contentText(c: Content): string {
   } catch {
     return String(c.body);
   }
-}
-
-/**
- * A pool impulse's provenance entry (a trace row). With the run's id, a cut one
- * carries where its whole can be read.
- */
-export function fromProvenance(raw: RawProvenance, source?: string | null, at?: number | null, dispatchId?: string | null): Content | null {
-  const e = normalizeProvenance(raw);
-  if (!e) return null;
-  const provenance = { producedBy: e.producedBy, source: source ?? null, at: at ?? null };
-  if (e.kind === "empty") return { shape: e.shape, origin: "impulse", body: "", state: "absent", provenance };
-  const impulseId = typeof raw.id === "string" && raw.id ? raw.id : null;
-  return {
-    shape: e.shape,
-    origin: "impulse",
-    body: e.preview,
-    state: e.truncated ? "truncated" : "full",
-    size: { shown: e.preview.length, total: e.chars },
-    provenance,
-    ...(e.truncated && dispatchId && impulseId ? { whole: { dispatchId, impulseId } } : {}),
-  };
 }
 
 /** A system question's body. */
@@ -76,33 +50,4 @@ export function fromResponse(shape: string, value: unknown, at?: number): Conten
 /** Plain prose the surface is relaying (a reason, an error, a gap summary). */
 export function fromText(shape: string, text: string, state: ContentState = "full"): Content {
   return { shape, origin: "text", body: text, state };
-}
-
-/** The walk's decision log: one line per entry, verbatim. */
-export function fromLog(entries: readonly WalkLogEntry[]): Content {
-  return { shape: "walk_log", origin: "text", body: entries.map((e) => walkLogText(e)).join("\n"), state: "full" };
-}
-
-/** Chunks arriving on a stream, accumulated. `done` closes it; `failed` says it broke. */
-export function fromStream(shape: string, chunks: readonly string[], done: boolean, failed = false): Content {
-  const body = chunks.join("");
-  return { shape, origin: "stream", body, state: failed ? "failed" : done ? "closed" : "streaming", size: { shown: body.length, total: body.length } };
-}
-
-/** A normalized ledger entry (what the trace joins events against). */
-export function fromLedgerEntry(
-  e: import("./ledger").LedgerEntry,
-  source?: string | null,
-  at?: number | null,
-): Content {
-  const provenance = { producedBy: e.producedBy, source: source ?? null, at: at ?? null };
-  if (e.kind === "empty") return { shape: e.shape, origin: "impulse", body: "", state: "absent", provenance };
-  return {
-    shape: e.shape,
-    origin: "impulse",
-    body: e.preview,
-    state: e.truncated ? "truncated" : "full",
-    size: { shown: e.preview.length, total: e.chars },
-    provenance,
-  };
 }

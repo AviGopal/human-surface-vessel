@@ -1,14 +1,13 @@
 /**
  * Live shapes from 10-13: a fetched page cut inside its wrapper (558fc260), a
- * numbered list split by sub-bullets (beb99adc), wrapper metadata as fields
- * (a84097d5), and a model answer that sits outside the run's outputs (ad9a96b1).
+ * numbered list split by sub-bullets (beb99adc), and wrapper metadata as fields
+ * (a84097d5).
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
-import type { GoalWalkState } from "../ui/src/api/types";
 import { findMarkup, planContent } from "../ui/src/lib/ledger";
 
 globalThis.fetch = (async () => new Response("{}", { status: 200 })) as typeof fetch;
@@ -21,7 +20,6 @@ const createRoot = (...a: Parameters<typeof rawCreateRoot>) => trackRoot(rawCrea
 const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-query"));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
-const { Chain } = await import("../ui/src/components/Chain");
 const { Prose } = await import("../ui/src/components/Prose");
 const { Rendered } = await import("../ui/src/components/Rendered");
 const { OnScreenProvider, useOnScreen } = await import("../ui/src/state/onScreen");
@@ -47,15 +45,6 @@ afterAll(async () => {
 // 558fc260's http_fetch preview: the page inside {success, body:{bodyText}}, cut before </html>.
 const PAGE = '<!DOCTYPE html>\n<html lang="en" dir="ltr">\n    <head>\n        <meta charset="utf-8" />\n        <meta name="description" content="Project 507 is a community interest company. Our vision is a society in which violent systems are replaced by ones that produce social justice, and learning belongs to everyone who wants it." />\n        <title>Project 507</title>';
 const FETCH = `{"success":true,"shape":"httpResponse","body":{"url":"https://project507.substack.com/","status":200,"ok":true,"contentType":"text/html; charset=utf-8","bodyText":${JSON.stringify(PAGE).slice(0, -1)}`;
-
-function walk(prov: unknown[], reached: boolean | null = false): GoalWalkState {
-  return {
-    dispatchId: "d", status: "failed", reached, goalReachReason: null, poolShapes: [], pendingTargets: [], poolEvents: [], walkLog: [],
-    currentStep: null, steps: [], executionPath: null, walkTier: null, attemptCount: null, grounded: null, learning: null, answerBody: null,
-    operator: null, completionShapes: null, humanGraded: false, humanReachNotes: null, trigger: null, requeueOf: null,
-    poolProvenance: [{ id: "g", shape: "goal", producedBy: "seed", contentPreview: "q", chars: 1, consumedIds: [] }, ...prov],
-  } as unknown as GoalWalkState;
-}
 
 describe("a fetched page cut inside its wrapper (558fc260)", () => {
   test("must-fail: it is markup, found inside the wrapper, and never planned as prose", () => {
@@ -97,21 +86,5 @@ describe("wrapper metadata (a84097d5)", () => {
     const meta = planContent("concept_write", rec, false).meta ?? [];
     expect(meta.some((m) => m.kind === "note" && m.text.startsWith("{"))).toBe(false);
     expect(meta).toContainEqual({ kind: "field", key: "source_type", text: "http_fetch" });
-  });
-});
-
-describe("a model answer outside the run's outputs (ad9a96b1)", () => {
-  test("must-fail: readable prose leads open even when a record is the run's output", async () => {
-    const gaps = JSON.stringify({ gaps: [{ id: "detector-coverage-dormant", status: "open" }] });
-    const el = await mount(
-      React.createElement(Chain, {
-        walk: walk([
-          { id: "x", shape: "substrateGap", producedBy: "activity:t", contentPreview: gaps, chars: 125731, consumedIds: ["g"] },
-          { id: "p", shape: "llm_completion_result", producedBy: "activity:⟨auto-bridge-source_code⟩", contentPreview: "We have learned that recent advancements in artificial intelligence are enabling machines to understand and generate human language with remarkable accuracy. This includes improvements in natural language processing, machine learning algorithms, and the ability to analyze vast amounts of data quickly.", chars: 867, consumedIds: [] },
-        ]),
-      }),
-    );
-    const open = [...el.querySelectorAll(".sf-chain-output")].map((a) => a.textContent ?? "");
-    expect(open.some((t) => t.includes("We have learned that recent advancements"))).toBe(true);
   });
 });

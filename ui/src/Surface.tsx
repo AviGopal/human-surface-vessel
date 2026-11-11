@@ -1,33 +1,27 @@
 /**
- * The surface: an ask bar across the top, a rail listing runs or the system's
- * questions, and one main pane showing whichever is open. The page never
- * scrolls — the rail and the main pane each scroll on their own, and content
+ * The surface: an ask bar across the top, a rail listing the questions put to a person, and
+ * one main pane showing the open question or, with none open, the landing the view names.
+ * The page never scrolls — the rail and the main pane each scroll on their own, and content
  * inside the main pane is never boxed into a scroller of its own.
  *
- * What is open is the URL (`/run/:id`, `/question/:id`), so it survives a
- * reload, can be linked, and the back button means what it should.
+ * What is open is the URL (`/question/:id`), so it survives a reload, can be linked, and the
+ * back button means what it should.
  */
 
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useCalibrationWindows } from "./api/calibration";
-import { useBoard, useRenderPolicy, useUiView } from "./api/queries";
-import { CalibrationPage } from "./components/Calibration";
+import { useRenderPolicy, useUiView } from "./api/queries";
 import { IssuesDrawer, useInterfaceGaps } from "./components/IssuesDrawer";
 import { QuestionsList } from "./components/QuestionsList";
 import { QuestionView } from "./components/QuestionView";
-import { RunsList, initialFilter, rememberFilter, type RunFilter } from "./components/RunsList";
-import { RunView } from "./components/RunView";
 import { Landing } from "./components/Landing";
 import { TopBar } from "./components/TopBar";
 import { boxContext } from "./lib/box";
-import { waitingQuestion } from "./lib/walk";
 import { useTokenOverrides } from "./lib/useTokenOverrides";
 import { useLiveControls } from "./state/liveControls";
 import { useStoreStream } from "./state/stream";
 import { QuestionsProvider, useQuestions } from "./state/questions";
-import { BoxTargetProvider, useBoxTarget } from "./state/boxTarget";
 import { OnScreenProvider } from "./state/onScreen";
 
 /**
@@ -35,14 +29,6 @@ import { OnScreenProvider } from "./state/onScreen";
  * under this layout must not be attributed to the earlier "onepage" grid.
  */
 const PRESENTATION = "workbench";
-
-type Tab = "runs" | "questions";
-
-const FILTERS: readonly { id: RunFilter; label: string }[] = [
-  { id: "mine", label: "Mine" },
-  { id: "all", label: "All" },
-  { id: "system", label: "System" },
-];
 
 function Workbench(): ReactNode {
   const { paused, intervalMs } = useLiveControls();
@@ -54,21 +40,8 @@ function Workbench(): ReactNode {
   }, []);
 
   const navigate = useNavigate();
-  const params = useParams({ strict: false }) as { dispatchId?: string; questionId?: string };
-  const runId = params.dispatchId ?? null;
+  const params = useParams({ strict: false }) as { questionId?: string };
   const questionId = params.questionId ?? null;
-
-  const [tab, setTab] = useState<Tab>(questionId ? "questions" : "runs");
-  useEffect(() => {
-    if (questionId) setTab("questions");
-    else if (runId) setTab("runs");
-  }, [questionId, runId]);
-
-  const [filter, setFilterState] = useState<RunFilter>(initialFilter);
-  const setFilter = (f: RunFilter): void => {
-    setFilterState(f);
-    rememberFilter(f);
-  };
   const [issuesOpen, setIssuesOpen] = useState(false);
   const [highlightIssue, setHighlightIssue] = useState<string | null>(null);
   const closeIssues = useCallback(() => {
@@ -87,41 +60,19 @@ function Workbench(): ReactNode {
     return () => window.removeEventListener("sf:show-issue", onShow);
   }, []);
 
-  const board = useBoard({ enabled: !paused, intervalMs });
   const questions = useQuestions();
   const gaps = useInterfaceGaps();
   const openGaps = gaps.data ? gaps.data.filter((g) => g.status !== "closed").length : null;
-  const calibration = useCalibrationWindows().data?.windows[0] ?? null;
 
   // Nothing selected: the landing, drawn from its view.
   const landingView = useUiView("landing", { enabled: !paused, intervalMs });
 
-  // The box answers the run on screen when that run is waiting on the person.
+  // The box answers a walk step's question (human_input) open on the questions page, unless the
+  // person set it aside. Other questions carry their own forms, so the box stays a new ask there.
   const [setAside, setSetAside] = useState<string | null>(null);
-  const shownRun = runId ?? null;
-  // The question the box answers: the run on screen's, or the one open on the questions page.
-  const waiting = waitingQuestion(questions.query.data?.questions, shownRun, questionId, Date.now());
-  const shownRow = shownRun ? (board.data?.find((r) => r.dispatchId === shownRun) ?? null) : null;
-  const shownGoal = shownRow?.goal ?? null;
-  const boxTargetState = useBoxTarget();
-  const target = boxTargetState?.target ?? null;
-  // A finished run on screen with an execution id can take a verdict typed in the box.
-  const outcome =
-    shownRow && shownRow.status !== "running" && shownRow.executionId
-      ? {
-          dispatchId: shownRow.dispatchId,
-          executionId: shownRow.executionId,
-          goal: shownRow.goal ?? "",
-          judgeReached: shownRow.reached,
-          about: target === null && boxTargetState?.judged?.dispatchId === shownRow.dispatchId ? boxTargetState.judged.about : null,
-        }
-      : null;
-  const context = boxContext(waiting, shownGoal, setAside, target && target.dispatchId === shownRun ? target : null, outcome);
+  const open = questionId ? (questions.query.data?.questions.find((q) => q.id === questionId && q.run !== undefined && !q.answered && !q.declined) ?? null) : null;
+  const context = boxContext(open, open?.title ?? null, setAside);
 
-  const openRun = (dispatchId: string): void => {
-    setIssuesOpen(false);
-    void navigate({ to: "/run/$dispatchId", params: { dispatchId } });
-  };
   const openQuestion = (id: string): void => {
     setIssuesOpen(false);
     void navigate({ to: "/question/$questionId", params: { questionId: id } });
@@ -132,56 +83,22 @@ function Workbench(): ReactNode {
       <h1 className="sf-visually-hidden">Substrate surface</h1>
       <TopBar
         context={context}
-        complaintRegion={tab === "questions" && questionId ? questionId : null}
-        onSetAside={() => setSetAside(waiting?.id ?? null)}
+        complaintRegion={questionId}
+        onSetAside={() => setSetAside(open?.id ?? null)}
         openIssues={openGaps}
         issuesOpen={issuesOpen}
         onToggleIssues={() => setIssuesOpen((v) => !v)}
-        calibration={
-          calibration
-            ? {
-                count: calibration.dispatch_ids.length,
-                open: () => void navigate({ to: "/calibrate/$windowId", params: { windowId: calibration.window_id } }),
-              }
-            : null
-        }
       />
 
-      <nav className="sf-rail" aria-label="Runs and questions">
-        <div className="sf-tabs" role="tablist">
-          <button type="button" role="tab" className="sf-tab" aria-selected={tab === "runs"} onClick={() => setTab("runs")}>
-            Runs{board.data ? <span className="sf-count">{board.data.length}</span> : null}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            className="sf-tab"
-            aria-selected={tab === "questions"}
-            onClick={() => setTab("questions")}
-          >
-            Questions{questions.waiting > 0 ? <span className="sf-count" data-attention="true">{questions.waiting}</span> : null}
-          </button>
-        </div>
-        {tab === "runs" ? (
-          <>
-            <div className="sf-segmented" role="group" aria-label="Show runs">
-              {FILTERS.map((f) => (
-                <button key={f.id} type="button" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            <RunsList selectedDispatchId={runId} onSelect={openRun} filter={filter} />
-          </>
-        ) : (
-          <QuestionsList selectedId={questionId} onSelect={openQuestion} />
-        )}
+      <nav className="sf-rail" aria-label="Questions">
+        <h2 className="sf-rail-head">
+          Questions{questions.waiting > 0 ? <span className="sf-count" data-attention="true">{questions.waiting}</span> : null}
+        </h2>
+        <QuestionsList selectedId={questionId} onSelect={openQuestion} />
       </nav>
 
       <main className="sf-main">
-        {runId ? (
-          <RunView key={runId} dispatchId={runId} />
-        ) : questionId ? (
+        {questionId ? (
           <QuestionView questionId={questionId} />
         ) : (
           <Landing
@@ -199,20 +116,11 @@ function Workbench(): ReactNode {
 }
 
 export function Surface(): ReactNode {
-  const params = useParams({ strict: false }) as { windowId?: string };
-  const navigate = useNavigate();
-  // Calibration replaces the whole board: the rail shows verdicts, and a blind
-  // grade must not have one in view.
-  if (params.windowId) {
-    return <CalibrationPage windowId={params.windowId} onExit={() => void navigate({ to: "/" })} />;
-  }
   return (
     <QuestionsProvider>
-      <BoxTargetProvider>
       <OnScreenProvider>
-      <Workbench />
+        <Workbench />
       </OnScreenProvider>
-      </BoxTargetProvider>
     </QuestionsProvider>
   );
 }

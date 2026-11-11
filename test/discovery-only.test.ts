@@ -1,13 +1,9 @@
 /**
  * EVERY CALL TO ANOTHER VESSEL GOES THROUGH DISCOVERY. The surface holds no producer's
  * address and reads none out of a registry row; discovery places each call by shape.
- * The other outbound calls are to identity (key and sign-in checks) and discovery's own
- * register/deregister.
- *
- * ONE NAMED EXCEPTION: a person's verdict (the label write) is sent with the person's
- * on-behalf-of token, and discovery's /resolve admits only `ApiKey` credentials, so that
- * write still goes to the address the registry names (person-session.ts `labelProducer`).
- * It stays only until discovery forwards a person's token or a verdict becomes a row.
+ * The other outbound calls are to identity (key checks) and discovery's own
+ * register/deregister. There is no exception: a person's verdict is a row written through
+ * discovery under the person's own key.
  */
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -30,8 +26,6 @@ const ALLOWED_FETCH: Array<{ file: string; target: RegExp }> = [
   { file: "routes/proxy.ts", target: /^fetch\(`\$\{base\.replace\(\/\\\/\+\$\/, ""\)\}\/registry\/shapes`/ },
   { file: "routes/proxy.ts", target: /^fetch\(url,/ },
   { file: "routes/impulses.ts", target: /^fetch\(`\$\{DISCOVERY_ENDPOINT\.replace\(\/\\\/\+\$\/, ""\)\}\/resolve`/ },
-  { file: "person-session.ts", target: /^fetch\(`\$\{DISCOVERY_ENDPOINT\.replace\(\/\\\/\+\$\/, ""\)\}\/resolve`/ },
-  { file: "person-session.ts", target: /^fetch\(`\$\{IDENTITY_VESSEL_URL\.replace\(\/\\\/\+\$\/, ""\)\}\/v1\/auth\/(login|on-behalf-of)`/ },
   { file: "caller-credential.ts", target: /^fetch\(`\$\{base\}\/v1\/auth\/resolve`/ },
   { file: "discovery-registration.ts", target: /^fetch\(`\$\{DISCOVERY_ENDPOINT\}\/(register|vessels\/)/ },
 ];
@@ -48,11 +42,15 @@ describe("the surface calls other vessels only through discovery", () => {
     expect(strays).toEqual([]);
   });
 
-  test("must-fail: proxy's generic passthrough is sent only to discovery or the named label write", () => {
+  test("must-fail: proxy's generic passthrough is sent only to discovery", () => {
     const proxy = files.find((f) => f.file === "routes/proxy.ts")!.text;
-    const targets = [...proxy.matchAll(/passthrough\(\{\s*url:\s*([^,\n]+),/g)].map((m) => m[1]!.trim());
+    // `{ url: <target>, ... }`, or the shorthand `{ url, ... }` naming a `const url` in the same file.
+    const targets = [...proxy.matchAll(/passthrough\(\{\s*url(?::\s*([^,\n]+))?,/g)].map((m) => (m[1] ?? "url").trim());
     expect(targets.length).toBeGreaterThan(0);
-    for (const t of targets) expect(t === "asPerson.url" || t.startsWith("`${DISCOVERY_ENDPOINT")).toBe(true);
+    const urls = [...proxy.matchAll(/const url = ([^;\n]+)/g)].map((m) => m[1]!.trim());
+    const resolved = targets.flatMap((t) => (t === "url" ? urls : [t]));
+    expect(resolved.length).toBeGreaterThan(0);
+    for (const t of resolved) expect([t, t.startsWith("`${DISCOVERY_ENDPOINT")]).toEqual([t, true]);
   });
 
   test("must-fail: the registry's shapes are read from discovery alone", () => {
@@ -60,7 +58,7 @@ describe("the surface calls other vessels only through discovery", () => {
     expect([...proxy.matchAll(/readShapesFrom\(([^)]*)\)/g)].map((m) => m[1]).filter((a) => !a!.startsWith("base:"))).toEqual(["DISCOVERY_ENDPOINT"]);
   });
 
-  test("must-fail: no address is read from a registry row, except the named label write", () => {
+  test("must-fail: no address is read from a registry row", () => {
     const reads: string[] = [];
     for (const { file, text } of files) {
       // The registration advertises this vessel's own address; that is a write, not a read.
@@ -68,7 +66,7 @@ describe("the surface calls other vessels only through discovery", () => {
       if (/resolve_endpoint|public_endpoint/.test(text)) reads.push(`${file}: resolve_endpoint/public_endpoint`);
       for (const m of text.matchAll(/\[\s*"endpoint"\s*\]|\.endpoint\b/g)) reads.push(`${file}: ${m[0]}`);
     }
-    expect(reads).toEqual(['person-session.ts: ["endpoint"]']);
+    expect(reads).toEqual([]);
   });
 
   test("must-fail: no producer address is pinned in the environment or as a literal", () => {

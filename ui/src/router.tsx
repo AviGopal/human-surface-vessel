@@ -2,7 +2,7 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { Surface } from "./Surface";
 
 /**
- * The surface is the ROOT component, so moving between a run and a question
+ * The surface is the ROOT component, so moving between questions
  * keeps the rail, its scroll position and the question snapshot mounted. The
  * child routes exist only to carry the open item in the URL.
  */
@@ -15,31 +15,13 @@ const indexRoute = createRoute({
   component: Empty,
 });
 
-/**
- * The detail panel is a ROUTE, not a piece of component state. A run a reader
- * is looking at survives a reload, can be linked to, and is where the browser's
- * back button expects it to be.
- */
-const runRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/run/$dispatchId",
-  component: Empty,
-});
-
 const questionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/question/$questionId",
   component: Empty,
 });
 
-/** Blind grading of a declared sample; replaces the board so no verdict is in view. */
-const calibrateRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/calibrate/$windowId",
-  component: Empty,
-});
-
-const routeTree = rootRoute.addChildren([indexRoute, runRoute, questionRoute, calibrateRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, questionRoute]);
 
 export const router = createRouter({ routeTree });
 

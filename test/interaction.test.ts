@@ -7,39 +7,11 @@ import { describe, expect, test } from "bun:test";
 import {
   complaintPayload,
   contributionContent,
-  gradePayload,
   humanChoice,
-  injectPayload,
   questionForAsk,
 } from "../ui/src/lib/interaction";
 
 describe("payload parity", () => {
-  test("grade: a challenged reach is not_achieved, notes join option and note", () => {
-    expect(gradePayload({ renderedState: "reached", option: "Didn't do it", note: "  it printed nothing ", executionId: "e1", goal: "g" })).toEqual({
-      executionId: "e1",
-      goal: "g",
-      verdict: "not_achieved",
-      notes: "Didn't do it — it printed nothing",
-    });
-    expect(Object.keys(gradePayload({ renderedState: "reached", option: "x", note: "", executionId: "e", goal: "g" }))).toEqual([
-      "executionId",
-      "goal",
-      "verdict",
-      "notes",
-    ]);
-  });
-
-  test("grade: only 'It actually worked' flips a non-reach to achieved; an empty note sends the option alone", () => {
-    expect(gradePayload({ renderedState: "not-reached", option: "It actually worked", note: "", executionId: "e", goal: "g" }).verdict).toBe("achieved");
-    const other = gradePayload({ renderedState: "not-reached", option: "Failed for a different reason", note: "   ", executionId: "e", goal: "g" });
-    expect(other.verdict).toBe("not_achieved");
-    expect(other.notes).toBe("Failed for a different reason");
-  });
-
-  test("add context: shape and content trimmed", () => {
-    expect(injectPayload({ dispatchId: "d", shape: " human_context ", content: " fact " })).toEqual({ dispatchId: "d", shape: "human_context", content: "fact" });
-  });
-
   test("report: panel_id, kind, trimmed value — the keys the gap keyspace is built from", () => {
     expect(complaintPayload({ region: "the surface", kind: "wrong", text: " broken " })).toEqual({ panel_id: "the surface", kind: "wrong", value: "broken" });
   });
@@ -63,12 +35,5 @@ describe("typed questions", () => {
     expect(questionForAsk({ type: "choice" })).toEqual({ kind: "text" });
     expect(questionForAsk({ type: "number" })).toEqual({ kind: "number" });
     expect(questionForAsk({ type: "claim" })).toEqual({ kind: "text" });
-  });
-});
-
-describe("grading a run with no verdict", () => {
-  test("the person's verdict is recorded as given", () => {
-    expect(gradePayload({ renderedState: "ungraded", option: "Reached", note: "", executionId: "e", goal: "g" }).verdict).toBe("achieved");
-    expect(gradePayload({ renderedState: "ungraded", option: "Not reached", note: "", executionId: "e", goal: "g" }).verdict).toBe("not_achieved");
   });
 });

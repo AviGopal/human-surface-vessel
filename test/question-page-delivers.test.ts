@@ -1,6 +1,6 @@
 /**
- * A run's question has one path wherever it is opened: the one box (16f-2). Before
- * that, the run page and the questions page each drew their own form for it.
+ * A walk step's question (human_input) has one path wherever it is opened: the one box
+ * (16f-2). Before that, the run page and the questions page each drew their own form for it.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -11,7 +11,7 @@ import { teardownDom, trackRoot } from "./setup.ts";
 const calls: { url: string; body: Record<string, unknown> }[] = [];
 const question = {
   id: "solicitation-s-9", revision: 1, title: "Where should it look?", body: "## Where should it look?", createdAt: 1, updatedAt: 1,
-  responses: [], answered: false, declined: false, run: { dispatchId: "d-wait", solicitationId: "s-9", deadlineAt: null, linked: true },
+  responses: [], answered: false, declined: false, run: { dispatchId: "d-wait", solicitationId: "s-9", deadlineAt: null, linked: false },
 };
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
@@ -24,7 +24,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   calls.push({ url, body });
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [question] } }), { status: 200 });
   if (url.includes("/api/participation")) return new Response(JSON.stringify({ resolved: true, success: true, body: { id: body["response_id"], panelId: body["panel_id"], panelRevision: body["panel_revision"] } }), { status: 200 });
-  if (body["type"] === "goalWalkState") return new Response(JSON.stringify({ resolved: true, shape: "goalWalkState", body: { dispatchId: "d-wait", status: "running", reached: null, walkLog: [], poolProvenance: [], pendingTargets: [], poolShapes: [], poolEvents: [], steps: [] } }), { status: 200 });
   return new Response(JSON.stringify({ resolved: true, success: true, body: {} }), { status: 200 });
 }) as typeof fetch;
 
@@ -43,10 +42,10 @@ afterAll(async () => {
   await teardownDom();
 });
 
-describe("a run's question on the questions page", () => {
+describe("a walk step's question on the questions page", () => {
   test("must-fail (G1): it is drawn without a second input; the one box answers it (16f-2)", async () => {
-    // The box's reply context there is waitingQuestion(…, questionId) (run-state-facts.test.ts);
-    // the answer path itself is the box's (one-box.test.ts).
+    // The box's reply context there is boxContext(open question) (Surface.tsx); the answer path
+    // itself is the box's (one-box.test.ts).
     const el = document.createElement("div");
     document.body.appendChild(el);
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -54,15 +53,14 @@ describe("a run's question on the questions page", () => {
       createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(QuestionView, { questionId: "solicitation-s-9" })))));
     });
     for (let i = 0; i < 5; i++) await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
-    const section = el.querySelector("[aria-label='Question']");
+    const section = el.querySelector("article.sf-question");
     expect(section).not.toBeNull();
     expect(section?.textContent).toContain("Where should it look?");
-    expect(el.querySelector("form.sf-run-question-form, textarea[aria-label='Answer']")).toBeNull();
-    const buttons = [...el.querySelectorAll("[aria-label='Question'] button")].map((b) => b.textContent);
+    expect(el.querySelector("article.sf-question textarea, article.sf-question form")).toBeNull();
+    const buttons = [...el.querySelectorAll("article.sf-question button")].map((b) => b.textContent);
     expect(buttons).not.toContain("Need more");
     expect(buttons).not.toContain("Decline");
     expect(buttons).not.toContain("Send");
-    // The run is still kept waiting while its question is on screen.
-    expect(calls.some((c) => c.body["type"] === "solicitationHeartbeat_write")).toBe(true);
+    expect(section?.textContent).toContain("Answer in the box above");
   });
 });

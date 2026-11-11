@@ -10,17 +10,15 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { injectContext, trySurfaceIntent, writeAsk, type RowWrite } from "../api/client";
-import { useBoxTarget } from "../state/boxTarget";
+import { trySurfaceIntent, writeAsk, type RowWrite } from "../api/client";
+import { sendContribution } from "../api/participation";
 import { onScreenReport, useOnScreen } from "../state/onScreen";
-import { injectPayload } from "../lib/interaction";
 import type { DispatchOutcome } from "../api/types";
-import { complaintPayload } from "../lib/interaction";
+import { complaintPayload, contributionContent } from "../lib/interaction";
 import { reportExposureAct } from "../lib/exposure-reporter";
-import { barePrefix, boxWords, presentationScope, readAs, readComplaint, readReplyPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
+import { barePrefix, boxWords, presentationScope, readComplaint, readReplyPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
-import { answerRunQuestion } from "./RunQuestion";
 import { SignIn } from "./SignIn";
 import { SESSION_KEY } from "../api/session";
 
@@ -45,7 +43,6 @@ function OutcomeLine({
   let tone = "error";
   switch (outcome.kind) {
     case "view":
-    case "signIn":
       return null;
     case "viewRefused":
       tone = "warn";
@@ -92,7 +89,6 @@ export function TopBar({
   openIssues,
   onToggleIssues,
   issuesOpen,
-  calibration = null,
   complaintRegion = null,
   context = NEW_ASK,
   onSetAside,
@@ -104,8 +100,6 @@ export function TopBar({
   openIssues: number | null;
   onToggleIssues: () => void;
   issuesOpen: boolean;
-  /** An open, attested calibration window; absent otherwise. */
-  calibration?: { count: number; open: () => void } | null;
   /** What a complaint typed now is about: the question open on the questions page; otherwise the surface. */
   complaintRegion?: string | null;
 }): ReactNode {
@@ -126,16 +120,13 @@ export function TopBar({
       // "not now" and "need more", exactly, are the replies offered beside the box.
       const phrase = readReplyPhrase(args.text);
       const outcome = phrase?.outcome ?? "answered";
-      const receipt = await answerRunQuestion(args.ctx.question, outcome, args.text, phrase ? { by: "box-phrase", phrase: phrase.phrase } : undefined);
+      // Recorded on the question, so the questions rail shows it answered.
+      const q = args.ctx.question;
+      const content = contributionContent({ panelId: q.id, revision: q.revision, askId: null, kind: outcome === "answered" ? "answer" : "dismiss", value: outcome === "answered" ? args.text.trim() : outcome });
+      const receipt = await sendContribution({ ...content, response_id: crypto.randomUUID(), ...(phrase ? { classified_by: "box-phrase", classified_phrase: phrase.phrase } : {}) });
       recordReceipt(receipt);
       return { kind: "answered" as const, outcome };
     },
-  });
-  const boxTarget = useBoxTarget();
-  const supply = useMutation({
-    retry: false,
-    mutationFn: (args: { dispatchId: string; shape: string; text: string }) =>
-      injectContext(injectPayload({ dispatchId: args.dispatchId, shape: args.shape, content: args.text })),
   });
   // An ask sent signed out: nothing was written, sign-in opens, and the ask goes once signed in.
   const [pendingAsk, setPendingAsk] = useState<string | null>(null);
@@ -165,7 +156,7 @@ export function TopBar({
     },
   });
   const words = boxWords(context);
-  const pending = asking.isPending || answer.isPending || supply.isPending || complain.isPending;
+  const pending = asking.isPending || answer.isPending || complain.isPending;
 
   // The box carries what "Show as" did: the answer on screen redraws, and the
   // choice is recorded from the box, as a click on it was.
@@ -230,23 +221,6 @@ export function TopBar({
             if (complaintRegion) reportExposureAct(complaintRegion, "complained");
             void queryClient.invalidateQueries({ queryKey: ["interfaceGaps"] });
             setEcho("Interface issue");
-            cleared();
-          },
-        },
-      );
-      return;
-    }
-    if (context.kind === "supply") {
-      const ctx = context;
-      asking.reset();
-      setReshaped(null);
-      supply.mutate(
-        { dispatchId: ctx.dispatchId, shape: ctx.shape, text },
-        {
-          onSuccess: () => {
-            setEcho(`${readAs(ctx)} · added to the run`);
-            boxTarget?.markSent({ dispatchId: ctx.dispatchId, shape: ctx.shape });
-            boxTarget?.choose(null);
             cleared();
           },
         },
@@ -320,11 +294,6 @@ export function TopBar({
       >
         <span className="sf-box-chip" data-context={context.kind} aria-live="polite">
           {words.chip}
-          {context.kind === "supply" && boxTarget ? (
-            <button type="button" className="sf-icon-button" aria-label="Ask something new instead" onClick={() => boxTarget.choose(null)}>
-              ×
-            </button>
-          ) : null}
           {context.kind === "reply" && onSetAside ? (
             <button type="button" className="sf-icon-button" aria-label="Ask something new instead" onClick={onSetAside}>
               ×
@@ -396,11 +365,6 @@ export function TopBar({
         >
           Issues{openIssues !== null ? <span className="sf-count">{openIssues}</span> : null}
         </button>
-        {calibration ? (
-          <button type="button" className="sf-button sf-button-quiet" onClick={calibration.open}>
-            Calibrate<span className="sf-count">{calibration.count}</span>
-          </button>
-        ) : null}
       </div>
 
       {asking.isError ? (
@@ -419,14 +383,6 @@ export function TopBar({
           </button>
         </div>
       ) : null}
-      {supply.isError ? (
-        <div className="sf-outcome-line" data-tone="error" role="status">
-          <span>Not added: {(supply.error as Error).message}</span>
-          <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => supply.reset()}>
-            ×
-          </button>
-        </div>
-      ) : null}
       {answer.isError ? (
         <div className="sf-outcome-line" data-tone="error" role="status">
           <span>Not delivered: {(answer.error as Error).message}</span>
@@ -435,7 +391,7 @@ export function TopBar({
           </button>
         </div>
       ) : null}
-      {echo && !answer.isError && !supply.isError ? (
+      {echo && !answer.isError ? (
         <div className="sf-outcome-line" data-tone="ok" role="status">
           <span>{echo}</span>
           <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => setEcho(null)}>

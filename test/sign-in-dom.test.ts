@@ -1,8 +1,7 @@
 /**
- * Signing in, as a person meets it: a "Sign in" control where it is offered, two
- * fields that post once, and a verdict typed in the box while signed out that is
- * recorded as the person's once they sign in (user ruling 10-24: re-sign-in when
- * needed; a small sign-in form; node-first).
+ * Signing in, as a person meets it: a "Sign in" control where it is offered, and one
+ * field, the person's own key, that posts once (user ruling 10-24: re-sign-in when
+ * needed; a small sign-in form; node-first). A person's rows are written under that key.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -10,7 +9,7 @@ GlobalRegistrator.register({ url: "http://surface.test/" });
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
 
-let available = true;
+let keySignIn = true;
 let signedIn = false;
 const calls: { url: string; body: Record<string, unknown> }[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -23,8 +22,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   calls.push({ url, body });
   const person = { userId: "user:alex", name: "Alex", email: "alex@example.test", expiresAt: Date.now() + 900_000 };
-  if (url.endsWith("/api/session")) return Response.json({ available, signedIn, ...(signedIn ? { person } : {}) });
-  if (url.endsWith("/api/session/login")) {
+  if (url.endsWith("/api/session")) return Response.json({ keySignIn, signedIn, ...(signedIn ? { person } : {}) });
+  if (url.endsWith("/api/session/key")) {
     signedIn = true;
     return Response.json({ signedIn: true, person });
   }
@@ -32,7 +31,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     signedIn = false;
     return Response.json({ signedIn: false });
   }
-  if (url.includes("/api/grade")) return signedIn ? Response.json({ success: true }) : Response.json({ success: false, error: "labeler human requires a person" }, { status: 403 });
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [] } });
   return Response.json({ resolved: true, success: true, body: {} });
 }) as typeof fetch;
@@ -46,7 +44,6 @@ const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tans
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { TopBar } = await import("../ui/src/components/TopBar");
-const { boxContext } = await import("../ui/src/lib/box");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
@@ -54,7 +51,7 @@ afterAll(async () => {
 });
 beforeEach(() => {
   calls.length = 0;
-  available = true;
+  keySignIn = true;
   signedIn = false;
 });
 
@@ -66,10 +63,9 @@ async function mount(): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const outcome = { dispatchId: "d-done", executionId: "e-done", goal: "Where is it raining?", judgeReached: true };
   await act(async () => {
     createRoot(el).render(
-      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false, context: boxContext(null, null, null, null, outcome) })))),
+      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false })))),
     );
   });
   await settle();
@@ -93,22 +89,23 @@ const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("butto
 
 describe("signing in on the surface", () => {
   test("nothing is shown where sign-in isn't offered", async () => {
-    available = false;
+    keySignIn = false;
     const el = await mount();
     expect(button(el, "Sign in")).toBeUndefined();
     expect(el.querySelector(".sf-signin")).toBeNull();
   });
 
-  test("must-fail: email-and-password sign-in still signs a person in, and says who", async () => {
+  test("must-fail: the one field is the person's key; it posts once and says who is signed in", async () => {
     const el = await mount();
     await act(async () => button(el, "Sign in")!.click());
     const form = el.querySelector("form[aria-label='Sign in']") as HTMLFormElement;
-    const [email, password] = [form.querySelector("input[type=email]") as HTMLInputElement, form.querySelector("input[type=password]") as HTMLInputElement];
-    expect(password.autocomplete).toBe("current-password");
-    await act(async () => { setValue(email, "alex@example.test"); setValue(password, "correct horse"); });
+    expect(form.querySelector("input[type=email]")).toBeNull();
+    const inputs = [...form.querySelectorAll("input")];
+    expect(inputs.map((i) => i.getAttribute("aria-label"))).toEqual(["Your key"]);
+    await act(async () => { setValue(inputs[0] as HTMLInputElement, "person-key"); });
     await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
     await settle();
-    expect(calls.find((c) => c.url.endsWith("/api/session/login"))?.body).toEqual({ email: "alex@example.test", password: "correct horse" });
+    expect(calls.filter((c) => c.url.endsWith("/api/session/key")).map((c) => c.body)).toEqual([{ key: "person-key" }]);
     expect(el.querySelector(".sf-signin-who")?.textContent).toMatch(/^Alex · until /);
     expect(el.querySelector("form[aria-label='Sign in']")).toBeNull();
   });

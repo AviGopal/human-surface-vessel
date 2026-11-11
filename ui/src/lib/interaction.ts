@@ -14,8 +14,6 @@
  * byte-for-byte by test/interaction.test.ts.
  */
 
-import type { OracleVerdict } from "../api/types";
-
 export type Question =
   | { readonly kind: "choice"; readonly options: readonly string[] }
   | { readonly kind: "score"; readonly levels: readonly string[]; readonly legend?: string }
@@ -45,35 +43,6 @@ export function questionForAsk(ask: { type: string; choices?: readonly string[] 
 }
 
 /* ───────────────────────── payload builders (pinned) ───────────────────────── */
-
-/** Grading a finished run → `goal_verification_label_write` via /api/grade. */
-export function gradePayload(args: {
-  renderedState: "reached" | "not-reached" | "ungraded";
-  option: string;
-  note: string;
-  executionId: string;
-  goal: string;
-}): { executionId: string; goal: string; verdict: OracleVerdict; notes: string } {
-  const verdict: OracleVerdict =
-    args.renderedState === "ungraded"
-      ? args.option === "Reached" ? "achieved" : "not_achieved"
-      : args.renderedState === "reached" ? "not_achieved" : args.option === "It actually worked" ? "achieved" : "not_achieved";
-  return {
-    executionId: args.executionId,
-    goal: args.goal,
-    verdict,
-    notes: args.note.trim() ? `${args.option} — ${args.note.trim()}` : args.option,
-  };
-}
-
-/** Pushing context into a running walk → `poolImpulse_write`. */
-export function injectPayload(args: { dispatchId: string; shape: string; content: string }): {
-  dispatchId: string;
-  shape: string;
-  content: string;
-} {
-  return { dispatchId: args.dispatchId, shape: args.shape.trim(), content: args.content.trim() };
-}
 
 export type ComplaintKind = "hard_to_see" | "hard_to_understand" | "wrong";
 

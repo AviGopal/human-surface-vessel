@@ -1,44 +1,30 @@
 /**
- * A person signed in on this surface, so a verdict they give is recorded as
- * theirs (user ruling 10-17: a verdict needs a person's own credential; 10-19:
- * sign in on the surface).
+ * A person signed in on this surface with their own key, so a row they write (an ask, a
+ * verdict) is recorded as theirs: records stamps the writer from the key a write arrives
+ * under, and discovery `/resolve` admits only keys.
  *
- * THE CONTRACT, as identity and activity-api ship it:
- *   1. identity POST /v1/auth/login {email, password} → a person's session
- *      token, valid 900 s, with no refresh: the person signs in again after it.
- *   2. identity POST /v1/auth/on-behalf-of, the actor presenting THIS vessel's
- *      own ApiKey, {caller: "Bearer <session token>", audience: {node, shape}}
- *      → a token for that one node and shape, valid at most 120 s.
- *   3. activity-api writes goal_verification_label_write with that token as
- *      Bearer, and stamps the label as a person's human verdict only when the
- *      token's node is its own (thisNode()). The node is read from the vessel
- *      registry row of the producer the write goes to, so the two cannot differ.
+ * Identity alone decides whether a key is a person's: it must authenticate, and it must not be
+ * this node's own key. Whether sign-in is offered depends on identity alone.
  *
- * WHAT NEVER LEAVES THE SERVER: the session token. The browser holds only a
- * random id in an HttpOnly, SameSite=Strict cookie; the token stays in this
- * process's memory, and a restart signs everyone out (at worst 15 minutes lost).
- * The password goes to identity once and is not kept anywhere. The on-behalf-of
- * token is minted right before each write and dropped after it.
+ * WHAT NEVER LEAVES THE SERVER: the key. The browser holds only a random id in an HttpOnly,
+ * SameSite=Strict cookie; the key stays in this process's memory, and a restart signs
+ * everyone out (the page says so when a write is refused for it).
  *
- * WHERE IT IS OFFERED: where this node serves the label write itself (a
- * registry row for the shape with a local origin). Where the write resolves on
- * another node over the relay, the path is built the same way but is not
- * offered until an end-to-end run through the relay has passed.
+ * Email and password sign-in is gone with the label write it served: identity's session token
+ * cannot write a row through discovery (a gap discovery owns). It returns when a person's
+ * token is admitted there.
  */
 
 import { randomBytes } from "node:crypto";
 import { identityCredential, isNodeSelfCredential } from "./caller-credential.ts";
-import { DISCOVERY_ENDPOINT, IDENTITY_VESSEL_URL, METABOB_API_KEY } from "./config.ts";
+import { IDENTITY_VESSEL_URL } from "./config.ts";
 
 export const PERSON_COOKIE = "sf_person";
-export const LABEL_WRITE_SHAPE = "goal_verification_label_write";
 /** Sessions held at once. A surface has a handful of people; the cap only bounds memory. */
 const MAX_SESSIONS = 64;
 /** Failed sign-ins tolerated per window before refusing for the rest of it (identity limits too). */
 const LOGIN_FAILURES_PER_WINDOW = 5;
 const LOGIN_WINDOW_MS = 60_000;
-/** How long a registry answer about the label writer is trusted. */
-const PRODUCER_TTL_MS = 60_000;
 /**
  * How long a sign-in with a person's own key lasts before they sign in again. A key does not
  * expire on its own; this matches identity's session (900 s) so both ways of signing in end
@@ -47,14 +33,12 @@ const PRODUCER_TTL_MS = 60_000;
 const KEY_SESSION_MS = 900_000;
 
 export interface PersonSession {
-  /** identity's session token, for a sign-in with email and password; empty for a sign-in with a key. */
-  readonly token: string;
   /**
    * The person's own API key, for a sign-in with a key. A person's rows (a verdict, an ask)
    * are written through discovery under it, so records names the person as their writer.
-   * Held in this process's memory only, like the token; never sent to the browser.
+   * Held in this process's memory only; never sent to the browser.
    */
-  readonly apiKey?: string;
+  readonly apiKey: string;
   readonly userId: string;
   readonly orgId: string | null;
   readonly email: string | null;
@@ -62,7 +46,7 @@ export interface PersonSession {
   readonly expiresAt: number;
 }
 
-/** What the browser may see of a session. Never the token. */
+/** What the browser may see of a session. Never the key. */
 export interface PersonView {
   readonly userId: string;
   readonly name: string | null;
@@ -161,44 +145,6 @@ export type LoginResult =
   | { readonly ok: true; readonly session: PersonSession }
   | { readonly ok: false; readonly status: number; readonly error: string };
 
-/** Sign a person in at identity. The password is sent once and not kept. */
-export async function loginAtIdentity(email: string, password: string): Promise<LoginResult> {
-  if (!IDENTITY_VESSEL_URL) return { ok: false, status: 503, error: "sign-in is not available on this node" };
-  let res: Response;
-  try {
-    res = await fetch(`${IDENTITY_VESSEL_URL.replace(/\/+$/, "")}/v1/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    return { ok: false, status: 502, error: "identity did not answer" };
-  }
-  const j = (await res.json().catch(() => null)) as null | Record<string, unknown>;
-  if (res.status === 401) return { ok: false, status: 401, error: "wrong email or password" };
-  if (!res.ok || !j || typeof j["token"] !== "string") {
-    return { ok: false, status: res.status >= 400 && res.status < 500 ? res.status : 502, error: "sign-in failed" };
-  }
-  const user = (j["user"] ?? {}) as Record<string, unknown>;
-  const userId = typeof user["id"] === "string" ? user["id"] : typeof j["user_id"] === "string" ? (j["user_id"] as string) : null;
-  // An ISO time today; seconds since the epoch accepted too, so a format change cannot sign everyone in forever.
-  const rawExpiry = j["expires_at"];
-  const expiresAt = typeof rawExpiry === "number" ? rawExpiry * 1000 : Date.parse(String(rawExpiry ?? ""));
-  if (!userId || !Number.isFinite(expiresAt)) return { ok: false, status: 502, error: "sign-in failed" };
-  return {
-    ok: true,
-    session: {
-      token: j["token"] as string,
-      userId,
-      orgId: typeof user["org_id"] === "string" ? user["org_id"] : typeof j["org_id"] === "string" ? (j["org_id"] as string) : null,
-      email: typeof user["email"] === "string" ? user["email"] : null,
-      name: typeof user["name"] === "string" ? user["name"] : null,
-      expiresAt,
-    },
-  };
-}
-
 /**
  * Sign a person in with their own API key: identity must authenticate it, and it must not be
  * this node's own key, which would let anyone at the page write as a person under the node's
@@ -214,97 +160,10 @@ export async function signInWithKey(apiKey: string, now = Date.now()): Promise<L
   }
   const keyId = cred.keyId ?? null;
   if (!keyId) return { ok: false, status: 502, error: "identity did not say whose key this is" };
-  return { ok: true, session: { token: "", apiKey, userId: keyId, orgId: null, email: null, name: null, expiresAt: now + KEY_SESSION_MS } };
-}
-
-export type OboResult = { readonly ok: true; readonly token: string } | { readonly ok: false; readonly status: number; readonly error: string };
-
-/** A token for one write of the label shape at `node`, on the person's behalf. */
-export async function mintLabelToken(session: PersonSession, node: string): Promise<OboResult> {
-  if (!IDENTITY_VESSEL_URL || !METABOB_API_KEY) return { ok: false, status: 503, error: "sign-in is not available on this node" };
-  let res: Response;
-  try {
-    res = await fetch(`${IDENTITY_VESSEL_URL.replace(/\/+$/, "")}/v1/auth/on-behalf-of`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `ApiKey ${METABOB_API_KEY}` },
-      body: JSON.stringify({ caller: `Bearer ${session.token}`, audience: { node, shape: LABEL_WRITE_SHAPE }, ttl_seconds: 60 }),
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    return { ok: false, status: 502, error: "identity did not answer" };
-  }
-  const j = (await res.json().catch(() => null)) as null | { data?: { token?: unknown }; error?: unknown; message?: unknown };
-  const token = j?.data?.token;
-  if (res.ok && typeof token === "string") return { ok: true, token };
-  const said = typeof j?.error === "object" && j?.error !== null ? (j.error as { message?: unknown }).message : (j?.error ?? j?.message);
-  return { ok: false, status: res.status, error: typeof said === "string" ? said : "the on-behalf-of token was refused" };
-}
-
-/* ─── where the label write goes ───────────────────────────────────────────── */
-
-export interface LabelProducer {
-  /** Where to send the write: the producer's resolve URL. */
-  readonly url: string;
-  /** The node its writer checks a token against (its registration's metadata.node). */
-  readonly node: string;
-  /** Served on this node, not over the overlay. */
-  readonly local: boolean;
-}
-
-let producerCache: { at: number; value: LabelProducer | null } | null = null;
-
-/** For tests. */
-export function resetLabelProducerCache(): void {
-  producerCache = null;
-}
-
-/**
- * The producer of the label write, from the vessel registry: a local row first.
- * Null when discovery has no row for the shape, or no row names its node.
- *
- * THE ONE CALL NOT PLACED BY DISCOVERY. The write carries the person's on-behalf-of
- * token, and discovery's /resolve admits only `ApiKey` credentials, so it goes to the
- * address this row names (test/discovery-only.test.ts holds it to this one place).
- */
-export async function labelProducer(now = Date.now()): Promise<LabelProducer | null> {
-  if (producerCache && now - producerCache.at < PRODUCER_TTL_MS) return producerCache.value;
-  let value: LabelProducer | null = null;
-  try {
-    const res = await fetch(`${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(METABOB_API_KEY ? { Authorization: `ApiKey ${METABOB_API_KEY}` } : {}) },
-      body: JSON.stringify({ pointer: { type: "vesselRegistry", filters: { shapes: [LABEL_WRITE_SHAPE] } } }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    const j = (await res.json().catch(() => null)) as null | Record<string, unknown>;
-    const body = (j?.["content"] ?? j?.["body"] ?? j) as Record<string, unknown> | null;
-    const rows = Array.isArray(body?.["vessels"]) ? (body!["vessels"] as Record<string, unknown>[]) : [];
-    const usable = rows
-      .map((v) => {
-        const node = (v["metadata"] as Record<string, unknown> | undefined)?.["node"];
-        const endpoint = v["endpoint"];
-        if (typeof node !== "string" || !node || typeof endpoint !== "string" || !/^https?:\/\//.test(endpoint)) return null;
-        const local = v["origin"] === "local" && v["protocol"] !== "libp2p";
-        // The label write is served on activity-api's impulse-resolve route, whatever path a row advertises for goal shapes.
-        return { url: `${endpoint.replace(/\/+$/, "")}/v2/impulses/resolve`, node, local };
-      })
-      .filter((x): x is LabelProducer => x !== null);
-    value = usable.find((p) => p.local) ?? usable[0] ?? null;
-  } catch {
-    value = null;
-  }
-  producerCache = { at: now, value };
-  return value;
+  return { ok: true, session: { apiKey, userId: keyId, orgId: null, email: null, name: null, expiresAt: now + KEY_SESSION_MS } };
 }
 
 /** Whether a person can sign in here with their own key: identity alone decides that. */
 export function keySignInAvailable(): boolean {
   return IDENTITY_VESSEL_URL.length > 0;
-}
-
-/** Whether a person can sign in here with email and password: identity is configured and this node serves the label write itself. */
-export async function signInAvailable(): Promise<{ available: boolean; producer: LabelProducer | null }> {
-  if (!IDENTITY_VESSEL_URL || !METABOB_API_KEY) return { available: false, producer: null };
-  const producer = await labelProducer();
-  return { available: producer !== null && producer.local, producer };
 }

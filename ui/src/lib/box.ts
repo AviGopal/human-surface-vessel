@@ -1,141 +1,24 @@
 /**
  * How the one box reads what a person types: by the context it shows beside it.
  *
- * A context is offered only where something reads the text. Today that is a new
- * ask (goal-host's dispatch) and a run's open question (its pending solicitation,
- * read by the waiting walk), and an input a person chose to supply to a running
- * run (read by its walk), and a verdict on the finished run on screen (kept on the
- * run as an observation). Follow-ups and corrections have no reader yet, so the box
- * never reads text as them.
+ * A context is offered only where something reads the text. Today that is a new ask (a
+ * world_changed row the walk takes up) and an open question (recorded on the question).
+ * A verdict is given on an answer row, not typed. Follow-ups and corrections have no reader
+ * yet, so the box never reads text as them.
  */
 
 import type { Question } from "../api/participation";
 
-/** A finished run on screen, which a verdict typed in the box is about. */
-export interface RunOutcome {
-  readonly dispatchId: string;
-  readonly executionId: string;
-  readonly goal: string;
-  readonly judgeReached: boolean | null;
-  /** The result shown as the run's answer and where it came from: what a verdict judges. */
-  readonly about?: Readonly<Record<string, string>> | null;
-}
-
 export type BoxContext =
-  | { readonly kind: "new"; readonly outcome?: RunOutcome }
-  | { readonly kind: "reply"; readonly question: Question; readonly goal: string | null }
-  | { readonly kind: "supply"; readonly dispatchId: string; readonly shape: string };
+  | { readonly kind: "new" }
+  | { readonly kind: "reply"; readonly question: Question; readonly goal: string | null };
 
 export const NEW_ASK: BoxContext = { kind: "new" };
 
-/**
- * The open question of the run on screen, unless the person set it aside; else the
- * input they chose to supply to it; else a new ask.
- */
-export function boxContext(
-  question: Question | null,
-  goal: string | null,
-  setAside: string | null,
-  supply: { dispatchId: string; shape: string } | null = null,
-  outcome: RunOutcome | null = null,
-): BoxContext {
+/** The open question, unless the person set it aside; else a new ask. */
+export function boxContext(question: Question | null, goal: string | null, setAside: string | null): BoxContext {
   if (question && question.id !== setAside) return { kind: "reply", question, goal: goal?.trim() || null };
-  if (supply) return { kind: "supply", dispatchId: supply.dispatchId, shape: supply.shape };
-  return outcome ? { kind: "new", outcome } : NEW_ASK;
-}
-
-const SAYS_REACHED = /^(that|it) (worked|is right|was right)$|^(correct|right|yes,? that'?s right)$/;
-const SAYS_NOT = /^(wrong( answer)?|that'?s wrong|it'?s wrong|(that|it) didn'?t work|not (it|right|reached))$/;
-
-/**
- * A verdict, when the whole message is one of a few exact phrases; anything else is
- * not a verdict. Kept as small as the presentation grammar on purpose: a wider guess
- * would read real asks as grades.
- */
-export function readVerdictPhrase(text: string): "achieved" | "not_achieved" | null {
-  const t = text.trim().toLowerCase().replace(/[.,;:!\s]+$/u, "").replace(/\s+/g, " ");
-  if (SAYS_REACHED.test(t)) return "achieved";
-  if (SAYS_NOT.test(t)) return "not_achieved";
-  return null;
-}
-
-/**
- * The grade form's reasons, as exact phrases the box reads (the form retired with
- * sign-in, 16f): each says why the run's verdict is wrong, so each is a verdict of
- * its own. "It actually worked" and "Reached" say it reached; every other reason
- * says it did not. Mirrors VERDICT_OPTIONS in the design tokens.
- */
-const REASON_PHRASES: Readonly<Record<string, { verdict: "achieved" | "not_achieved"; label: string }>> = Object.fromEntries(
-  [
-    ["It actually worked", "achieved"],
-    ["Reached", "achieved"],
-    ["Not reached", "not_achieved"],
-    ["Failed for a different reason", "not_achieved"],
-    ["Shouldn't have been tried", "not_achieved"],
-    ["Didn't answer it", "not_achieved"],
-    ["Didn't do it", "not_achieved"],
-    ["Did the wrong thing", "not_achieved"],
-    ["Right idea, wrong change", "not_achieved"],
-    ["Unsafe", "not_achieved"],
-  ].map(([label, verdict]) => [norm(label as string), { verdict: verdict as "achieved" | "not_achieved", label: label as string }]),
-);
-
-function norm(t: string): string {
-  return t.trim().toLowerCase().replace(/[’]/g, "'").replace(/[.,;:!\s]+$/u, "").replace(/\s+/g, " ");
-}
-
-/**
- * Where something may follow a verdict phrase: a colon, a comma, a semicolon, a full
- * stop or a dash ("wrong answer: …", "wrong answer, the dates are off").
- */
-const NOTE_SEPARATOR = /\s*(?::|,|;|\.(?=\s)|\s[—–-])\s*/g;
-
-/**
- * What follows a verdict asks for MORE rather than saying WHY: a question, or a clause
- * that opens with a request ("now also show …", "can you …", "list …"). Then the
- * message has two parts, the verdict and a new ask, and both are acted on.
- */
-const ASKS_FOR_MORE =
-  /\?\s*$|^(?:(?:and|but|so|then|ok|okay)\s+)?(?:(?:now|also|next|please)\b[\s,]*)*(?:can you|could you|would you|will you|please|show|list|find|give|tell|make|try|do|add|open|search|check|fetch|get|run|send|compare|summari[sz]e|explain|write|draw|put|lead|sort|rank|filter|what|how|why|where|when|who|which)\b/i;
-
-/** Whether the words after a verdict ask for more, not explain it. */
-export function asksForMore(rest: string): boolean {
-  return ASKS_FOR_MORE.test(rest.trim());
-}
-
-/**
- * A verdict with what the person said after it: an exact verdict phrase or one of the
- * grade reasons, optionally followed by a separator and more words. The words before
- * the separator must be the whole phrase, so an ask that merely contains one ("wrong
- * answers to common questions") is not read as a grade. What follows is the verdict's
- * reason, kept as "<phrase> — <reason>". After a reached verdict, words that ask for
- * more ("that worked, now also list the sources") are a new ask sent as well, and the
- * verdict is bare; after a not-reached verdict, whatever follows is about that run and
- * stays its reason. Anything else is not a verdict.
- */
-export function readVerdict(text: string): { verdict: "achieved" | "not_achieved"; notes: string; ask?: string } | null {
-  const whole = readHead(text, "");
-  if (whole) return whole;
-  for (const m of text.matchAll(NOTE_SEPARATOR)) {
-    const rest = text.slice((m.index ?? 0) + m[0].length).trim();
-    if (!rest) continue;
-    const head = text.slice(0, m.index);
-    const bare = readHead(head, "");
-    // After "it worked", a request is a new ask; after "wrong answer", whatever follows is
-    // about that run (why it is wrong, or how to try again) and stays its reason.
-    if (bare?.verdict === "achieved" && asksForMore(rest)) return { ...bare, ask: rest };
-    const read = readHead(head, rest);
-    if (read) return read;
-  }
-  return null;
-}
-
-function readHead(head: string, note: string): { verdict: "achieved" | "not_achieved"; notes: string } | null {
-  const reason = REASON_PHRASES[norm(head)];
-  if (reason) return { verdict: reason.verdict, notes: note ? `${reason.label} — ${note}` : reason.label };
-  const plain = readVerdictPhrase(head);
-  if (!plain) return null;
-  return { verdict: plain, notes: note ? `${head.trim()} — ${note}` : head.trim().replace(/[,;:\s]+$/u, "") };
+  return NEW_ASK;
 }
 
 /**
@@ -191,7 +74,6 @@ export interface BoxWords {
 
 export function boxWords(ctx: BoxContext): BoxWords {
   if (ctx.kind === "new") return { chip: "New ask", placeholder: "What do you want done?", send: "Send" };
-  if (ctx.kind === "supply") return { chip: `Supplying ${ctx.shape} to this run`, placeholder: `Content for ${ctx.shape}`, send: "Add" };
   const about = ctx.goal ?? ctx.question.title;
   return { chip: `Answering “${about}” · waiting on you`, placeholder: "Your answer", send: "Answer" };
 }
@@ -199,7 +81,6 @@ export function boxWords(ctx: BoxContext): BoxWords {
 /** The echo after a message is taken: how it was read. */
 export function readAs(ctx: BoxContext): string {
   if (ctx.kind === "new") return "Read as a new ask";
-  if (ctx.kind === "supply") return `Read as ${ctx.shape} for this run`;
   return `Read as your answer to “${ctx.goal ?? ctx.question.title}”`;
 }
 

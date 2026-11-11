@@ -153,7 +153,8 @@ export type ObservationType =
    * the learning corpus does with it, and independent concurring observations
    * are weighed by their reader, never refused at the door. `body` carries
    * dispatch_id, execution_id, goal, verdict, note, source and judge_reached.
-   * READER: personVerdicts (the run page's "You: …" line and the thread mark).
+   * No writer or reader since the run page went with goal-host; the type stays so earlier
+   * journal lines still load. A person's verdict is now an `outcome` row in records.
    */
   | "verdict"
   /**
@@ -169,6 +170,7 @@ export type ObservationType =
    * the join), `body.status`, `body.recorded`, `body.reason` (upstream's own
    * words, or "unreachable"), `body.upstream`. The verdict is kept either way;
    * this says whether the corpus took it, so "not recorded" outlives a reload.
+   * No writer or reader since the run page went; the type stays so earlier journal lines load.
    */
   | "verdict_delivery"
   /** A person signed in or out on this surface: the user id only, never a credential. */
@@ -308,33 +310,6 @@ function indexFeedback(f: Feedback): void {
   if (list) list.push(f); else feedbackByPanel.set(f.panelId, [f]);
 }
 const observations: Observation[] = [];
-/** The latest upstream answer for each kept verdict, by dispatch and the verdict's observedAt. */
-const deliveries = new Map<string, Observation>();
-function deliveryKey(dispatchId: unknown, verdictAt: unknown): string | null {
-  return typeof dispatchId === "string" && dispatchId.length > 0 && typeof verdictAt === "number" ? `${dispatchId}\u0000${verdictAt}` : null;
-}
-function indexDelivery(o: Observation): void {
-  const key = deliveryKey(o.body?.["dispatch_id"], o.body?.["verdict_at"]);
-  if (!key) return;
-  const prev = deliveries.get(key);
-  if (!prev || o.observedAt >= prev.observedAt) deliveries.set(key, o);
-}
-/** What upstream answered for the verdict kept at `verdictAt` on this run, if an answer was kept. */
-export function verdictDelivery(dispatchId: string, verdictAt: number): Record<string, unknown> | undefined {
-  const key = deliveryKey(dispatchId, verdictAt);
-  return key ? deliveries.get(key)?.body : undefined;
-}
-
-/** Verdict observations by dispatch, replayed from the journal at init so they outlive restarts. */
-const verdictsByDispatch = new Map<string, Observation[]>();
-function indexVerdict(o: Observation): void {
-  const id = o.body?.["dispatch_id"];
-  if (typeof id !== "string" || id.length === 0) return;
-  const list = verdictsByDispatch.get(id);
-  if (list) list.push(o);
-  else verdictsByDispatch.set(id, [o]);
-}
-
 const events: InteractorEvent[] = [];
 const asserts: InteractorAssertion[] = [];
 const attachments: InteractorAttachment[] = [];
@@ -499,8 +474,6 @@ for (const raw of readParticipation("uiPanel_write")) {
 }
 for (const raw of readParticipation("interactorObservation_write")) {
   const o = raw as Observation | null;
-  if (o && o.type === "verdict" && typeof o.observedAt === "number") indexVerdict(o);
-  if (o && o.type === "verdict_delivery" && typeof o.observedAt === "number") indexDelivery(o);
 }
 for (const raw of readParticipation("uiFeedback_write")) {
   const f = raw as Feedback | null;
@@ -568,16 +541,8 @@ export function recordObservation(
   if (exposure || o.type === "form_choice" || o.type === "verdict" || o.type === "surface_intent_refused" || o.type === "verdict_delivery") {
     appendParticipation("interactorObservation_write", entry);
   }
-  if (o.type === "verdict") indexVerdict(entry);
-  if (o.type === "verdict_delivery") indexDelivery(entry);
   emit("observation_recorded", entry);
   return entry;
-}
-
-/** Verdicts recorded on a run, oldest first; or the newest across runs when no id is given. */
-export function personVerdicts(dispatchId?: string, limit = 200): Observation[] {
-  if (dispatchId) return [...(verdictsByDispatch.get(dispatchId) ?? [])];
-  return [...verdictsByDispatch.values()].flat().sort((a, b) => b.observedAt - a.observedAt).slice(0, limit);
 }
 
 export function recentObservations(limit = 50): Observation[] {

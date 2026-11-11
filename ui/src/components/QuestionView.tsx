@@ -17,9 +17,7 @@ import { ComplaintChips } from "./ComplainButton";
 import { answerReaderFor, gapIdForPanel } from "../lib/disposition";
 import { EscalationForm, EscalationOutcome, LocalizationForm, UnreadNote, VerificationForm } from "./ResponseForms";
 import { Rendered } from "./Rendered";
-import { useGap, useWalk } from "../api/queries";
-import { useLiveControls } from "../state/liveControls";
-import { RunQuestion } from "./RunQuestion";
+import { useGap } from "../api/queries";
 import { bodyLead } from "../lib/questionClass";
 
 /** The pin key a question body is planned under. */
@@ -222,6 +220,10 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
         <VerificationForm {...formProps} />
       ) : reader === "localization" ? (
         <LocalizationForm {...formProps} />
+      ) : question.run ? (
+        // A walk step's question (human_input) is answered in the one box above; there is no
+        // second input here (16f-2).
+        question.answered || question.declined ? null : <p className="sf-view-section sf-note sf-muted">Answer in the box above, or type “not now” or “need more”.</p>
       ) : (
         <>
         <form
@@ -300,23 +302,6 @@ export function QuestionView({ questionId }: { questionId: string }): ReactNode 
   if (!question) {
     return <p className="sf-main-empty">{query.isPending ? "Loading…" : "This question is no longer listed."}</p>;
   }
-  // A run's question has one path wherever it is opened: delivered to the waiting run, with
-  // the heartbeat that keeps it waiting. Recording it on the question alone left the run waiting.
-  if (question.run?.linked) return <LinkedRunQuestion key={question.id} question={question} />;
   // Keyed so a different question gets a fresh draft and a fresh held revision.
   return <QuestionCard key={question.id} incoming={question} />;
-}
-
-function LinkedRunQuestion({ question }: { question: Question }): ReactNode {
-  const { paused, intervalMs } = useLiveControls();
-  const dispatchId = question.run?.dispatchId ?? "";
-  const walk = useWalk(dispatchId, { enabled: !paused && dispatchId !== "", intervalMs }).data;
-  return (
-    <article className="sf-question">
-      <p className="sf-note sf-muted">
-        Asked by a run · <a href={`/run/${encodeURIComponent(dispatchId)}`}>open the run</a>
-      </p>
-      <RunQuestion question={question} running={walk?.status === "running"} />
-    </article>
-  );
 }

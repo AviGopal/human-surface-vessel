@@ -5,11 +5,11 @@
  * Through the whole app (index.ts), so refuseForeignOriginWrites runs first as it does live.
  * Identity is a real HTTP stub on 127.0.0.1 (port 0): it authenticates keys that start with
  * "valid-", answers keyId and scopes, and refuses the rest. Every other outbound call
- * (goal-host, discovery, activity-api) is recorded and answered here, so "never reaches
- * goal-host" is read off the record, not assumed.
+ * (discovery and whatever it places) is recorded and answered here, so "reaches nothing"
+ * is read off the record, not assumed.
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { forgetOwnDispatches, restoreNativeGlobals, signedInCookie, testAuth } from "./setup.ts";
+import { restoreNativeGlobals, testAuth } from "./setup.ts";
 
 // First: in one process an earlier file may have left happy-dom or a fetch stub installed (test/setup.ts).
 await restoreNativeGlobals();
@@ -35,13 +35,9 @@ afterAll(() => identity.stop(true));
 
 const outbound: Array<{ url: string; body: Record<string, unknown> }> = [];
 const realFetch = globalThis.fetch;
-// Undo what this file leaves in the one process (test/setup.ts): its fetch stub, and the runs its
-// keyless same-origin /api/run-goal records as this surface's own (src/routes/proxy.ts), on disk
-// under the shared WORKSPACE_ROOT and in the module's cache. A later file that needs that record
-// empty (own-dispatches-backfill) otherwise never sees the backfill run.
-afterAll(async () => {
+// Undo what this file leaves in the one process (test/setup.ts): its fetch stub.
+afterAll(() => {
   globalThis.fetch = realFetch;
-  await forgetOwnDispatches();
 });
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -53,7 +49,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   outbound.push({ url, body });
   const type = String(body["type"] ?? (body["pointer"] as { type?: unknown } | undefined)?.type ?? "");
   if (type === "vesselCapability") return new Response(JSON.stringify({ content: { vessels: [] } }), { status: 200 });
-  if (type === "goalDispatchAsync") return new Response(JSON.stringify({ dispatchId: `d-${outbound.length}`, status: "running" }), { status: 202 });
   return new Response(JSON.stringify({ resolved: true, success: true, body: {} }), { status: 200 });
 }) as typeof fetch;
 
@@ -72,14 +67,10 @@ const WRITES: ReadonlyArray<{ route: string; body: Record<string, unknown> }> = 
     body: { pointer: { type, id: `w-${type}`, title: "t", body: "b", solicitation_id: "s-1", panel_id: "p-1", response_id: "r-1", value: "v", obs_type: "click", event_type: "click", text: "bigger text", pointer: { type: "x" } } },
   })),
   { route: "/api/participation", body: { panel_id: "p-1", panel_revision: 1, response_id: "r-2", kind: "answer", value: "yes" } },
-  { route: "/api/run-goal", body: { goal: "What is 2 + 2?" } },
-  { route: "/api/resolve", body: { type: "poolImpulse_write", dispatchId: "d-x", shape: "note", content: "c" } },
   { route: "/api/discovery/resolve", body: { pointer: { type: "vesselCapability", shape: "x" } } },
-  { route: "/api/grade", body: { execution_id: "e-1", verdict: "reached" } },
   { route: "/api/feedback", body: { panel_id: "region-1", value: "wrong", kind: "wrong" } },
   { route: "/api/observations", body: { obs_type: "click", panel_id: "p-1" } },
   { route: "/api/surface-intent", body: { text: "make the text bigger" } },
-  { route: "/api/calibration/grade", body: { window_id: "w-1", dispatch_id: "d-1", grade: "reached" } },
   { route: "/api/page-frame", body: { source: "<p>x</p>" } },
 ];
 
@@ -127,38 +118,6 @@ describe("every write route names its caller", () => {
     expect(listPanels().some((p) => p.id === "same-origin-panel")).toBe(false);
   });
 
-  test("must-fail: a keyless same-origin /api/resolve of a shape the page does not send is refused", async () => {
-    // In the surface's shape list, but not a shape the page sends: the caller gate refuses it.
-    for (const type of ["vesselCapability", "goal_verification_label_write", "interactorObservation"]) {
-      const r = await post("/api/resolve", { type, dispatchId: "d-x" }, { Origin: HERE });
-      expect({ type, status: r.status }).toEqual({ type, status: 401 });
-      expect(((await r.json()) as { reason?: string }).reason).toBe("keyless_not_allowlisted");
-    }
-    // A write the page does not send, even one the surface forwards: refused.
-    const label = await post("/api/resolve", { type: "goal_verification_label_write", dispatchId: "d-x" }, { Origin: HERE });
-    expect(label.status).toBe(401);
-    // Outside the shape list: refused before any caller is asked, as it always was.
-    const executing = await post("/api/resolve", { type: "goalDispatchAsync", goal: "x" }, { Origin: HERE });
-    expect(executing.status).toBe(403);
-    expect(outbound).toEqual([]);
-  });
-
-  test("must-fail: a valid ApiKey is admitted and named by its validated label on /api/run-goal", async () => {
-    const r = await post("/api/run-goal", { goal: "What is 2 + 2?" }, { Authorization: "ApiKey valid-service-1" });
-    expect(r.status).toBe(202);
-    const sent = outbound.find((o) => o.body["type"] === "goalDispatchAsync");
-    expect(sent?.body["operator"]).toBe("key:svc-key-1");
-  });
-
-  test("must-fail: a browser-supplied operator is ignored on /api/run-goal", async () => {
-    const browser = await post("/api/run-goal", { goal: "What is 2 + 2?", operator: "operator:claude-avi" }, { Origin: HERE, Cookie: await signedInCookie() });
-    expect(browser.status).toBe(202);
-    expect(outbound.filter((o) => o.body["type"] === "goalDispatchAsync").at(-1)?.body["operator"]).toBe("human-surface");
-    const keyed = await post("/api/run-goal", { goal: "What is 2 + 2?", operator: "operator:claude-avi" }, { Authorization: "ApiKey valid-operator-1" });
-    expect(keyed.status).toBe(202);
-    expect(outbound.filter((o) => o.body["type"] === "goalDispatchAsync").at(-1)?.body["operator"]).toBe("key:op-key-1");
-  });
-
   test("must-fail: an invalid key is refused key_rejected", async () => {
     const r = await post("/v2/impulses/resolve", { pointer: { type: "uiPanel_write", id: "bad-key-panel", title: "t", body: "b" } }, { Authorization: "ApiKey not-a-real-key" });
     expect(r.status).toBe(401);
@@ -168,7 +127,7 @@ describe("every write route names its caller", () => {
 
   test("must-fail: identity unreachable refuses every other key, identity_unreachable", async () => {
     process.env.IDENTITY_VESSEL_URL = IDENTITY_DOWN;
-    const r = await post("/api/run-goal", { goal: "What is 2 + 2?" }, { Authorization: "ApiKey valid-during-outage-1" });
+    const r = await post("/v2/impulses/resolve", { pointer: { type: "uiPanel_write", id: "outage-panel", title: "t", body: "b" } }, { Authorization: "ApiKey valid-during-outage-1" });
     expect(r.status).toBe(401);
     const j = (await r.json()) as { reason?: string; error?: string };
     expect(j.reason).toBe("identity_unreachable");
@@ -196,7 +155,7 @@ describe("every write route names its caller", () => {
     const r = await post("/v2/impulses/resolve", { pointer: { type: "uiQuestion" } });
     expect(r.status).toBe(200);
     const before = await refusedCount("key_rejected", "keyed-unknown");
-    await post("/api/run-goal", { goal: "x" }, { Authorization: "ApiKey not-a-real-key" });
+    await post("/api/feedback", { panel_id: "region-1", value: "wrong", kind: "wrong" }, { Authorization: "ApiKey not-a-real-key" });
     expect(await refusedCount("key_rejected", "keyed-unknown")).toBe(before + 1);
   });
 });
@@ -248,55 +207,6 @@ describe("a stored record carries the admitted caller, not its own claim", () =>
     expect(legacy?.["title"]).toBe("t2");
     expect(legacy?.["origin"]).toBeUndefined();
     expect(legacy?.["producer"]).toBeUndefined();
-  });
-});
-
-describe("the browser's reads on /api/resolve are their own list", () => {
-  test("must-fail: the read allowlist holds reads only, and admits them keyless from the page", async () => {
-    const { BROWSER_READ_ALLOWLIST, BROWSER_WRITE_ALLOWLIST } = await import("../src/inbound-auth.ts");
-    const reads = BROWSER_READ_ALLOWLIST.flatMap((e) => e.shapes);
-    expect(reads.sort()).toEqual(["activeDispatches", "goalWalkState"]);
-    expect(reads.some((s) => s.endsWith("_write"))).toBe(false);
-    const resolveWrites = BROWSER_WRITE_ALLOWLIST.find((e) => e.route === "/api/resolve")?.shapes ?? [];
-    expect([...resolveWrites].sort()).toEqual(["poolImpulse_write", "solicitationHeartbeat_write", "solicitationResponse_write"]);
-    for (const type of reads) {
-      const r = await post("/api/resolve", { type, dispatchId: "d-1" }, { Origin: HERE });
-      expect({ type, status: r.status }).toEqual({ type, status: 200 });
-    }
-    // Keyless with no Origin is refused, reads included: the route is gated as a whole.
-    expect((await post("/api/resolve", { type: "goalWalkState", dispatchId: "d-1" })).status).toBe(401);
-  });
-});
-
-/*
- * qa ruling (3): the operator stays "human-surface" for the page (so "Mine" matches), and
- * the admitted caller rides the dispatch's existing tag channel, which goal-host reads into
- * the walk's trace tags (gh 7b048e2 src/index.ts:18639 body.tags, :19111 effectiveTags,
- * :19158 runGoalWithRecovery tags). A body's own caller:* tag is dropped, never forwarded.
- */
-describe("/api/run-goal tags the dispatch with the admitted caller", () => {
-  const lastDispatch = () => outbound.filter((o) => o.body["type"] === "goalDispatchAsync").at(-1)?.body;
-
-  test("must-fail: a keyless same-origin ask is tagged caller:browser-unverified and the person who asked, keeping its operator and its own tags", async () => {
-    const r = await post("/api/run-goal", { goal: "What is 2 + 2?", tags: ["probe:x", "caller:operator:claude-avi"] }, { Origin: HERE, Cookie: await signedInCookie() });
-    expect(r.status).toBe(202);
-    const sent = lastDispatch();
-    expect(sent?.["operator"]).toBe("human-surface");
-    expect(sent?.["tags"]).toEqual(["probe:x", "caller:browser-unverified", "person:user:person-a"]);
-  });
-
-  test("must-fail: a keyless same-origin ask with nobody signed in dispatches nothing and asks for sign-in", async () => {
-    const before = outbound.filter((o) => o.body["type"] === "goalDispatchAsync").length;
-    const r = await post("/api/run-goal", { goal: "What is 2 + 2?" }, { Origin: HERE });
-    expect(r.status).toBe(401);
-    expect(((await r.json()) as { error?: string }).error).toBe("sign_in_required");
-    expect(outbound.filter((o) => o.body["type"] === "goalDispatchAsync").length).toBe(before);
-  });
-
-  test("must-fail: a keyed ask is tagged caller:<validated label>", async () => {
-    const r = await post("/api/run-goal", { goal: "What is 2 + 2?" }, { Authorization: "ApiKey valid-service-5" });
-    expect(r.status).toBe(202);
-    expect(lastDispatch()?.["tags"]).toEqual(["caller:key:svc-key-1"]);
   });
 });
 
