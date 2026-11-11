@@ -375,6 +375,33 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
   });
 });
 
+/** What a row a person wrote names as its writer, to a viewer who has not signed in. */
+const A_PERSON = "a person";
+
+/**
+ * A row a person wrote, read by a viewer who has not signed in, names "a person" as its writer
+ * and not the person's key id: whoever can open the page is not thereby someone the person told
+ * who they are. Which rows are a person's is records' `role`, stamped from the writer's key.
+ */
+function unnamePeople(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(unnamePeople);
+  if (typeof v !== "object" || v === null) return v;
+  const o = Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, unnamePeople(x)]));
+  return o["role"] === "person" && "writer" in o ? { ...o, writer: A_PERSON } : o;
+}
+
+/** A read's answer with every person's writer unnamed; an answer that is not JSON passes as it came. */
+async function unnamed(res: Response): Promise<Response> {
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return new Response(text, { status: res.status, headers: res.headers });
+  }
+  return new Response(JSON.stringify(unnamePeople(body)), { status: res.status, headers: res.headers });
+}
+
 /**
  * A lookup through this node's discovery, which asks its peers itself when it has no producer
  * for a shape. A READ goes under this node's key. A WRITE goes only under the signed-in person's own key,
@@ -394,7 +421,10 @@ proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve
   } catch {
     /* not JSON: forwarded as a read, and discovery answers it */
   }
-  if (!isWritePointerType(type)) return passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin") });
+  if (!isWritePointerType(type)) {
+    const read = await passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin") });
+    return sessionOf(c.req.header("Cookie")) ? read : unnamed(read);
+  }
   const person = sessionOf(c.req.header("Cookie"));
   if (!person?.apiKey) {
     // What the person tried to write is kept even though it was not sent: a refusal must not
