@@ -2108,6 +2108,8 @@ body { overflow: hidden; }
 .sf-reports { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sf-space-3); }
 .sf-report { display: flex; flex-direction: column; gap: var(--sf-space-2); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); min-width: 0; }
 .sf-report-title { margin: 0; font-size: var(--sf-text-sm); font-weight: 600; color: var(--sf-ink); }
+/* A closed details still puts its hidden content in the column, so the card's gap would sit under the title: the open summary's margin is the only space. */
+.sf-report-folded { gap: 0; }
 .sf-report-folded > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: var(--sf-space-2); align-items: baseline; }
 .sf-report-folded[open] > summary { margin-bottom: var(--sf-space-2); }
 .sf-report-count { font-weight: 400; color: var(--sf-ink-3); font-variant-numeric: tabular-nums; }
