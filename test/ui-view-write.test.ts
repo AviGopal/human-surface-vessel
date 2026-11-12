@@ -39,19 +39,20 @@ beforeEach(forgetViews);
 afterAll(forgetViews);
 
 describe("uiView_write", () => {
-  test("with nothing written, the landing draws its default per job: what waits on a person, their asks, then the raw reads folded; nothing reads a shape no one writes", async () => {
+  test("with nothing written, the landing draws its default per job: what waits on a person (questions, checks held for them), their asks, then the raw reads folded; nothing reads a shape no one writes", async () => {
     const r = await read("landing");
     expect(r.status).toBe(200);
     expect(r.json).toMatchObject({ region: "landing", revision: 0, id: "landing@0", notDrawn: null });
     expect(r.json.entries.map((e: any) => [e.pointer.type, e.pointer.shape ?? null])).toEqual([
       ["uiQuestion", null],
+      ["record_read", "gap"],
       ["record_read", "world_changed"],
       ["record_read", "answer"],
       ["record_read", "failure"],
       ["record_read", "outcome"],
     ]);
-    expect(r.json.entries.map((e: any) => e.folded === true)).toEqual([false, false, true, true, true]);
-    expect(r.json.entries[1]).toMatchObject({ newest: true, thread: { newest: true } });
+    expect(r.json.entries.map((e: any) => e.folded === true)).toEqual([false, false, false, true, true, true]);
+    expect(r.json.entries[2]).toMatchObject({ newest: true, thread: { newest: true } });
   });
 
   test("must-fail: a valid view is stored, advances the revision, names its writer, and the page reads it", async () => {
@@ -136,7 +137,7 @@ describe("uiView_write", () => {
     await write({ region: "landing", entries: [load] });
     const u3 = await write({ region: "landing", undo: true });
     expect(u3.json.body.view).toMatchObject({ revision: 2, undoOf: 0 });
-    expect(u3.json.body.view.entries.length).toBe(5);
+    expect(u3.json.body.view.entries.length).toBe(6);
   });
 
   test("must-fail: an identical view is unchanged, whatever its note, and writes no revision", async () => {
@@ -216,7 +217,7 @@ describe("human_surface:ui_view names the view each region draws", () => {
 
   test("with nothing written, the report names the default", async () => {
     expect((await report()).views.landing).toMatchObject({ id: "landing@0", revision: 0, written_by: null, written_at: null, not_drawn: null });
-    expect((await report()).views.landing.entries.length).toBe(5);
+    expect((await report()).views.landing.entries.length).toBe(6);
   });
 
   test("must-fail: after a write and an undo, the report names each revision, its entries and writer", async () => {

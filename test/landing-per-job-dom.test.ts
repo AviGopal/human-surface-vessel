@@ -1,6 +1,6 @@
 /**
- * The default landing is per job (surface-acts-on-shapes-present R.5): what waits on the person,
- * then their asks newest first with their answers, then the raw reads folded and counted. Nothing
+ * The default landing is per job (surface-acts-on-shapes-present R.5): what waits on the person
+ * (questions, then checks held for their verdict), then their asks newest first with their answers, then the raw reads folded and counted. Nothing
  * writes a `health` row, so no health line is drawn: a read nothing writes is a fossil
  * (agf_nq0r50m3h3uu), and it comes back only with a live writer of what it shows.
  *
@@ -20,7 +20,7 @@ const ASKS = [1, 2, 3, 4, 5, 6, 7].map(ask);
 const answerTo = (n: number) => ({ input_refs: [hex(String(n))], text: `Answer to ${n}.`, shape: "answer", seq: 20 + n, t: "2026-11-11T11:56:00.000Z", writer: "described-shape-vessel", role: "described", id: hex(String.fromCharCode(96 + n)) });
 const ANSWERS = [6, 7].map(answerTo);
 const FAILURES = Array.from({ length: 12 }, (_, i) => ({ input_refs: [], shape: "failure", body: `step ${i} failed`, seq: 40 + i, t: "2026-11-11T12:00:00.000Z", writer: "walk-vessel", role: "walk", id: `f${i}`.padEnd(64, "0") }));
-const BY_SHAPE: Record<string, unknown[]> = { world_changed: ASKS, answer: ANSWERS, failure: FAILURES, outcome: [], health: [] };
+const BY_SHAPE: Record<string, unknown[]> = { world_changed: ASKS, answer: ANSWERS, failure: FAILURES, outcome: [], health: [], gap: [] };
 
 const reads: Record<string, unknown>[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -71,15 +71,15 @@ describe("the default landing is per job", () => {
   test("must-fail: needs-you, then the asks, then the raw reads folded and counted", async () => {
     const el = await mount();
     const r = reports(el);
-    expect(r.map((s) => s.getAttribute("aria-label"))).toEqual(["Waiting on you", "What people asked", "What the walk answered", "What failed", "Verdicts and outcomes"]);
-    expect(r.map((s) => s.tagName)).toEqual(["SECTION", "SECTION", "DETAILS", "DETAILS", "DETAILS"]);
-    expect(r.slice(2).map((d) => d.hasAttribute("open"))).toEqual([false, false, false]);
-    expect(r.slice(2).map((d) => d.querySelector("[data-count]")?.getAttribute("data-count"))).toEqual(["2", "12", "0"]);
+    expect(r.map((s) => s.getAttribute("aria-label"))).toEqual(["Waiting on you", "Checks held for you", "What people asked", "What the walk answered", "What failed", "Verdicts and outcomes"]);
+    expect(r.map((s) => s.tagName)).toEqual(["SECTION", "SECTION", "SECTION", "DETAILS", "DETAILS", "DETAILS"]);
+    expect(r.slice(3).map((d) => d.hasAttribute("open"))).toEqual([false, false, false]);
+    expect(r.slice(3).map((d) => d.querySelector("[data-count]")?.getAttribute("data-count"))).toEqual(["2", "12", "0"]);
   });
 
   test("must-fail: the asks are newest first, each with its answer under it", async () => {
     const el = await mount();
-    const asked = reports(el)[1]!;
+    const asked = reports(el)[2]!;
     const top = [...asked.querySelectorAll(".sf-rows > .sf-row")].filter((r) => !r.parentElement!.closest(".sf-thread")).map((r) => r.getAttribute("data-row"));
     expect(top).toEqual([hex("7"), hex("6"), hex("5")]);
     expect([...asked.querySelectorAll("details.sf-earlier")].filter((d) => !d.closest(".sf-thread")).map((d) => d.querySelector("summary")!.textContent)).toEqual(["4 earlier"]);

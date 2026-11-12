@@ -11,7 +11,7 @@
  * guessed (src/row-words.ts): the owner's `shape_description` row for the row's shape, else the
  * entry's `words`; with neither the row shows its shape and time. With `judge: "outcome"`
  * each row offers a person's verdict, outside the fold, written as an outcome row citing it
- * under their own key.
+ * under their own key; when the entry names `words`, only a row holding one of them does.
  * `questions`: each row is a question this surface holds, opened on selection.
  * A folded entry with `strip: {hours}` draws in its summary one bar per hour of the last `hours`,
  * each as tall as the rows read whose `t` falls in it, on that strip's own scale; from the rows
@@ -346,7 +346,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
                   ))}
                 </dl>
               </details>
-              {judge && id ? <Judge rowId={id} graded={entry.graded} reading={reading} /> : null}
+              {judge && id && (entry.words === undefined || entry.words.some((f) => o[f] !== undefined && o[f] !== null && o[f] !== "")) ? <Judge rowId={id} graded={entry.graded} reading={reading} /> : null}
             </div>
             {entry.thread && id ? <Thread entry={entry.thread} rowId={id} reading={reading} /> : null}
           </li>

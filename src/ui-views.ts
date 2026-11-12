@@ -58,7 +58,8 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * the field of the answer that holds its rows, when the rows are not the answer itself.
  * `show` draws only the last n rows, in the order the producer returned them.
  * `judge: "outcome"` offers a person's verdict on each row, written as an outcome row
- * citing it under the person's own key. `empty` is what the entry says when the read answers
+ * citing it under the person's own key; with `words` named, only on a row that holds one of
+ * them, so a row with nothing to judge offers no verdict. `empty` is what the entry says when the read answers
  * with no rows, so an empty read carries its reason rather than a bare "no rows".
  * `words` names the fields that hold a row's words, in order, for a row whose shape has no
  * `shape_description` row declaring them (the owner's declaration comes first); a row with
@@ -130,6 +131,11 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
   landing: {
     entries: [
       { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you", empty: "Nothing is waiting on you." },
+      // A detector's gap that is held for a person carries a `claim`: the person's Right or Wrong on it
+      // is read where holds are lifted. Rows with no claim (older, closed, or other gaps) offer no grade.
+      // The read is every gap row (records filters by equality, not by a field being present); the
+      // newest three are drawn, as with the asks, and the held rows are re-written newest.
+      { pointer: { type: "record_read", shape: "gap" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Checks held for you", empty: "No check is held." },
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
