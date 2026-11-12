@@ -55,34 +55,36 @@ export function useSession() {
 }
 
 /**
- * What the server answers per session: a report goes only under the signed-in person's own key
- * (src/routes/proxy.ts), and a view names a person only to them. A sign-in or sign-out changes
- * those answers, so they are read again at once, not on the next report cycle.
+ * The reads whose answer the server shapes by who is signed in, and only these: a report goes
+ * only under the signed-in person's own key (src/routes/proxy.ts), a view and the questions name
+ * a person only to them (src/unname.ts, src/routes/participation.ts). One list for both hooks, so a
+ * read added here is re-read on sign-in and dropped on sign-out alike. Not here: the render policy
+ * and the gap reads, which the surface makes under its own key whoever is looking.
  */
-const REPORTS = ["report"] as const;
-const VIEWS = ["uiView"] as const;
+export const PER_SESSION: readonly (readonly string[])[] = [["report"], ["uiView"], ["humanQuestions"]];
 
+/** Signing in reads them again at once, not on their next cycle. */
 export function useSignIn() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (key: string) => signInWithKey(key),
     onSuccess: (state) => {
       client.setQueryData(SESSION_KEY, state);
-      void client.invalidateQueries({ queryKey: REPORTS });
-      void client.invalidateQueries({ queryKey: VIEWS });
+      for (const queryKey of PER_SESSION) void client.invalidateQueries({ queryKey: [...queryKey] });
     },
   });
 }
 
-/** Signed out, no report read under the person's key stays on screen: reports are dropped, then read again. */
+/** Signing out drops them at once, so nothing read for the person stays on the page, then reads them again. */
 export function useSignOut() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: signOut,
     onSettled: () => {
+      const before = client.getQueryData<SessionState>(SESSION_KEY);
+      client.setQueryData<SessionState>(SESSION_KEY, { keySignIn: before?.keySignIn ?? true, signedIn: false });
       void client.invalidateQueries({ queryKey: SESSION_KEY });
-      void client.resetQueries({ queryKey: REPORTS });
-      void client.invalidateQueries({ queryKey: VIEWS });
+      for (const queryKey of PER_SESSION) void client.resetQueries({ queryKey: [...queryKey] });
     },
   });
 }

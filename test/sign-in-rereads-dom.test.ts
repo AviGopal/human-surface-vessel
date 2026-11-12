@@ -1,8 +1,9 @@
 /**
  * A report goes through the surface only under the signed-in person's own key (src/routes/proxy.ts):
- * signed out, every report is refused. Signing in reads the reports again at once, so they fill
- * without a reload; signing out drops what was read under the person's key at once, so none of it
- * stays on screen for whoever comes to the page next.
+ * signed out, every report is refused. The questions name who asked only to that person
+ * (src/routes/participation.ts). Signing in reads both again at once, so they fill without a
+ * reload; signing out drops what was read for the person at once, so none of it stays on screen
+ * for whoever comes to the page next.
  *
  * Shape: one node 11-12. A person signed in and the landing stayed on its refusals until they
  * reloaded: the reports were re-read only on their next cycle, a minute on.
@@ -30,6 +31,11 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     signedIn = false;
     return Response.json({ signedIn: false });
   }
+  if (url.endsWith("/api/questions")) {
+    // As participation.ts answers: the person is named only to them.
+    const question = { id: "question-one", revision: 1, title: signedIn ? "Asked by you" : "Asked by a person", body: "Which way?", kind: "question", createdAt: 0, updatedAt: 0, responses: [], answered: false, declined: false, rank: 1 };
+    return Response.json({ resolved: true, success: true, body: { questions: [question] } });
+  }
   if (url.includes("/api/discovery/resolve")) {
     reads++;
     // The live refusal, as proxy.ts sends it signed out.
@@ -48,6 +54,8 @@ const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { Entries } = await import("../ui/src/components/Reports");
 const { SignIn } = await import("../ui/src/components/SignIn");
+const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
+const { QuestionsProvider, useQuestions } = await import("../ui/src/state/questions");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
@@ -71,13 +79,18 @@ async function mount(): Promise<HTMLElement> {
   document.body.appendChild(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // The page's live cadence: a minute, longer than the test, so only the sign-in or sign-out can re-read.
-  const page = React.createElement(React.Fragment, null, React.createElement(SignIn, {}), React.createElement(Entries, { entries: [asks] as never, enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }));
+  const page = React.createElement(React.Fragment, null, React.createElement(SignIn, {}), React.createElement(Questions), React.createElement(Entries, { entries: [asks] as never, enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }));
   await act(async () => {
-    createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, page));
+    createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, page))));
   });
   await settle();
   return el;
 }
+/** The questions as the page holds them, one line each. */
+function Questions(): unknown {
+  return React.createElement("ul", { "data-questions": "" }, useQuestions().ordered.map((q: { id: string; title: string }) => React.createElement("li", { key: q.id }, q.title)));
+}
+const questions = (el: HTMLElement) => [...el.querySelectorAll("[data-questions] li")].map((li) => li.textContent);
 const rows = (el: HTMLElement) => el.querySelectorAll(`.sf-row[data-row="${ASK.id}"]`).length;
 const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement;
 
@@ -103,5 +116,25 @@ describe("signing in or out reads the reports again at once", () => {
     await act(async () => button(el, "Sign out").click());
     await settle();
     expect(rows(el)).toBe(0);
+  });
+
+  test("must-fail: the questions read for nobody give way to the person's own as soon as they sign in", async () => {
+    signedIn = false;
+    const el = await mount();
+    expect(questions(el)).toEqual(["Asked by a person"]);
+    await act(async () => button(el, "Sign in").click());
+    await act(async () => setValue(el.querySelector('input[name="key"]') as HTMLInputElement, "person-key-abc123"));
+    await act(async () => (el.querySelector("form") as HTMLFormElement).requestSubmit());
+    await settle();
+    expect(questions(el)).toEqual(["Asked by you"]);
+  });
+
+  test("must-fail: signing out takes the questions that named the person off the page at once", async () => {
+    signedIn = true;
+    const el = await mount();
+    expect(questions(el)).toEqual(["Asked by you"]);
+    await act(async () => button(el, "Sign out").click());
+    await settle();
+    expect(questions(el)).not.toContain("Asked by you");
   });
 });

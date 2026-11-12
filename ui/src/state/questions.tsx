@@ -17,6 +17,7 @@ import { FOLDED, classifyQuestion } from "../lib/questionClass";
 import { useLiveControls } from "./liveControls";
 import { streamAwareInterval, useStreamConnected } from "./stream";
 import { useRecheck } from "./recheck";
+import { useSession } from "../api/session";
 
 export interface QuestionGroup {
   readonly kind: string;
@@ -134,10 +135,14 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
   const { paused, intervalMs } = useLiveControls();
   const live = useStreamConnected();
   const recheck = useRecheck();
+  // Who the questions were read for: they name a person only to that person, so the read is theirs.
+  // Not read before the page knows who is looking, so a signed-in load reads them once, as that person.
+  const session = useSession();
+  const who = session.data?.person?.userId ?? null;
   const query = useQuery({
-    queryKey: ["humanQuestions"],
+    queryKey: ["humanQuestions", who],
     queryFn: fetchQuestions,
-    enabled: !paused,
+    enabled: !paused && session.isFetched,
     refetchInterval: !paused ? streamAwareInterval(Math.max(intervalMs, recheck.questionsMinMs), live, recheck.streamFallbackMs) : false,
     refetchOnWindowFocus: false,
     retry: false,
@@ -146,6 +151,15 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
   const [ranking, setRanking] = useState<Ranking | null>(null);
   const [classes, setClasses] = useState<QuestionClasses | null>(null);
   const [acceptedTicks, setAcceptedTicks] = useState(0);
+  // The questions on screen were accepted for one person. When who is looking changes, they are
+  // dropped before this render paints, and the next read for the new person is taken as it comes.
+  const [shownFor, setShownFor] = useState(who);
+  if (shownFor !== who) {
+    setShownFor(who);
+    setSnapshot(null);
+    setRanking(null);
+    setClasses(null);
+  }
 
   useEffect(() => {
     if (snapshot === null && query.data) {
