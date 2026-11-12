@@ -34,6 +34,8 @@ const IDENTITY_DOWN = "http://127.0.0.1:9";
 afterAll(() => identity.stop(true));
 
 const outbound: Array<{ url: string; body: Record<string, unknown> }> = [];
+// The credential each outbound call carried, in order: whose key a forwarded lookup went under.
+const sentAuth: Array<string | null> = [];
 const realFetch = globalThis.fetch;
 // Undo what this file leaves in the one process (test/setup.ts): its fetch stub.
 afterAll(() => {
@@ -47,6 +49,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   // A call through discovery carries its pointer; record what was asked for.
   body = (body["pointer"] as Record<string, unknown> | undefined) ?? body;
   outbound.push({ url, body });
+  sentAuth.push(new Headers(init?.headers as HeadersInit | undefined).get("authorization"));
   const type = String(body["type"] ?? (body["pointer"] as { type?: unknown } | undefined)?.type ?? "");
   if (type === "vesselCapability") return new Response(JSON.stringify({ content: { vessels: [] } }), { status: 200 });
   return new Response(JSON.stringify({ resolved: true, success: true, body: {} }), { status: 200 });
@@ -54,7 +57,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 const { app } = await import("../src/index.ts");
 const { listPanels } = await import("../src/store.ts");
-const { PORT } = await import("../src/config.ts");
+const { PORT, METABOB_API_KEY } = await import("../src/config.ts");
+const { openSession } = await import("../src/person-session.ts");
 
 const HERE = `http://127.0.0.1:${PORT}`;
 const json = { "content-type": "application/json" };
@@ -79,6 +83,7 @@ const post = (route: string, body: unknown, headers: Record<string, string> = {}
 beforeEach(() => {
   process.env.IDENTITY_VESSEL_URL = IDENTITY_UP;
   outbound.length = 0;
+  sentAuth.length = 0;
 });
 
 /** The refusal count /health reports for a reason and caller hint (0 before the seam existed). */
@@ -237,5 +242,51 @@ describe("/api/page-frame names its caller", () => {
     // The frame keeps the caller it was admitted as, like every other browser write.
     const { __frameCallerForTests } = await import("../src/page-frame.ts");
     expect(__frameCallerForTests(id as string)).toEqual({ origin: "browser-unverified", label: "browser-unverified" });
+  });
+});
+
+describe("a lookup through the surface goes only under the caller's own credential", () => {
+  // The tools that run commands or change git: a lookup of any of these under the node's key would run
+  // it as the node. And any other type, a made-up one included: the rule does not depend on the shape.
+  const TOOLS = ["shell", "bash", "bounded_shell", "git_worktree", "walk_trees_reclaim", "git_land"];
+  const ANY = [...TOOLS, "vesselCapability", "record_read", "not_a_known_shape", ""];
+  const lookup = (type: string, headers: Record<string, string> = {}) => post("/api/discovery/resolve", { pointer: { type, command: "id" } }, headers);
+  const personCookie = (apiKey: string) =>
+    openSession({ apiKey, userId: "key-person-1", orgId: null, email: null, name: null, expiresAt: Date.now() + 60_000 }).cookie.split(";")[0]!;
+
+  test("must-fail: with no session and the page's own Origin, nothing is sent, whatever the shape", async () => {
+    for (const type of ANY) {
+      const r = await lookup(type, { Origin: HERE });
+      expect({ type, status: r.status }).toEqual({ type, status: 401 });
+      expect(((await r.json()) as { error?: string }).error).toBe("sign_in_required");
+    }
+    expect(outbound).toEqual([]);
+  });
+
+  test("must-fail: a forged Origin with no session sends nothing", async () => {
+    for (const type of TOOLS) {
+      const own = await lookup(type, { Origin: HERE, Host: new URL(HERE).host });
+      expect(own.status).toBe(401);
+      const foreign = await lookup(type, { Origin: "http://evil.example" });
+      expect(foreign.status).toBe(403);
+    }
+    expect(outbound).toEqual([]);
+  });
+
+  test("must-fail: a signed-in person's lookup goes under the person's key, never the node's", async () => {
+    const cookie = personCookie("valid-person-key-1");
+    for (const type of ["vesselCapability", "bash"]) {
+      const r = await lookup(type, { Origin: HERE, Cookie: cookie });
+      expect(r.status).toBe(200);
+    }
+    expect(sentAuth.length).toBe(2);
+    expect(sentAuth.every((a) => a === "ApiKey valid-person-key-1")).toBe(true);
+    expect(sentAuth.some((a) => a === `ApiKey ${METABOB_API_KEY}`)).toBe(false);
+  });
+
+  test("a keyed caller's lookup goes under the key it presented, never the node's", async () => {
+    const r = await lookup("vesselCapability", { Authorization: "ApiKey valid-service-key-1" });
+    expect(r.status).toBe(200);
+    expect(sentAuth).toEqual(["ApiKey valid-service-key-1"]);
   });
 });

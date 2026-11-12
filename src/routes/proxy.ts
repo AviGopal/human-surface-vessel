@@ -378,10 +378,12 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
 
 /**
  * A lookup through this node's discovery, which asks its peers itself when it has no producer
- * for a shape. A READ goes under this node's key. A WRITE goes only under the signed-in person's own key,
- * so the row records the person as its writer; with no person signed in with a key, it is
- * refused here and nothing is sent. A write under the node's key would be the node writing,
- * whatever the row claims, so the page never sends one.
+ * for a shape. It goes only under the caller's OWN credential: the key a service caller presented
+ * (admitted above, so identity has validated it), or the signed-in person's own key. Identity and
+ * the producers' PERMISSIONS then decide what that caller may resolve, read or write. With neither,
+ * it is refused here and nothing is sent: this vessel's own key never carries a caller's lookup,
+ * since a lookup under it would be the node asking, whatever the caller is (a shell or git tool
+ * among them).
  */
 proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve"), async (c) => {
   const rawBody = await rawBodyOf(c);
@@ -393,21 +395,22 @@ proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve
     const t = (pointer as { type?: unknown } | null)?.type;
     type = typeof t === "string" ? t : "";
   } catch {
-    /* not JSON: forwarded as a read, and discovery answers it */
-  }
-  if (!isWritePointerType(type)) {
-    const read = await passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin") });
-    return unnamed(read, sessionOf(c.req.header("Cookie"))?.userId ?? null);
+    /* not JSON: sent as it came, and discovery answers it */
   }
   const person = sessionOf(c.req.header("Cookie"));
-  if (!person?.apiKey) {
+  const presented = c.req.header("Authorization")?.trim();
+  const authorization = presented ? presented : person?.apiKey ? `ApiKey ${person.apiKey}` : null;
+  if (authorization === null) {
     // What the person tried to write is kept even though it was not sent: a refusal must not
     // lose what the person said (user ruling 10-17). Most often the surface restarted and the
     // in-memory sign-in went with it.
-    recordObservation({ type: "person_write", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { recorded: false, reason: "sign_in_required", pointer } });
-    return c.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, 401, corsHeaders(c.req.header("Origin")));
+    if (isWritePointerType(type)) {
+      recordObservation({ type: "person_write", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { recorded: false, reason: "sign_in_required", pointer } });
+    }
+    return c.json({ error: "sign_in_required", reason: "a lookup is sent only under the caller's own key: sign in" }, 401, corsHeaders(c.req.header("Origin")));
   }
-  return passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin"), authorization: `ApiKey ${person.apiKey}` });
+  const sent = await passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin"), authorization });
+  return isWritePointerType(type) ? sent : unnamed(sent, person?.userId ?? null);
 });
 
 // ─── a person signed in on this surface (src/person-session.ts) ──────────────

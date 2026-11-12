@@ -16,6 +16,11 @@ import { isOwnOrigin, proxyRouter, refuseForeignOriginWrites } from "../src/rout
 // assertions) against a parent that lacks this export.
 const servedHostnames = (...a: Parameters<typeof proxy.servedHostnames>) => proxy.servedHostnames(...a);
 import { PORT } from "../src/config.ts";
+import { openSession } from "../src/person-session.ts";
+
+/** A signed-in person's cookie: a lookup goes only under a person's own key. */
+const personCookie = () =>
+  openSession({ apiKey: "guard-person-key", userId: "key-guard-1", orgId: null, email: null, name: null, expiresAt: Date.now() + 60_000 }).cookie.split(";")[0]!;
 
 const upstream: { url: string; body: string }[] = [];
 // First: in one process an earlier file may have left happy-dom or a fetch stub installed (test/setup.ts).
@@ -61,8 +66,12 @@ describe("refuseForeignOriginWrites", () => {
   });
 
   test("the surface's own page and keyed service callers (no Origin) pass; a keyless one does not", async () => {
+    // The page passes the Origin gate (not 403); its lookup then goes only under a signed-in person's key.
     const page = await post("/api/discovery/resolve", '{"pointer":{"type":"record_read","shape":"answer"}}', { "Content-Type": "application/json", Origin: own });
-    expect(page.status).toBe(200);
+    expect(page.status).toBe(401);
+    expect(upstream.length).toBe(0);
+    const signedIn = await post("/api/discovery/resolve", '{"pointer":{"type":"record_read","shape":"answer"}}', { "Content-Type": "application/json", Origin: own, Cookie: personCookie() });
+    expect(signedIn.status).toBe(200);
     const service = await post("/api/discovery/resolve", '{"pointer":{"type":"record_read","shape":"answer"}}', { "Content-Type": "application/json", ...testAuth() });
     expect(service.status).toBe(200);
     // Every write route now names its caller (src/inbound-auth.ts): no key and no Origin is refused.
@@ -77,7 +86,7 @@ describe("refuseForeignOriginWrites", () => {
 
   test("must-fail: a node publishing under another port prefix accepts its own page", async () => {
     // compose2 publishes 8310 as 26310; its page's writes were refused (10-17).
-    const page = await post("/api/discovery/resolve", '{"pointer":{"type":"record_read","shape":"answer"}}', { "Content-Type": "application/json", Origin: "http://127.0.0.1:26310" }, "http://127.0.0.1:26310");
+    const page = await post("/api/discovery/resolve", '{"pointer":{"type":"record_read","shape":"answer"}}', { "Content-Type": "application/json", Origin: "http://127.0.0.1:26310", Cookie: personCookie() }, "http://127.0.0.1:26310");
     expect(page.status).toBe(200);
   });
 

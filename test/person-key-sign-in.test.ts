@@ -92,7 +92,7 @@ describe("signing in with a person's own key", () => {
   });
 });
 
-describe("the page's discovery path: reads under the node's key, writes under the person's", () => {
+describe("the page's discovery path: every lookup under the person's own key, none under the node's", () => {
   test("must-fail: signed out, a write is refused and nothing is sent", async () => {
     const res = await post("/api/discovery/resolve", { pointer: OUTCOME });
     expect(res.status).toBe(401);
@@ -128,11 +128,14 @@ describe("the page's discovery path: reads under the node's key, writes under th
     expect(toDiscovery().map((c) => c.auth)).toEqual([`ApiKey ${PERSON_KEY}`]);
   });
 
-  test("a read goes under the node's key, signed in or not", async () => {
+  test("must-fail: a read goes under the person's key signed in, and signed out nothing is sent", async () => {
     const cookie = cookieOf(await post("/api/session/key", { key: PERSON_KEY }));
     calls.length = 0;
-    await post("/api/discovery/resolve", { pointer: { type: "record_read", shape: "answer" } }, cookie);
-    await post("/api/discovery/resolve", { pointer: { type: "record_read", shape: "answer" } });
-    expect(toDiscovery().map((c) => c.auth)).toEqual([`ApiKey ${NODE_KEY}`, `ApiKey ${NODE_KEY}`]);
+    expect((await post("/api/discovery/resolve", { pointer: { type: "record_read", shape: "answer" } }, cookie)).status).toBe(200);
+    const signedOut = await post("/api/discovery/resolve", { pointer: { type: "record_read", shape: "answer" } });
+    expect(signedOut.status).toBe(401);
+    expect(await signedOut.json()).toMatchObject({ error: "sign_in_required" });
+    expect(toDiscovery().map((c) => c.auth)).toEqual([`ApiKey ${PERSON_KEY}`]);
+    expect(toDiscovery().some((c) => c.auth === `ApiKey ${NODE_KEY}`)).toBe(false);
   });
 });
