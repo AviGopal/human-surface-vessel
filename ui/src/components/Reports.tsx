@@ -96,6 +96,13 @@ export function fieldText(v: unknown): string {
 type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number | null } | { state: "refused"; reason: string } | { state: "signedOut" };
 
 const SIGN_IN_TO_JUDGE = "Sign in with your key to give a verdict.";
+/** What a read refused for want of a sign-in says: on the title's line, so a refused entry is one line high. */
+const SIGN_IN_TO_SEE = "sign in to see";
+
+/** Why a read drew nothing, in a person's words where they can act on it, else the producer's. */
+function Unanswered({ a, className }: { a: Extract<ReportAnswer, { ok: false }>; className: string }): ReactNode {
+  return a.signIn ? <p className={className} data-sign-in-to-see="">Sign in to see this.</p> : <p className={className}>no answer: {a.reason}</p>;
+}
 
 /** Whether any entry, or its thread, offers a verdict: the page says how to sign in once, not under every row. */
 function offersVerdicts(entries: readonly ViewEntry[]): boolean {
@@ -122,7 +129,7 @@ function SystemGrade({ graded, rowId, reading }: { graded: NonNullable<ViewEntry
       {!a ? (
         <p className="sf-muted sf-row-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>
       ) : !a.ok ? (
-        <p className="sf-muted sf-row-note">no answer: {a.reason}</p>
+        <Unanswered a={a} className="sf-muted sf-row-note" />
       ) : !got || "missing" in got || got.rows.length === 0 ? (
         <p className="sf-muted sf-row-note">The system has not graded this.</p>
       ) : (
@@ -307,7 +314,7 @@ function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; re
       {!a ? (
         <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>
       ) : !a.ok ? (
-        <p className="sf-muted sf-report-note">no answer: {a.reason}</p>
+        <Unanswered a={a} className="sf-muted sf-report-note" />
       ) : (
         <Drawn entry={entry} answer={a.answer} reading={reading} />
       )}
@@ -524,6 +531,7 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
   const a: ReportAnswer | undefined = q.data;
   let inner: ReactNode;
   if (!a) inner = <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>;
+  else if (!a.ok && a.signIn) inner = null;
   else if (!a.ok) inner = <p className="sf-muted sf-report-note">no answer: {a.reason}</p>;
   else inner = <Drawn entry={entry} answer={a.answer} reading={reading} />;
   if (entry.folded) {
@@ -541,7 +549,7 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
           {entry.strip && got && "total" in got ? (
             <Strip rows={[...got.earlier, ...got.rows]} hours={entry.strip.hours} last={typeof pointer["last"] === "number" ? (pointer["last"] as number) : undefined} />
           ) : null}
-          {a && !a.ok ? <span className="sf-report-count" data-no-answer="">no answer</span> : null}
+          {a && !a.ok ? a.signIn ? <span className="sf-report-count" data-sign-in-to-see="">{SIGN_IN_TO_SEE}</span> : <span className="sf-report-count" data-no-answer="">no answer</span> : null}
         </summary>
         {inner}
       </details>
@@ -549,7 +557,10 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
   }
   return (
     <section className="sf-report" data-report={pointer.type} data-form={entry.form} aria-label={title}>
-      <h2 className="sf-report-title">{title}</h2>
+      <h2 className="sf-report-title">
+        {title}
+        {a && !a.ok && a.signIn ? <span className="sf-report-count" data-sign-in-to-see="">{SIGN_IN_TO_SEE}</span> : null}
+      </h2>
       {inner}
     </section>
   );

@@ -2163,7 +2163,9 @@ body { overflow: hidden; }
 .sf-strip-wrap { display: inline-flex; align-items: flex-start; gap: var(--sf-space-2); margin-left: auto; align-self: center; flex: none; }
 .sf-strip-plot { display: inline-flex; flex-direction: column; }
 .sf-strip-axis { display: flex; justify-content: space-between; font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); line-height: 1.2; }
-.sf-report-name > .sf-report-count { margin-left: var(--sf-space-2); }
+/* A folded title's summary is a flex row with its own gap; an open entry's heading is a line of words. */
+.sf-report-name > .sf-report-count,
+h2.sf-report-title > .sf-report-count { margin-left: var(--sf-space-2); }
 .sf-strip { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; border-bottom: 1px solid var(--sf-rule-strong); }
 .sf-strip-bar { display: block; width: 4px; background: var(--sf-ink-3); border-radius: 1px 1px 0 0; }
 /* One width for every caption, so the strips of every folded read line up whatever their numbers. */

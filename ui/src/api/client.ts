@@ -272,7 +272,12 @@ export function writeComplaint(text: string, about: string | null): Promise<RowW
 }
 
 /** A report's answer, or why there is none. `answer` is what the producer returned, uninterpreted. */
-export type ReportAnswer = { readonly ok: true; readonly shape: string; readonly answer: unknown } | { readonly ok: false; readonly reason: string };
+/**
+ * `signIn` marks the one refusal a person can act on: the surface sends a lookup only under the
+ * signed-in person's own key (src/routes/proxy.ts), and with no one signed in it answers 401
+ * `sign_in_required`. The page says "sign in" for it, in a person's words, not the refusal's.
+ */
+export type ReportAnswer = { readonly ok: true; readonly shape: string; readonly answer: unknown } | { readonly ok: false; readonly reason: string; readonly signIn?: true };
 
 /**
  * One report, resolved by shape through discovery (the surface's own passthrough), so
@@ -298,6 +303,7 @@ export async function fetchReport(pointer: ReportPointer): Promise<ReportAnswer>
     const parts = [r["error"], r["reason"], r["detail"], r["note"]].filter((x): x is string => typeof x === "string" && x.length > 0);
     return parts.length ? [...new Set(parts)].join(": ") : null;
   };
+  if (res.status === 401 && body["error"] === "sign_in_required") return { ok: false, reason: said(body) ?? "sign in", signIn: true };
   if (!res.ok) return { ok: false, reason: said(body) ?? `no answer (${res.status})` };
   const content = body["content"];
   if (typeof content === "object" && content !== null && "error" in content) return { ok: false, reason: said(content) ?? "refused" };
