@@ -60,6 +60,21 @@ describe("signing in with a key", () => {
     await act(async () => (el.querySelector("form") as HTMLFormElement).requestSubmit());
     await settle();
     expect(posts).toEqual([{ url: "/api/session/key", body: { key: "person-key-abc123" } }]);
-    expect(el.querySelector('[data-signed-in="true"]')?.textContent).toContain("key_person_1");
+    expect(el.querySelector('[data-signed-in="true"]')?.textContent).toContain("Signed in");
+  });
+
+  test("must-fail: signed in with a key, the bar says signed in, not the key id; which key is one hover away", async () => {
+    signedIn = true;
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => {
+      createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(SignIn, {})));
+    });
+    await settle();
+    const who = el.querySelector('[data-signed-in="true"] .sf-signin-who') as HTMLElement;
+    expect(who.textContent).toMatch(/^Signed in · until /);
+    expect(el.textContent).not.toContain("key_person_1");
+    expect(who.title).toBe("key_person_1");
   });
 });

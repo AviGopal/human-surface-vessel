@@ -1496,7 +1496,10 @@ body { overflow: hidden; }
 }
 .sf-ask-suggest .sf-chips { margin: 0; }
 .sf-ask-bar .sf-button-primary { flex: 0 0 auto; align-self: stretch; max-height: 2.75rem; }
-.sf-top-controls { display: flex; align-items: center; gap: var(--sf-space-2); flex: 0 0 auto; min-height: 2.5rem; }
+/* Shrinks rather than run past a phone's width: signed in, the bar holds who and Sign out as well. */
+.sf-top-controls { display: flex; align-items: center; gap: var(--sf-space-2); flex: 0 1 auto; min-width: 0; min-height: 2.5rem; }
+/* Only who is signed in gives way; the buttons keep their words on one line. */
+.sf-top-controls .sf-button { flex: none; white-space: nowrap; }
 .sf-live-dot {
   display: inline-block;
   width: 0.5rem;
@@ -2060,8 +2063,9 @@ body { overflow: hidden; }
 .sf-awaiting-grade { font-size: var(--sf-text-xs); text-decoration: underline; }
 
 /* A person signed in on this surface: who, until when, and the two-field form when signed out. */
-.sf-signin { position: relative; display: inline-flex; align-items: center; gap: var(--sf-space-2); }
-.sf-signin-who { font-size: var(--sf-text-sm); color: var(--sf-ink-2); white-space: nowrap; }
+.sf-signin { position: relative; display: inline-flex; align-items: center; gap: var(--sf-space-2); min-width: 0; }
+/* One line, cut short at the end rather than widening the bar; the whole of it is in its title. */
+.sf-signin-who { font-size: var(--sf-text-sm); color: var(--sf-ink-2); white-space: nowrap; min-width: 0; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
 .sf-signin-form { position: absolute; top: calc(100% + var(--sf-space-1)); right: 0; z-index: 20; display: grid; gap: var(--sf-space-2); min-width: 16rem; padding: var(--sf-space-3); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-md); box-shadow: 0 4px 16px rgb(0 0 0 / 0.08); }
 .sf-signin-form input { font: inherit; padding: var(--sf-space-1) var(--sf-space-2); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); }
 .sf-signin-error { margin: 0; font-size: var(--sf-text-sm); color: var(--sf-not-reached); }

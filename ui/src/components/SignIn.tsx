@@ -28,10 +28,12 @@ export function SignIn({ onSignedIn, openSignal = 0 }: { onSignedIn?: () => void
   if (!state?.keySignIn) return null;
 
   if (state.signedIn && state.person) {
-    const who = state.person.name ?? state.person.email ?? `Signed in (${state.person.userId})`;
+    // A key sign-in carries no name: the words say signed in, and which key is one hover away
+    // (a person may hold more than one), not a key id on the bar.
+    const who = state.person.name ?? state.person.email ?? "Signed in";
     return (
       <span className="sf-signin" data-signed-in="true">
-        <span className="sf-signin-who" title={state.person.email ?? undefined}>
+        <span className="sf-signin-who" title={state.person.email ?? state.person.userId}>
           {who} · until {until(state.person.expiresAt)}
         </span>
         <button type="button" className="sf-button sf-button-quiet" onClick={() => signOut.mutate()}>
