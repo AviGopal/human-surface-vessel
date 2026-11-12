@@ -217,9 +217,12 @@ function when(t: unknown): string | null {
   return Number.isNaN(d.getTime()) ? t : d.toLocaleString(undefined, WHEN);
 }
 
-/** An instant as an ISO string, and an identifier as a long run of hex or a UUID: what a value is, never which field holds it. */
+/**
+ * An instant as an ISO string, and an identifier as a long run of hex with a letter in it, or a
+ * UUID: what a value is, never which field holds it. A run of digits alone is a number.
+ */
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
-const HEX_ID = /^(?:[0-9a-f]{16,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/;
+const HEX_ID = /^(?:(?=\d*[a-f])[0-9a-f]{16,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/;
 
 /** An id drawn as a short mark: the whole id is the element's text, so selecting it copies all of it; the style clips it. */
 function ShortId({ id }: { id: string }): ReactNode {

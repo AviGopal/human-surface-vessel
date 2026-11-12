@@ -503,14 +503,6 @@ proxyRouter.get("/api/page-frame/:id", (c) => {
   });
 });
 
-// ─── gap threads (browser read) ─────────────────────────────────────────────
-
-/** For tests: drop the cached join. */
-
-/** The judged result as the page names it: plain strings only, nothing else kept. */
-
-/** Verdicts kept on a run (or the newest across runs), for the run page and the thread mark. */
-
 // ─── interface gaps (browser read) ──────────────────────────────────────────
 
 /**

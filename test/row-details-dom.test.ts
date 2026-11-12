@@ -2,7 +2,7 @@
  * A row's opened details draw each value by what it is, not as raw text: an instant in the reader's
  * zone with the exact value on hover; an id as a short mark whose text is still the whole id
  * (selecting it copies it; the style clips it, measured in the rendered check); several ids as
- * their count, folded over their marks; an empty list as "none". Anything else is its text, so details still holds every field in full.
+ * their count, folded over their marks; an empty list as "none"; a long run of digits alone stays a number. Anything else is its text, so details still holds every field in full.
  *
  * Shape: one node 11-11. Opening "details" under an ask showed "2026-11-11T16:34:47.891Z", a
  * 64-character id and an empty "input refs" as they are stored; a walk's answer listed 112 ids,
@@ -17,10 +17,10 @@ import { teardownDom, trackRoot } from "./setup.ts";
 
 const ID = "b".repeat(64);
 const REFS = ["c", "d", "e", "f", "a"].map((c) => c.repeat(64));
-const ROW = { input_refs: [], shape: "world_changed", what: "Find the most interesting thing.", seq: 9510, t: "2026-11-11T16:34:47.891Z", writer: "a person", role: "person", id: ID };
-const ONE = { input_refs: [ID], shape: "outcome", r: 1, seq: 9530, t: "2026-11-11T16:41:00.000Z", writer: "a person", role: "person", id: "8".repeat(64) };
+const ROW = { input_refs: [], shape: "world_changed", what: "Find the most interesting thing.", seq: 9510, t: "2026-11-11T16:34:47.891Z", writer: "a person", role: "person", id: ID, nonce: "12345678901234567890" };
+const ONE = { input_refs: [ID], shape: "outcome", r: 1, seq: 9530, t: "2026-11-11T16:41:00.000Z", writer: "a person", role: "person", id: `${"8".repeat(63)}a` };
 const CALL = "0be3a2f5-291b-4ef9-bacd-9e83e318c8e1";
-const REPLY = { input_refs: REFS, call_id: CALL, shape: "answer", text: "Here it is.", seq: 9520, t: "2026-11-11T16:40:00.000Z", writer: "described-shape-vessel", role: "described", id: "9".repeat(64) };
+const REPLY = { input_refs: REFS, call_id: CALL, shape: "answer", text: "Here it is.", seq: 9520, t: "2026-11-11T16:40:00.000Z", writer: "described-shape-vessel", role: "described", id: `${"9".repeat(63)}a` };
 
 globalThis.fetch = (async (input: RequestInfo | URL) => {
   if (String(input).includes("/api/discovery/resolve")) return Response.json([ROW, REPLY, ONE]);
@@ -100,5 +100,11 @@ describe("a row's opened details", () => {
     expect(f.get("seq")!.textContent).toBe("9510");
     expect(f.get("what")!.textContent).toBe(ROW.what);
     expect(f.get("shape")!.textContent).toBe("world_changed");
+  });
+
+  test("must-fail: a long run of digits alone is a number, not an id", async () => {
+    const nonce = opened(await mount(), ID).get("nonce")!;
+    expect(nonce.textContent).toBe("12345678901234567890");
+    expect(nonce.querySelector("code")).toBeNull();
   });
 });
