@@ -54,18 +54,35 @@ export function useSession() {
   return useQuery({ queryKey: SESSION_KEY, queryFn: fetchSession, refetchInterval: recheck.sessionMs, refetchOnWindowFocus: true, retry: false });
 }
 
+/**
+ * What the server answers per session: a report goes only under the signed-in person's own key
+ * (src/routes/proxy.ts), and a view names a person only to them. A sign-in or sign-out changes
+ * those answers, so they are read again at once, not on the next report cycle.
+ */
+const REPORTS = ["report"] as const;
+const VIEWS = ["uiView"] as const;
+
 export function useSignIn() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (key: string) => signInWithKey(key),
-    onSuccess: (state) => client.setQueryData(SESSION_KEY, state),
+    onSuccess: (state) => {
+      client.setQueryData(SESSION_KEY, state);
+      void client.invalidateQueries({ queryKey: REPORTS });
+      void client.invalidateQueries({ queryKey: VIEWS });
+    },
   });
 }
 
+/** Signed out, no report read under the person's key stays on screen: reports are dropped, then read again. */
 export function useSignOut() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: signOut,
-    onSettled: () => void client.invalidateQueries({ queryKey: SESSION_KEY }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: SESSION_KEY });
+      void client.resetQueries({ queryKey: REPORTS });
+      void client.invalidateQueries({ queryKey: VIEWS });
+    },
   });
 }
