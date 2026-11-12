@@ -2112,6 +2112,8 @@ body { overflow: hidden; }
 .sf-report-folded { gap: 0; }
 .sf-report-folded > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: var(--sf-space-2); align-items: baseline; }
 .sf-report-folded[open] > summary { margin-bottom: var(--sf-space-2); }
+/* Opened with nothing under it, the summary keeps no space for what is not there. */
+.sf-report-folded[open] > summary:last-child { margin-bottom: 0; }
 .sf-report-count { font-weight: 400; color: var(--sf-ink-3); font-variant-numeric: tabular-nums; }
 .sf-report-fields { margin: 0; display: flex; flex-direction: column; gap: var(--sf-space-1); }
 .sf-report-field { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: var(--sf-space-3); font-size: var(--sf-text-sm); }

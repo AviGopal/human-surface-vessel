@@ -418,9 +418,11 @@ function emptyReasonOf(answer: unknown): string | null {
 /**
  * An entry with no rows: the view's own words first, when it declares them, with the producer's
  * reason folded under "why"; else the producer's reason; else a plain note. The reason is never
- * dropped, only placed behind the plain sentence.
+ * dropped, only placed behind the plain sentence. A folded entry's summary already counts its rows
+ * ("0 in all"), so with nothing else to say it opens on nothing rather than say so twice.
  */
-function Empty({ said, why }: { said: string | undefined; why: string | null }): ReactNode {
+function Empty({ said, why, counted }: { said: string | undefined; why: string | null; counted: boolean }): ReactNode {
+  if (said === undefined && why === null && counted) return null;
   if (said === undefined) return <p className="sf-muted sf-report-note">{why ?? "answered with no rows"}</p>;
   return (
     <>
@@ -440,7 +442,7 @@ function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; 
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
-  if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} />;
+  if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} counted={entry.folded === true} />;
   const draw = (rows: readonly unknown[]): ReactNode =>
     entry.form === "questions" ? <Questions rows={rows} onOpen={reading.onOpenQuestion} /> : <Rows rows={rows} entry={entry} reading={reading} />;
   return (
