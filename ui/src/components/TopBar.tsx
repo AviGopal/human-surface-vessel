@@ -112,6 +112,9 @@ export function TopBar({
   const { recordReceipt } = useQuestions();
   const onScreen = useOnScreen();
   const [echo, setEcho] = useState<string | null>(null);
+  // A send that failed, held against the echo that says so: that echo is drawn as a failure, with what
+  // the system itself said, when it said something, on hover.
+  const [failed, setFailed] = useState<{ echo: string; said?: string } | null>(null);
   // The ask just written, followed under its echo by the rows that cite it, while that echo stands.
   const [asked, setAsked] = useState<{ id: string; echo: string } | null>(null);
   const [reshaped, setReshaped] = useState<DispatchOutcome | null>(null);
@@ -227,6 +230,7 @@ export function TopBar({
               return;
             }
             setEcho(`Not sent: ${got.reason}`);
+            setFailed({ echo: `Not sent: ${got.reason}`, said: got.said });
           },
         },
       );
@@ -286,6 +290,7 @@ export function TopBar({
           return;
         }
         setEcho(`Not sent: ${got.reason}`);
+        setFailed({ echo: `Not sent: ${got.reason}`, said: got.said });
       },
     });
   };
@@ -399,8 +404,8 @@ export function TopBar({
         </div>
       ) : null}
       {echo && !answer.isError ? (
-        <div className="sf-outcome-line" data-tone="ok" role="status">
-          <span>{echo}</span>
+        <div className="sf-outcome-line" data-tone={failed?.echo === echo ? "error" : "ok"} role="status">
+          <span title={failed?.echo === echo ? failed.said : undefined}>{echo}</span>
           <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => setEcho(null)}>
             ×
           </button>

@@ -93,7 +93,7 @@ export function fieldText(v: unknown): string {
   return plain(v);
 }
 
-type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number | null } | { state: "refused"; reason: string } | { state: "signedOut" };
+type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number | null } | { state: "refused"; reason: string; said?: string } | { state: "signedOut" };
 
 const SIGN_IN_TO_JUDGE = "Sign in with your key to give a verdict.";
 /** What a read refused for want of a sign-in says: on the title's line, so a refused entry is one line high. */
@@ -165,7 +165,7 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
       void client.invalidateQueries({ queryKey: SESSION_KEY });
       return;
     }
-    setVerdict(got.ok ? { state: "done", r, seq: got.seq } : { state: "refused", reason: got.reason });
+    setVerdict(got.ok ? { state: "done", r, seq: got.seq } : { state: "refused", reason: got.reason, said: got.said });
   };
   return (
     <>
@@ -188,7 +188,7 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
         </p>
       ) : null}
       {verdict.state === "refused" ? (
-        <p className="sf-row-note" role="alert">
+        <p className="sf-row-note" role="alert" title={verdict.said}>
           Not recorded: {verdict.reason}
         </p>
       ) : null}

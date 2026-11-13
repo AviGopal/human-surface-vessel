@@ -217,7 +217,15 @@ export type ViewEntry = {
 };
 
 /** What a person's row write came to: its record number and id, or why it was not recorded. */
-export type RowWrite = { ok: true; seq: number | null; id: string | null } | { ok: false; reason: string; signedOut?: true };
+export type RowWrite = { ok: true; seq: number | null; id: string | null } | { ok: false; reason: string; signedOut?: true; said?: string };
+
+/**
+ * A gateway's statuses: the write went out but no producer answered it (a link between machines
+ * was down, or the owner was not up). The person is told so in words; what the gateway said is
+ * kept, one hover away.
+ */
+const UNREACHED = new Set([502, 503, 504]);
+export const NOT_REACHED = "the system couldn't be reached just now. Try again.";
 
 /**
  * A row a person writes to records, through discovery. The surface sends it under the
@@ -234,12 +242,13 @@ async function writeRow(row: Record<string, unknown>): Promise<RowWrite> {
       body: JSON.stringify({ pointer: { type: "record_write", row } }),
     });
   } catch {
-    return { ok: false, reason: "the surface did not answer" };
+    return { ok: false, reason: NOT_REACHED, said: "the surface did not answer" };
   }
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const inner = (body["body"] ?? body["content"] ?? body) as Record<string, unknown>;
   const said = [body["error"], body["reason"], body["detail"], inner?.["error"], inner?.["detail"]].filter((x): x is string => typeof x === "string" && x.length > 0);
   if (res.status === 401 && body["error"] === "sign_in_required") return { ok: false, reason: "you are no longer signed in", signedOut: true };
+  if (UNREACHED.has(res.status)) return { ok: false, reason: NOT_REACHED, said: [...new Set(said)].join(": ") || `status ${res.status}` };
   if (!res.ok || said.length > 0 || body["success"] === false) return { ok: false, reason: [...new Set(said)].join(": ") || `not recorded (${res.status})` };
   return {
     ok: true,
