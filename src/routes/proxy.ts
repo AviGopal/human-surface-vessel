@@ -115,12 +115,12 @@ function allowedOrigin(): string {
  * REALIGNMENT §9.0 still requires route auth on every vessel.
  */
 /**
- * Whether the session cookie is marked Secure: always when the deployment's public address is
- * https (the person reaches it over TLS, whatever scheme the proxy used to reach this process),
- * and otherwise when this request arrived over TLS.
+ * Whether the session cookie is marked Secure: always when the deployment states a public address
+ * (it is https only, so the person reaches it over TLS, whatever scheme the proxy used to reach
+ * this process), and otherwise when this request arrived over TLS.
  */
 function cookieSecure(c: Context): boolean {
-  return publicOrigin()?.startsWith("https:") === true || arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c));
+  return publicOrigin() !== null || arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c));
 }
 
 export const refuseForeignOriginWrites: MiddlewareHandler = async (c, next) => {

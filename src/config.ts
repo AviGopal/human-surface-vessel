@@ -38,22 +38,33 @@ export const SERVER_IDLE_TIMEOUT_S = 30;
 export const VESSEL_ENDPOINT = process.env.VESSEL_ENDPOINT ?? `http://127.0.0.1:${PORT}`;
 
 /**
- * The deployment's public address, as a full origin (scheme://host[:port]), when it serves this
+ * The deployment's public address, as an https origin (https://host[:port]), when it serves this
  * surface to people outside the machine through a TLS proxy: a bootstrap value (law 1 lets
  * bootstrap carry a deployment's address), set only by a deployment that publishes one, and
- * unset everywhere else. Unset or not an http(s) origin, it is null and nothing changes. Read
- * where it is used, from the environment the unit was started with, which does not change while
- * the process runs.
+ * unset everywhere else. It is used only when it is exactly an https origin as written: a value
+ * with a path, query, user, trailing slash or plain http is refused whole, never trimmed to an
+ * origin, and with it refused nothing changes. Read where it is used, from the environment the
+ * unit was started with, which does not change while the process runs. /health shows it, and why
+ * a stated value is refused, so a wrong value can be seen without reading the unit.
  */
-export function publicOrigin(env: Record<string, string | undefined> = process.env): string | null {
+export function publicOriginRefusal(env: Record<string, string | undefined> = process.env): string | null {
   const raw = env.HUMAN_SURFACE_PUBLIC_URL?.trim();
   if (!raw) return null;
   try {
     const u = new URL(raw);
-    return u.protocol === "https:" || u.protocol === "http:" ? u.origin : null;
-  } catch {
+    if (u.protocol !== "https:") return "not https";
+    // A name a certificate can be issued to, matched as written: no wildcard, no bracketed address.
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/.test(u.hostname)) return "not a host name";
+    if (raw !== u.origin) return "not exactly an origin: https://host[:port], with no path, query, user or trailing slash";
     return null;
+  } catch {
+    return "not a URL";
   }
+}
+
+export function publicOrigin(env: Record<string, string | undefined> = process.env): string | null {
+  const raw = env.HUMAN_SURFACE_PUBLIC_URL?.trim();
+  return raw && publicOriginRefusal(env) === null ? raw : null;
 }
 
 export const VESSEL_ID =

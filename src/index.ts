@@ -24,6 +24,8 @@ import {
   VESSEL_ID,
   VESSEL_NAME,
   config,
+  publicOrigin,
+  publicOriginRefusal,
   SERVER_IDLE_TIMEOUT_S,
 } from "./config.ts";
 import {
@@ -112,6 +114,10 @@ app.get("/health", (c) =>
     discovery: discoveryStatus(),
     // Write refusals by reason and (unverified) caller hint; see inbound-auth.ts.
     inbound_auth: inboundAuthCounts(),
+    // The public address this surface accepts as its own page (null: none stated, or refused),
+    // and why a stated one is refused, so a wrong value is seen here rather than in the unit.
+    public_origin: publicOrigin(),
+    ...((refused) => (refused ? { public_origin_refused: refused } : {}))(publicOriginRefusal()),
   }),
 );
 
@@ -324,6 +330,8 @@ app.post("/resolve", async (c) => {
  * test process with discovery. The unit runs this file directly, so it is main.
  */
 function startServer(): void {
+  const refused = publicOriginRefusal();
+  if (refused) console.error(`[human-surface-vessel] HUMAN_SURFACE_PUBLIC_URL is ignored: ${refused}`);
   const server = Bun.serve({
     port: PORT,
     hostname: HOST,

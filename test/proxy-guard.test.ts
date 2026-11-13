@@ -15,7 +15,7 @@ import { isOwnOrigin, proxyRouter, refuseForeignOriginWrites } from "../src/rout
 // Read through the namespace so the request-level checks below still run (and fail on their own
 // assertions) against a parent that lacks this export.
 const servedHostnames = (...a: Parameters<typeof proxy.servedHostnames>) => proxy.servedHostnames(...a);
-import { PORT } from "../src/config.ts";
+import { PORT, publicOrigin, publicOriginRefusal } from "../src/config.ts";
 import { openSession } from "../src/person-session.ts";
 
 /** A signed-in person's cookie: a lookup goes only under a person's own key. */
@@ -152,6 +152,27 @@ describe("the deployment's public address (one stated origin, matched whole)", (
       if (stated) process.env.HUMAN_SURFACE_PUBLIC_URL = stated;
       const res = await post("/api/discovery/resolve", write, { "Content-Type": "text/plain", Origin: PUBLIC, "X-Forwarded-Host": "surface.example", "X-Forwarded-Proto": "https" }, own);
       expect({ stated: stated ?? null, status: res.status }).toEqual({ stated: stated ?? null, status: 403 });
+    }
+    expect(upstream.length).toBe(0);
+  });
+
+  test("must-fail: only an https origin exactly as written is used; plain http, a path, query, user or trailing slash is refused whole, with its reason", () => {
+    const at = (v: string) => ({ HUMAN_SURFACE_PUBLIC_URL: v });
+    expect(publicOrigin(at(PUBLIC))).toBe(PUBLIC);
+    expect(publicOrigin(at("https://surface.example:8443"))).toBe("https://surface.example:8443");
+    for (const v of ["http://surface.example", "https://surface.example/app", "https://u@surface.example", "https://surface.example/", "https://surface.example?x=1", "https://*.example", "surface.example"]) {
+      expect({ v, origin: publicOrigin(at(v)) }).toEqual({ v, origin: null });
+      expect({ v, refused: typeof publicOriginRefusal(at(v)) }).toEqual({ v, refused: "string" });
+    }
+    expect(publicOriginRefusal(at("http://surface.example"))).toBe("not https");
+    expect(publicOriginRefusal({})).toBeNull();
+  });
+
+  test("must-fail: a stated plain-http or path-carrying address opens nothing: its page is refused as foreign", async () => {
+    for (const [stated, origin] of [["http://surface.example", "http://surface.example"], ["https://surface.example/app", PUBLIC], ["https://u@surface.example", PUBLIC]]) {
+      process.env.HUMAN_SURFACE_PUBLIC_URL = stated;
+      const res = await post("/api/discovery/resolve", write, { "Content-Type": "text/plain", Origin: origin }, origin.replace("https:", "http:"));
+      expect({ stated, status: res.status }).toEqual({ stated, status: 403 });
     }
     expect(upstream.length).toBe(0);
   });
