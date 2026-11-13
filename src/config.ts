@@ -34,9 +34,6 @@ export const HOST = process.env.HOST ?? "0.0.0.0";
  */
 export const SERVER_IDLE_TIMEOUT_S = 30;
 
-/** The self-address this vessel registers with discovery (its unit sets it). */
-export const VESSEL_ENDPOINT = process.env.VESSEL_ENDPOINT ?? `http://127.0.0.1:${PORT}`;
-
 /**
  * The deployment's public address, as an https origin (https://host[:port]), when it serves this
  * surface to people outside the machine through a TLS proxy: a bootstrap value (law 1 lets

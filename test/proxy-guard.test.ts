@@ -107,11 +107,19 @@ describe("refuseForeignOriginWrites", () => {
     expect(upstream.length).toBe(0);
   });
 
-  test("a name the vessel serves is accepted on any port; the served names come from its configuration", () => {
+  test("a name the vessel serves is accepted on any port; the served names are localhost and a named bind", () => {
     expect(isOwnOrigin("http://localhost:26310", "http://localhost:26310/api/discovery/resolve")).toBe(true);
-    expect(servedHostnames("http://surface.lan:8310", "0.0.0.0")).toEqual(new Set(["localhost", "surface.lan"]));
-    expect(isOwnOrigin("http://surface.lan:26310", "http://surface.lan:26310/x", servedHostnames("http://surface.lan:8310"))).toBe(true);
-    expect(isOwnOrigin("http://surface.lan:26310", "http://surface.lan:26310/x", servedHostnames())).toBe(false);
+    expect(servedHostnames("0.0.0.0")).toEqual(new Set(["localhost"]));
+    expect(servedHostnames("surface.lan")).toEqual(new Set(["localhost", "surface.lan"]));
+    expect(isOwnOrigin("http://surface.lan:26310", "http://surface.lan:26310/x", servedHostnames("surface.lan"), null)).toBe(true);
+    expect(isOwnOrigin("http://surface.lan:26310", "http://surface.lan:26310/x", servedHostnames("0.0.0.0"), null)).toBe(false);
+  });
+
+  test("must-fail: a public name is one fact: no second address (VESSEL_ENDPOINT) makes a name this vessel's own, over any scheme", async () => {
+    const config = await import("../src/config.ts");
+    expect("VESSEL_ENDPOINT" in config).toBe(false);
+    // the public name over plain http, with no public address stated, is not this vessel's page
+    expect(isOwnOrigin("http://surface.example", "http://surface.example/x", servedHostnames("0.0.0.0"), null)).toBe(false);
   });
 
   test("isOwnOrigin compares the Origin with the address the request was sent to", () => {

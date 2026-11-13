@@ -35,7 +35,6 @@ import {
   METABOB_API_KEY,
   PORT,
   RESOLVE_PATH,
-  VESSEL_ENDPOINT,
   publicOrigin,
 } from "../config.ts";
 
@@ -45,17 +44,14 @@ function isIpLiteral(hostname: string): boolean {
 }
 
 /**
- * The names this vessel serves under, from its own configuration: the
- * registered self-address, the bind when it names a host, and `localhost`
- * (which no other site can be served from).
+ * The names this vessel serves under, over any scheme: `localhost` (which no
+ * other site can be served from) and the bind when it names a host. A name
+ * people reach from outside is not one of these: it is the deployment's public
+ * address, accepted only as that exact https origin (publicOrigin, config.ts),
+ * so one stated fact decides it and plain http on the same name never passes.
  */
-export function servedHostnames(endpoint = VESSEL_ENDPOINT, bind = HOST): ReadonlySet<string> {
+export function servedHostnames(bind = HOST): ReadonlySet<string> {
   const names = new Set<string>(["localhost"]);
-  try {
-    names.add(new URL(endpoint).hostname);
-  } catch {
-    /* no registered address */
-  }
   if (bind && bind !== "0.0.0.0" && bind !== "::") names.add(bind);
   return names;
 }
