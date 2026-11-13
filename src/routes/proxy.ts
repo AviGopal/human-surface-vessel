@@ -36,6 +36,7 @@ import {
   PORT,
   RESOLVE_PATH,
   VESSEL_ENDPOINT,
+  publicOrigin,
 } from "../config.ts";
 
 /** An IP literal: a name no other site can point at this vessel. */
@@ -75,11 +76,15 @@ export function servedHostnames(endpoint = VESSEL_ENDPOINT, bind = HOST): Readon
  * evil.example. So the name must be an IP literal, which cannot be re-pointed,
  * or one this vessel serves.
  */
-export function isOwnOrigin(requestOrigin: string, requestUrl: string, served: ReadonlySet<string> = servedHostnames()): boolean {
+export function isOwnOrigin(requestOrigin: string, requestUrl: string, served: ReadonlySet<string> = servedHostnames(), published: string | null = publicOrigin()): boolean {
   try {
     const o = new URL(requestOrigin);
     if (o.protocol !== "http:" && o.protocol !== "https:") return false;
     if (o.host !== new URL(requestUrl).host) return false;
+    // The deployment's public address, when it states one: that exact origin, scheme and port
+    // included, so the same name over plain http is not it. The request's host is the Host the
+    // proxy passed on; no X-Forwarded-* header is read.
+    if (published !== null && o.origin === published) return true;
     return isIpLiteral(o.hostname) || served.has(o.hostname);
   } catch {
     return false; // malformed, or the literal "null" a sandboxed or file:// page sends
@@ -109,6 +114,15 @@ function allowedOrigin(): string {
  * Origin and are unaffected. This is defence in depth, not authentication:
  * REALIGNMENT §9.0 still requires route auth on every vessel.
  */
+/**
+ * Whether the session cookie is marked Secure: always when the deployment's public address is
+ * https (the person reaches it over TLS, whatever scheme the proxy used to reach this process),
+ * and otherwise when this request arrived over TLS.
+ */
+function cookieSecure(c: Context): boolean {
+  return publicOrigin()?.startsWith("https:") === true || arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c));
+}
+
 export const refuseForeignOriginWrites: MiddlewareHandler = async (c, next) => {
   const method = c.req.method;
   if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
@@ -448,7 +462,7 @@ proxyRouter.post("/api/session/key", requireCaller("/api/session/key"), async (c
     if (result.status === 401 || result.status === 403) noteLoginFailure();
     return c.json({ error: result.error }, result.status as 401);
   }
-  const { cookie } = openSession(result.session, Date.now(), arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c)));
+  const { cookie } = openSession(result.session, Date.now(), cookieSecure(c));
   recordObservation({ type: "person_session", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { event: "signed_in", user_id: result.session.userId, with: "key" } });
   return c.json({ signedIn: true, person: viewOf(result.session) }, 200, { "Set-Cookie": cookie });
 });
@@ -456,7 +470,7 @@ proxyRouter.post("/api/session/key", requireCaller("/api/session/key"), async (c
 proxyRouter.post("/api/session/logout", requireCaller("/api/session/logout"), (c) => {
   if (!fromOwnPage(c)) return c.json({ error: "sign-out is accepted only from this surface's page" }, 403);
   const person = sessionOf(c.req.header("Cookie"));
-  const cleared = closeSession(c.req.header("Cookie"), arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c)));
+  const cleared = closeSession(c.req.header("Cookie"), cookieSecure(c));
   if (person) recordObservation({ type: "person_session", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { event: "signed_out", user_id: person.userId } });
   return c.json({ signedIn: false }, 200, { "Set-Cookie": cleared });
 });

@@ -37,6 +37,25 @@ export const SERVER_IDLE_TIMEOUT_S = 30;
 /** The self-address this vessel registers with discovery (its unit sets it). */
 export const VESSEL_ENDPOINT = process.env.VESSEL_ENDPOINT ?? `http://127.0.0.1:${PORT}`;
 
+/**
+ * The deployment's public address, as a full origin (scheme://host[:port]), when it serves this
+ * surface to people outside the machine through a TLS proxy: a bootstrap value (law 1 lets
+ * bootstrap carry a deployment's address), set only by a deployment that publishes one, and
+ * unset everywhere else. Unset or not an http(s) origin, it is null and nothing changes. Read
+ * where it is used, from the environment the unit was started with, which does not change while
+ * the process runs.
+ */
+export function publicOrigin(env: Record<string, string | undefined> = process.env): string | null {
+  const raw = env.HUMAN_SURFACE_PUBLIC_URL?.trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.origin : null;
+  } catch {
+    return null;
+  }
+}
+
 export const VESSEL_ID =
   process.env.HUMAN_SURFACE_VESSEL_ID ?? process.env.VESSEL_ID ?? "human-surface-vessel";
 export const VESSEL_NAME = "human-surface-vessel";

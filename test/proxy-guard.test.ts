@@ -124,6 +124,48 @@ describe("refuseForeignOriginWrites", () => {
   });
 });
 
+describe("the deployment's public address (one stated origin, matched whole)", () => {
+  const PUBLIC = "https://surface.example";
+  const write = '{"pointer":{"type":"record_write","row":{"shape":"world_changed","what":"x","input_refs":[]}}}';
+  afterEach(() => { delete process.env.HUMAN_SURFACE_PUBLIC_URL; });
+
+  test("must-fail: the public page, behind the proxy (Host passed on, plain http to this process), passes the Origin gate", async () => {
+    process.env.HUMAN_SURFACE_PUBLIC_URL = PUBLIC;
+    const res = await post("/api/discovery/resolve", write, { "Content-Type": "application/json", Origin: PUBLIC }, "http://surface.example");
+    expect(res.status).not.toBe(403);
+  });
+
+  test("the same name over plain http, a foreign page, and a rebinding page are refused", async () => {
+    process.env.HUMAN_SURFACE_PUBLIC_URL = PUBLIC;
+    for (const origin of ["http://surface.example", "https://evil.example"]) {
+      const res = await post("/api/discovery/resolve", write, { "Content-Type": "text/plain", Origin: origin }, "http://surface.example");
+      expect({ origin, status: res.status }).toEqual({ origin, status: 403 });
+    }
+    // rebinding: the attacker's name re-pointed here, so Host and Origin are both the attacker's
+    const rebound = await post("/api/discovery/resolve", write, { "Content-Type": "text/plain", Origin: "https://evil.example" }, "https://evil.example");
+    expect(rebound.status).toBe(403);
+    expect(upstream.length).toBe(0);
+  });
+
+  test("an X-Forwarded-Host naming the public address is not read: with none stated, or sent to another host, it is refused", async () => {
+    for (const stated of [undefined, PUBLIC]) {
+      if (stated) process.env.HUMAN_SURFACE_PUBLIC_URL = stated;
+      const res = await post("/api/discovery/resolve", write, { "Content-Type": "text/plain", Origin: PUBLIC, "X-Forwarded-Host": "surface.example", "X-Forwarded-Proto": "https" }, own);
+      expect({ stated: stated ?? null, status: res.status }).toEqual({ stated: stated ?? null, status: 403 });
+    }
+    expect(upstream.length).toBe(0);
+  });
+
+  test("isOwnOrigin: the stated origin matches only whole (scheme, host and port); unset, nothing changes", () => {
+    const url = "http://surface.example/api/x";
+    expect(isOwnOrigin(PUBLIC, url, new Set(["localhost"]), PUBLIC)).toBe(true);
+    expect(isOwnOrigin("http://surface.example", url, new Set(["localhost"]), PUBLIC)).toBe(false);
+    expect(isOwnOrigin("https://surface.example:8443", "http://surface.example:8443/x", new Set(["localhost"]), PUBLIC)).toBe(false);
+    expect(isOwnOrigin(PUBLIC, url, new Set(["localhost"]), null)).toBe(false);
+    expect(isOwnOrigin("http://127.0.0.1:26310", "http://127.0.0.1:26310/x", new Set(["localhost"]), null)).toBe(true);
+  });
+});
+
 describe("fetchGap", () => {
   test("absence is the route's {gap:null}; any other 404 is an error, not 'gone'", async () => {
     const { fetchGap } = await import("../ui/src/api/client.ts");

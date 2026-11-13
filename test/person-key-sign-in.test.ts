@@ -7,7 +7,7 @@
  *
  * The verdict row is the form the walk's fold counts: {shape:"outcome", r, input_refs:[answer id]}.
  */
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { restoreNativeGlobals } from "./setup.ts";
 await restoreNativeGlobals();
 import { Hono } from "hono";
@@ -137,5 +137,28 @@ describe("the page's discovery path: every lookup under the person's own key, no
     expect(await signedOut.json()).toMatchObject({ error: "sign_in_required" });
     expect(toDiscovery().map((c) => c.auth)).toEqual([`ApiKey ${PERSON_KEY}`]);
     expect(toDiscovery().some((c) => c.auth === `ApiKey ${NODE_KEY}`)).toBe(false);
+  });
+});
+
+describe("a deployment that states a public https address", () => {
+  const PUBLIC = "https://surface.example";
+  afterEach(() => { delete process.env.HUMAN_SURFACE_PUBLIC_URL; });
+
+  test("must-fail: signing in from the public page behind the proxy's plain http sets a Secure, host-only cookie", async () => {
+    process.env.HUMAN_SURFACE_PUBLIC_URL = PUBLIC;
+    // The proxy passes the public Host on and reaches this process over plain http.
+    const res = await app.request("http://surface.example/api/session/key", {
+      method: "POST", headers: { "content-type": "application/json", Origin: PUBLIC }, body: JSON.stringify({ key: PERSON_KEY }),
+    });
+    expect(res.status).toBe(200);
+    const set = res.headers.get("Set-Cookie") ?? "";
+    expect(set).toMatch(/; HttpOnly; SameSite=Strict; Path=\/; Max-Age=\d+; Secure$/);
+    expect(set).not.toMatch(/Domain=/i);
+  });
+
+  test("with no public address stated, a plain-http sign-in cookie is as before (not Secure)", async () => {
+    const res = await post("/api/session/key", { key: PERSON_KEY });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Set-Cookie") ?? "").not.toContain("Secure");
   });
 });
