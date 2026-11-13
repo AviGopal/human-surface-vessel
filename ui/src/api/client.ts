@@ -222,7 +222,7 @@ export type RowWrite = { ok: true; seq: number | null; id: string | null } | { o
 /**
  * A gateway's statuses: the write went out but no producer answered it (a link between machines
  * was down, or the owner was not up). The person is told so in words; what the gateway said is
- * kept, one hover away.
+ * kept, one tap away under "why".
  */
 const UNREACHED = new Set([502, 503, 504]);
 export const NOT_REACHED = "the system couldn't be reached.";

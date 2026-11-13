@@ -23,7 +23,7 @@ import { useQuestions } from "../state/questions";
 import { SignIn } from "./SignIn";
 import { SESSION_KEY } from "../api/session";
 import { useLimits } from "../state/limits";
-import { Entries } from "./Reports";
+import { Entries, Said } from "./Reports";
 
 
 /** The echo for a reply delivered to a waiting run. */
@@ -113,7 +113,7 @@ export function TopBar({
   const onScreen = useOnScreen();
   const [echo, setEcho] = useState<string | null>(null);
   // A send that failed, held against the echo that says so: that echo is drawn as a failure, with what
-  // the system itself said, when it said something, on hover.
+  // the system itself said, when it said something, under "why".
   const [failed, setFailed] = useState<{ echo: string; said?: string } | null>(null);
   // The ask just written, followed under its echo by the rows that cite it, while that echo stands.
   const [asked, setAsked] = useState<{ id: string; echo: string } | null>(null);
@@ -405,7 +405,10 @@ export function TopBar({
       ) : null}
       {echo && !answer.isError ? (
         <div className="sf-outcome-line" data-tone={failed?.echo === echo ? "error" : "ok"} role="status">
-          <span title={failed?.echo === echo ? failed.said : undefined}>{echo}</span>
+          <div className="sf-outcome-said">
+            <span>{echo}</span>
+            {failed?.echo === echo ? <Said said={failed.said} /> : null}
+          </div>
           <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={() => setEcho(null)}>
             ×
           </button>

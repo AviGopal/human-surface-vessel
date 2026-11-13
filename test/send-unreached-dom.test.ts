@@ -1,7 +1,7 @@
 /**
  * A send that no producer answered (a gateway's 502, 503 or 504: a link between machines down,
  * or the owner not up) tells the person so in plain words, with the ask kept in the box; what
- * the system itself said is one hover away. A producer's own refusal keeps its words.
+ * the system itself said is one tap away under "why". A producer's own refusal keeps its words.
  *
  * Shape: the hub surface 11-13. An ask came back "Not sent: ingress proxy failed: failed to
  * connect via relay with status NO_RESERVATION".
@@ -96,13 +96,17 @@ async function typeInBox(el: HTMLElement, text: string): Promise<void> {
 const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement | undefined;
 
 describe("a send nothing answered", () => {
-  test("must-fail: says in plain words it could not reach the system, keeps the ask, and holds the system's words on hover", async () => {
+  test("must-fail: says in plain words it could not reach the system, keeps the ask, and holds the system's words one tap away", async () => {
     const el = await mount();
     await typeInBox(el, "What time is it in Lisbon?");
     const line = el.querySelector(".sf-outcome-line span") as HTMLElement;
     expect(line.textContent).toBe("Not sent: the system couldn't be reached.");
-    expect(el.textContent).not.toContain("NO_RESERVATION");
-    expect(line.title).toBe(LINK);
+    // What the system said is one tap away under "why", not a hover a touch screen cannot make.
+    const why = line.closest(".sf-outcome-line")!.querySelector("details[data-said]") as HTMLDetailsElement;
+    expect(why.querySelector("summary")!.textContent).toBe("why");
+    expect(why.querySelector("p")!.textContent).toBe(LINK);
+    // Folded: the line itself carries only the plain words.
+    expect(why.open).toBe(false);
     // Drawn as a failure, not in the colour of a send that went.
     expect(line.closest(".sf-outcome-line")!.getAttribute("data-tone")).toBe("error");
     expect((el.querySelector("textarea") as HTMLTextAreaElement).value).toBe("What time is it in Lisbon?");

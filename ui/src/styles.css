@@ -1537,6 +1537,12 @@ body { overflow: hidden; }
 .sf-outcome-line[data-tone="warn"] { background: var(--sf-waiting-bg); }
 .sf-outcome-line[data-tone="ok"] { background: var(--sf-reached-bg); }
 .sf-outcome-line .sf-chip, .sf-outcome-unparsed { margin-left: var(--sf-space-2); }
+/* "why" sits after the words on their line (a failed send, a refused verdict); opened, what the system said takes a line of its own. */
+.sf-outcome-said { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sf-space-2); min-width: 0; }
+.sf-outcome-said > details[open] { flex-basis: 100%; }
+/* A refused verdict's note keeps its own line under the buttons; its words and "why" share it. */
+.sf-row-judge > .sf-outcome-said { flex-basis: 100%; }
+.sf-outcome-said > .sf-row-note { flex-basis: auto; }
 .sf-icon-button {
   font: inherit;
   font-size: var(--sf-text-lg);

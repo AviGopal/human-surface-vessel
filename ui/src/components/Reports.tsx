@@ -150,6 +150,17 @@ function SystemGrade({ graded, rowId, reading }: { graded: NonNullable<ViewEntry
   );
 }
 
+/** What the system itself said of a write it did not take, one tap away under "why": a title is out of reach on a touch screen. */
+export function Said({ said }: { said: string | undefined }): ReactNode {
+  if (!said) return null;
+  return (
+    <details className="sf-row-details" data-said="">
+      <summary>why</summary>
+      <p className="sf-muted sf-report-note">{said}</p>
+    </details>
+  );
+}
+
 function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["graded"]; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
   const session = useSession();
   const client = useQueryClient();
@@ -188,9 +199,10 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
         </p>
       ) : null}
       {verdict.state === "refused" ? (
-        <p className="sf-row-note" role="alert" title={verdict.said}>
-          Not recorded: {verdict.reason}
-        </p>
+        <div className="sf-outcome-said" role="alert">
+          <p className="sf-row-note">Not recorded: {verdict.reason}</p>
+          <Said said={verdict.said} />
+        </div>
       ) : null}
     </div>
     {verdict.state === "done" && graded ? <SystemGrade graded={graded} rowId={rowId} reading={reading} /> : null}
