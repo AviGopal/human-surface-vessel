@@ -100,7 +100,7 @@ describe("a send nothing answered", () => {
     const el = await mount();
     await typeInBox(el, "What time is it in Lisbon?");
     const line = el.querySelector(".sf-outcome-line span") as HTMLElement;
-    expect(line.textContent).toBe("Not sent: the system couldn't be reached just now. Try again.");
+    expect(line.textContent).toBe("Not sent: the system couldn't be reached.");
     expect(el.textContent).not.toContain("NO_RESERVATION");
     expect(line.title).toBe(LINK);
     // Drawn as a failure, not in the colour of a send that went.
@@ -112,7 +112,7 @@ describe("a send nothing answered", () => {
     ANSWER = () => { throw new TypeError("network"); };
     const el = await mount();
     await typeInBox(el, "What time is it in Lisbon?");
-    expect(el.querySelector(".sf-outcome-line span")!.textContent).toBe("Not sent: the system couldn't be reached just now. Try again.");
+    expect(el.querySelector(".sf-outcome-line span")!.textContent).toBe("Not sent: the system couldn't be reached.");
   });
 
   test("must-fail: a producer's own refusal keeps its words, drawn as a failure", async () => {

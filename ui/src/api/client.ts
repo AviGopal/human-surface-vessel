@@ -225,7 +225,7 @@ export type RowWrite = { ok: true; seq: number | null; id: string | null } | { o
  * kept, one hover away.
  */
 const UNREACHED = new Set([502, 503, 504]);
-export const NOT_REACHED = "the system couldn't be reached just now. Try again.";
+export const NOT_REACHED = "the system couldn't be reached.";
 
 /**
  * A row a person writes to records, through discovery. The surface sends it under the
