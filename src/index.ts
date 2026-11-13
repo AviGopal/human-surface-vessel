@@ -16,7 +16,7 @@ import { getRenderPolicy } from "./store.ts";
  *   - register flat with discovery, re-registering as its own heartbeat
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   DISCOVERY_SHAPES,
   HOST,
@@ -38,7 +38,7 @@ import { inboundAuthCounts } from "./inbound-auth.ts";
 import { sessionOf } from "./person-session.ts";
 import { unnamePeople } from "./unname.ts";
 import { participationRouter } from "./routes/participation.ts";
-import { corsHeaders, listedShapes, proxyRouter, refuseForeignOriginWrites } from "./routes/proxy.ts";
+import { cookieSecure, corsHeaders, listedShapes, proxyRouter, refuseForeignOriginWrites } from "./routes/proxy.ts";
 import {
   counts,
   listPanels,
@@ -268,11 +268,12 @@ async function serveUiFile(pathname: string): Promise<Response> {
 }
 
 /** The shell starts a frame session if the browser has none (src/page-frame.ts). */
-async function shell(c: { req: { header: (n: string) => string | undefined } }, pathname: string): Promise<Response> {
+async function shell(c: Context, pathname: string): Promise<Response> {
   const res = await serveUiFile(pathname);
   if (frameSessionOf(c.req.header("Cookie")) || !(res.headers.get("Content-Type") ?? "").startsWith("text/html")) return res;
   const headers = new Headers(res.headers);
-  headers.append("Set-Cookie", newFrameSessionCookie());
+  // Secure by the one rule every cookie this surface sets follows: a stated public https origin, or a request over TLS.
+  headers.append("Set-Cookie", newFrameSessionCookie(cookieSecure(c)));
   return new Response(res.body, { status: res.status, headers });
 }
 

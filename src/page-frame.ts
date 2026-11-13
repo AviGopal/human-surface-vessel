@@ -87,7 +87,7 @@ export function frameSessionOf(cookieHeader: string | undefined): string | null 
   return m?.[1] ?? null;
 }
 
-/** A Set-Cookie value for a new frame session. */
-export function newFrameSessionCookie(): string {
-  return `${FRAME_COOKIE}=${randomBytes(16).toString("hex")}; HttpOnly; SameSite=Strict; Path=/api/page-frame`;
+/** A Set-Cookie value for a new frame session; Secure by the same rule as the sign-in cookie (proxy.ts cookieSecure). */
+export function newFrameSessionCookie(secure = false): string {
+  return `${FRAME_COOKIE}=${randomBytes(16).toString("hex")}; HttpOnly; SameSite=Strict; Path=/api/page-frame${secure ? "; Secure" : ""}`;
 }

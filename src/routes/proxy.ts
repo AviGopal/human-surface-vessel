@@ -115,7 +115,7 @@ function allowedOrigin(): string {
  * (it is https only, so the person reaches it over TLS, whatever scheme the proxy used to reach
  * this process), and otherwise when this request arrived over TLS.
  */
-function cookieSecure(c: Context): boolean {
+export function cookieSecure(c: Context): boolean {
   return publicOrigin() !== null || arrivedOverTls(c.req.url, c.req.header("X-Forwarded-Proto"), remoteOf(c));
 }
 
