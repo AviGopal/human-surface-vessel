@@ -93,7 +93,7 @@ export function fieldText(v: unknown): string {
   return plain(v);
 }
 
-type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number | null } | { state: "refused"; reason: string; said?: string } | { state: "signedOut" };
+type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number } | { state: "refused"; reason: string; said?: string } | { state: "signedOut" };
 
 const SIGN_IN_TO_JUDGE = "Sign in with your key to give a verdict.";
 /** What a read refused for want of a sign-in says: on the title's line, so a refused entry is one line high. */
@@ -182,16 +182,12 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
   return (
     <>
     <div className="sf-row-judge" role="group" aria-label="Your verdict on this">
-      {verdict.state === "done" ? (
-        <p className="sf-row-note">
-          You judged this {verdict.r === 1 ? "right" : "wrong"}
-          {verdict.seq !== null ? ` (record #${verdict.seq})` : ""}. Judging again replaces it.
-        </p>
-      ) : null}
-      <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(1)}>
+      {/* The verdict given is the marked word (aria-pressed); beside it, the record it was stored as. */}
+      {verdict.state === "done" ? <span className="sf-verdict-given">record #{verdict.seq}</span> : null}
+      <button type="button" className="sf-verdict" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(1)}>
         Right
       </button>
-      <button type="button" className="sf-button" disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(0)}>
+      <button type="button" className="sf-verdict" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(0)}>
         Wrong
       </button>
       {verdict.state === "signedOut" ? (

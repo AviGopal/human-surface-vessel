@@ -37,7 +37,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       return Response.json(GAPS);
     }
     if (pointer["type"] === "record_read") return Response.json([]);
-    if (pointer["type"] === "record_write") return Response.json({ ok: true, seq: 40 });
+    if (pointer["type"] === "record_write") return Response.json({ ok: true, seq: 40, id: "outcome-row-one" });
   }
   return Response.json({});
 }) as typeof fetch;
@@ -99,6 +99,22 @@ describe("checks held for a person", () => {
     const el = await mount();
     expect([...el.querySelectorAll(".sf-rows > .sf-row")].map((r) => r.getAttribute("data-row"))).toEqual([CLOSED.id, HELD.id, OLDER.id]);
     expect(el.querySelector("details.sf-earlier > summary")!.textContent).toBe("2 earlier");
+  });
+
+  test("must-fail: Right and Wrong are quiet words on the row's line, not boxes, and the verdict given stays marked", async () => {
+    const el = await mount();
+    const h = row(el, HELD.id);
+    const right = button(h, "Right");
+    const wrong = button(h, "Wrong");
+    for (const b of [right, wrong]) {
+      expect(b.classList.contains("sf-verdict")).toBe(true);
+      expect(b.classList.contains("sf-button")).toBe(false);
+      expect(b.getAttribute("aria-pressed")).toBe("false");
+    }
+    await act(async () => wrong.click());
+    await settle();
+    expect(button(row(el, HELD.id), "Wrong").getAttribute("aria-pressed")).toBe("true");
+    expect(button(row(el, HELD.id), "Right").getAttribute("aria-pressed")).toBe("false");
   });
 
   test("must-fail: Right and Wrong are outcome rows citing exactly the held row", async () => {
