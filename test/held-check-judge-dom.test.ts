@@ -3,8 +3,9 @@
  * (what the person is asked to judge), and that claim is the row's words; Right or Wrong on it is
  * an outcome row citing exactly that gap row, which the hold lift reads (r 1: the test is right,
  * fix the source; r 0: the test is wrong). A gap row with no claim (an older row of the same gap,
- * a closed one, another kind of gap) has nothing to judge and offers no verdict. The read is
- * every gap row; the newest three are drawn, the rest counted as earlier.
+ * a closed one, another kind of gap) has nothing to judge and offers no verdict. The read asks
+ * records for the held checks (each gap's latest row, open, holding a claim); the newest three are
+ * drawn, the rest counted as earlier.
  *
  * Shape: one node 11-11. A failing-test gap was held for a person, and nothing on the surface
  * showed it or let them answer; the hold could only be lifted by an operator's hand.
@@ -16,6 +17,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
 import { DEFAULT_VIEWS } from "../src/ui-views.ts";
 
+let SENT_GAP_READ: Record<string, unknown> | null = null;
 const CLAIM = "The test is right: the source must change so these tests in repos/test-vessel/test/a.test.ts pass: adds ; subtracts";
 const gap = (seq: number, id: string, extra: Record<string, unknown>) => ({ input_refs: [], shape: "gap", gap_id: "gap-test-a", category: "failing_test", status: "open", summary: "2 tests fail in test-vessel", meta: { operator_hold: true }, seq, t: "2026-11-11T20:00:00.000Z", writer: "pull-sync", role: "detector", id, ...extra });
 const OLDER = gap(10, "gap-row-older", {});
@@ -30,7 +32,10 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.includes("/api/discovery/resolve")) {
     const pointer = JSON.parse(String(init?.body)).pointer as Record<string, unknown>;
     sent.push(pointer);
-    if (pointer["type"] === "record_read" && pointer["shape"] === "gap") return Response.json(GAPS);
+    if (pointer["type"] === "record_read" && pointer["shape"] === "gap") {
+      SENT_GAP_READ = pointer;
+      return Response.json(GAPS);
+    }
     if (pointer["type"] === "record_read") return Response.json([]);
     if (pointer["type"] === "record_write") return Response.json({ ok: true, seq: 40 });
   }
@@ -72,9 +77,11 @@ const row = (el: HTMLElement, id: string): Element => el.querySelector(`.sf-row[
 const button = (el: Element, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement;
 
 describe("checks held for a person", () => {
-  test("must-fail: the landing reads the detectors' gap rows, and a held row's claim is the words judged", async () => {
-    expect(held?.pointer).toEqual({ type: "record_read", shape: "gap" });
+  test("must-fail: the landing reads the held checks records answers, and a held row's claim is the words judged", async () => {
+    // Each gap's latest row, open, holding a claim: records' read, so the page filters nothing.
+    expect(held?.pointer).toEqual({ type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" });
     const el = await mount();
+    expect(SENT_GAP_READ).toEqual({ type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" });
     const h = row(el, HELD.id);
     expect(h.querySelector(".sf-row-words")!.textContent).toContain(CLAIM);
     expect(h.querySelector(".sf-row-judge")).not.toBeNull();

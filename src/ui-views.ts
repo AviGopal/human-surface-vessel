@@ -42,7 +42,8 @@ export type ViewRegion = (typeof VIEW_REGIONS)[number];
  * any arguments as plain values. Whatever serves the shape answers; the surface draws the
  * answer and does not interpret it.
  */
-export type ReportPointer = Readonly<Record<string, string | number | boolean>> & { readonly type: string };
+/** A read's pointer: plain arguments, and at most records' `where` ({field: value}, by equality). */
+export type ReportPointer = Readonly<Record<string, string | number | boolean | Readonly<Record<string, string | number | boolean>>>> & { readonly type: string };
 
 /**
  * The forms an answer can be drawn in. `fields`: its plain values, and each list as its size
@@ -132,10 +133,9 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
     entries: [
       { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you", empty: "Nothing is waiting on you." },
       // A detector's gap that is held for a person carries a `claim`: the person's Right or Wrong on it
-      // is read where holds are lifted. Rows with no claim (older, closed, or other gaps) offer no grade.
-      // The read is every gap row (records filters by equality, not by a field being present); the
-      // newest three are drawn, as with the asks, and the held rows are re-written newest.
-      { pointer: { type: "record_read", shape: "gap" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Checks held for you", empty: "No check is held." },
+      // is read where holds are lifted. Records answers the held checks themselves: each gap's latest
+      // row, open, holding a claim. The page filters nothing; the newest three are drawn.
+      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Checks held for you", empty: "No check is held." },
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
@@ -180,7 +180,7 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
     `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; ` +
@@ -376,21 +376,18 @@ function gradedOf(g: unknown): { graded: GradedRead } | { detail: string } {
   const { pointer, ...rest } = g as Record<string, unknown>;
   if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: graded is {pointer}` };
   if (typeof pointer !== "object" || pointer === null || Array.isArray(pointer)) return { detail: "graded is {pointer}" };
-  const { where, ...args } = pointer as Record<string, unknown>;
-  const got = pointerOf(args);
+  const got = pointerOf(pointer);
   if ("detail" in got) return got;
   if (!Object.values(got.pointer).includes(ROW_BINDING)) return { detail: `graded: its pointer names "${ROW_BINDING}", the row it grades` };
-  if (where === undefined) return { graded: { pointer: got.pointer } };
-  const fields = typeof where === "object" && where !== null && !Array.isArray(where) ? Object.entries(where as Record<string, unknown>) : [];
-  const plain = fields.length >= 1 && fields.length <= MAX_WHERE && fields.every(([k, v]) => FIELD_NAME.test(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean"));
-  if (!plain) return { detail: `where: 1 to ${MAX_WHERE} fields, each a plain value` };
-  return { graded: { pointer: { ...got.pointer, where: where as Record<string, Plain> } } };
+  return { graded: { pointer: got.pointer } };
 }
 
+/** Plain arguments, and at most a `where` of 1 to MAX_WHERE fields, each a plain value: records' equality filter. */
 function pointerOf(r: unknown): { pointer: ReportPointer } | { detail: string } {
   if (typeof r !== "object" || r === null || Array.isArray(r)) return { detail: "pointer is an object with a type" };
-  const out: Record<string, string | number | boolean> = {};
-  for (const [k, v] of Object.entries(r as Record<string, unknown>)) {
+  const { where, ...args } = r as Record<string, unknown>;
+  const out: Record<string, Plain | Record<string, Plain>> = {};
+  for (const [k, v] of Object.entries(args)) {
     if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return { detail: `${k}: arguments are plain values` };
     out[k] = v;
   }
@@ -398,6 +395,12 @@ function pointerOf(r: unknown): { pointer: ReportPointer } | { detail: string } 
   if (typeof type !== "string" || !SHAPE_NAME.test(type)) return { detail: `type: a shape name` };
   // Drawing the screen must not write anything, and a _write shape is a write by name.
   if (type.endsWith("_write")) return { detail: `${type}: a view only reads` };
+  if (where !== undefined) {
+    const fields = typeof where === "object" && where !== null && !Array.isArray(where) ? Object.entries(where as Record<string, unknown>) : [];
+    const plain = fields.length >= 1 && fields.length <= MAX_WHERE && fields.every(([k, v]) => FIELD_NAME.test(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean"));
+    if (!plain) return { detail: `where: 1 to ${MAX_WHERE} fields, each a plain value` };
+    out["where"] = where as Record<string, Plain>;
+  }
   return { pointer: out as ReportPointer };
 }
 

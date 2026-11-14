@@ -77,7 +77,7 @@ describe("uiView_write", () => {
       [{ region: "landing", entries: [{ type: "system_load_report" }] }, "bad_entry", "pointer, form, title"],
       [{ region: "landing", entries: ["system_load_report"] }, "bad_entry", "{pointer, form}"],
       [{ region: "landing", entries: [{ pointer: { limit: 3 }, form: "fields" }] }, "bad_entry", "type"],
-      [{ region: "landing", entries: [{ pointer: { type: "x", where: { a: 1 } }, form: "fields" }] }, "bad_entry", "plain values"],
+      [{ region: "landing", entries: [{ pointer: { type: "x", filter: { a: 1 } }, form: "fields" }] }, "bad_entry", "plain values"],
       [{ region: "landing", entries: [{ pointer: { type: "x" } }] }, "bad_entry", "form: fields, rows, questions"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "table" }] }, "bad_entry", "form: fields, rows, questions"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "fields", judge: "outcome" }] }, "bad_entry", "judge needs form"],
@@ -102,6 +102,9 @@ describe("uiView_write", () => {
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", newest: "yes" }] }, "bad_entry", "newest: true"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "fields", newest: true }] }, "bad_entry", "newest needs form"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", folded: 1 }] }, "bad_entry", "folded: true"],
+      [{ region: "landing", entries: [{ pointer: { type: "x", where: { status: { not: "closed" } } }, form: "rows" }] }, "bad_entry", "where: 1 to 4 fields, each a plain value"],
+      [{ region: "landing", entries: [{ pointer: { type: "x", where: {} }, form: "rows" }] }, "bad_entry", "where: 1 to 4 fields, each a plain value"],
+      [{ region: "landing", entries: [{ pointer: { type: "x", has: { claim: true } }, form: "rows" }] }, "bad_entry", "has: arguments are plain values"],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } }] }, "bad_entry", 'graded needs judge "outcome"'],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", judge: "outcome", graded: { pointer: { type: "record_read", shape: "outcome" } } }] }, "bad_entry", 'graded: its pointer names "$row"'],
       [{ region: "landing", entries: [{ pointer: { type: "x" }, form: "rows", judge: "outcome", graded: { pointer: { type: "record_read", refs_to: "$row", where: { role: { not: "person" } } } } }] }, "bad_entry", "where: 1 to 4 fields, each a plain value"],
@@ -184,6 +187,13 @@ describe("uiView_write", () => {
     const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered", empty: "The walk has answered nothing yet.", words: ["text"], graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } }, thread: { pointer: { type: "record_read", refs_to: "$row" }, form: "rows", show: 2, newest: true, judge: "outcome", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } }, newest: true, folded: true };
     const w = await write({ region: "landing", entries: [entry, load] });
     expect(w.json.body.view.entries).toEqual([entry, load]);
+  });
+
+  test("must-fail: an entry's pointer may narrow by records' where, stored as written", async () => {
+    const entry = { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", words: ["claim"], judge: "outcome", title: "Checks held for you" };
+    const w = await write({ region: "landing", entries: [entry] });
+    expect(w.status).toBe(200);
+    expect(w.json.body.view.entries).toEqual([entry]);
   });
 
   test("must-fail: the ask region is written and read back like any region; its default reads what cites the ask", async () => {
