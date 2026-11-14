@@ -1540,7 +1540,7 @@ body { overflow: hidden; }
 /* "why" sits after the words on their line (a failed send, a refused verdict); opened, what the system said takes a line of its own. */
 .sf-outcome-said { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sf-space-2); min-width: 0; }
 .sf-outcome-said > details[open] { flex-basis: 100%; }
-/* A refused verdict's note keeps its own line under the buttons; its words and "why" share it. */
+/* A refused verdict's note (.sf-judge-refused) takes a line of its own under the row's line; its words and "why" share it. */
 .sf-outcome-said > .sf-row-note { flex-basis: auto; }
 .sf-icon-button {
   font: inherit;
@@ -2113,6 +2113,15 @@ body { overflow: hidden; }
 .sf-reports { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sf-space-3); }
 .sf-report { display: flex; flex-direction: column; gap: var(--sf-space-2); background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); min-width: 0; }
 .sf-report-title { margin: 0; font-size: var(--sf-text-sm); font-weight: 600; color: var(--sf-ink); }
+/* On the landing a section is not a box: a hairline and space set it apart, and its title leads
+   it. Only "Waiting on you" is raised, and only while something waits; the folded reads sit as
+   one close list under the open sections. */
+.sf-landing .sf-reports { gap: var(--sf-space-5); }
+.sf-landing .sf-report { background: none; border: 0; border-top: 1px solid var(--sf-rule-strong); border-radius: 0; padding: var(--sf-space-3) 0 0; }
+.sf-landing .sf-report:not(.sf-report-folded) > .sf-report-title { font-size: var(--sf-text-base); }
+.sf-landing .sf-report-folded { padding-top: var(--sf-space-2); }
+.sf-landing .sf-report-folded + .sf-report-folded { margin-top: calc(var(--sf-space-2) - var(--sf-space-5)); }
+.sf-landing .sf-report[data-form="questions"]:has(.sf-landing-list > li) { background: var(--sf-panel); border: 1px solid var(--sf-accent); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); }
 /* A closed details still puts its hidden content in the column, so the card's gap would sit under the title: the open summary's margin is the only space. */
 .sf-report-folded { gap: 0; }
 .sf-report-folded > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: var(--sf-space-2); align-items: baseline; }
