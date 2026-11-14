@@ -10,7 +10,6 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
 
 const calls: { url: string; body: Record<string, unknown> }[] = [];
-let intentApplies = false;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   let body: Record<string, unknown> = {};
@@ -20,11 +19,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     /* not json */
   }
   calls.push({ url, body });
-  if (url.includes("/api/surface-intent")) {
-    return intentApplies
-      ? new Response(JSON.stringify({ applied: true, changes: [{ field: "formByShape.webSearchResult", from: "prose", to: "rows" }], unparsed: [], policy: { revision: 9 } }), { status: 200 })
-      : new Response(JSON.stringify({ applied: false, unparsed: [] }), { status: 422 });
-  }
   if (url.includes("/api/participation")) {
     return new Response(JSON.stringify({ resolved: true, success: true, body: { id: body["response_id"], panelId: body["panel_id"], panelRevision: body["panel_revision"] } }), { status: 200 });
   }
@@ -171,13 +165,24 @@ describe("one box", () => {
     expect(asideCalled).toBe(true);
   });
 
-  test("must-fail: a presentation phrase typed while a question is open changes the display and answers nothing", async () => {
-    intentApplies = true;
+  // Shape: a person's ask on 11-14 named the text box growing to 10 lines; the box read "text … grow"
+  // as an order to enlarge the whole page's type, applied it, and wrote only a fragment as the ask.
+  test("must-fail: an ask that talks about the page is written whole, as one ask, and nothing reads it first", async () => {
+    const text = "On the human surface, let the text box grow to 10 lines before it starts scrolling, instead of 8.";
+    const el = await mount({});
+    await type(el, text);
+    expect(asked(text)).toBe(true);
+    expect(calls.filter((c) => c.url.includes("/api/discovery/resolve")).length).toBe(1);
+    expect(calls.some((c) => c.url.includes("/api/surface-intent"))).toBe(false);
+    expect(el.textContent).not.toContain("Interface changed");
+  });
+
+  test("must-fail: an answer that talks about the page is recorded as the answer", async () => {
     const el = await mount({ context: boxContext(question, "Where is it raining?", null) });
-    await type(el, "show search results as a table");
-    expect(calls.some((c) => c.url.includes("/api/participation"))).toBe(false);
-    expect(el.textContent).toContain("formByShape.webSearchResult → rows · for every webSearchResult output");
-    intentApplies = false;
+    await type(el, "make the text bigger and show search results as a table");
+    const kept = calls.find((c) => c.url.includes("/api/participation"));
+    expect(kept?.body).toMatchObject({ panel_id: "solicitation-s-1", kind: "answer", value: "make the text bigger and show search results as a table" });
+    expect(calls.some((c) => c.url.includes("/api/surface-intent"))).toBe(false);
   });
 
   test("must-fail: a complaint prefix with nothing after it is not sent; it stays in the box", async () => {

@@ -66,14 +66,13 @@ const json = { "content-type": "application/json" };
 /** Every write route and a body it accepts once a caller is admitted. */
 const WRITES: ReadonlyArray<{ route: string; body: Record<string, unknown> }> = [
   ...["uiPanel_write", "uiQuestion_write", "human_input", "uiFeedback", "interactorObservation", "interactorEvent",
-    "interactorAssertion", "interactorAttachment", "renderPolicy_write", "surfaceIntent"].map((type) => ({
+    "interactorAssertion", "interactorAttachment", "renderPolicy_write"].map((type) => ({
     route: "/v2/impulses/resolve",
     body: { pointer: { type, id: `w-${type}`, title: "t", body: "b", solicitation_id: "s-1", panel_id: "p-1", response_id: "r-1", value: "v", obs_type: "click", event_type: "click", text: "bigger text", pointer: { type: "x" } } },
   })),
   { route: "/api/participation", body: { panel_id: "p-1", panel_revision: 1, response_id: "r-2", kind: "answer", value: "yes" } },
   { route: "/api/discovery/resolve", body: { pointer: { type: "vesselCapability", shape: "x" } } },
   { route: "/api/observations", body: { obs_type: "click", panel_id: "p-1" } },
-  { route: "/api/surface-intent", body: { text: "make the text bigger" } },
   { route: "/api/page-frame", body: { source: "<p>x</p>" } },
 ];
 

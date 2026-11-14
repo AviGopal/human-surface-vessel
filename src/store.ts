@@ -166,13 +166,6 @@ export type ObservationType =
    */
   | "verdict"
   /**
-   * The box read an ask as about the output on screen and could not apply it
-   * ("as a page" on prose, nothing on screen): `body.text`, `body.reason`,
-   * `body.shape`, `body.region`, `body.origin`. A refusal is a decision, kept so
-   * a misread one is visible to whatever later reads the corpus.
-   */
-  | "surface_intent_refused"
-  /**
    * What upstream answered when a verdict was forwarded: `body.dispatch_id`,
    * `body.execution_id`, `body.verdict_at` (the verdict observation's observedAt,
    * the join), `body.status`, `body.recorded`, `body.reason` (upstream's own
@@ -546,7 +539,7 @@ export function recordObservation(
   // `readExposureCorpus`), so its corpus is neither bounded by MAX_HISTORY nor
   // lost on restart.
   // A person's form choice is learner evidence too (src/form-learn.ts readFormChoices).
-  if (exposure || o.type === "form_choice" || o.type === "verdict" || o.type === "surface_intent_refused" || o.type === "verdict_delivery") {
+  if (exposure || o.type === "form_choice" || o.type === "verdict" || o.type === "verdict_delivery") {
     appendParticipation("interactorObservation_write", entry);
   }
   emit("observation_recorded", entry);
@@ -631,7 +624,6 @@ export function counts(): Record<string, number> {
     events: events.length,
     assertions: asserts.length,
     attachments: attachments.length,
-    intents: intents.length,
   };
 }
 
@@ -716,7 +708,7 @@ export interface RenderPolicy {
   readonly formByShape: Record<string, string>;
   /**
    * The form LEARNER's table, and only its. `formByShape` above is the human's
-   * pin table: written by `surfaceIntent`, and its clear-pins path replaces the
+   * pin table, written through `renderPolicy_write`, and clearing it replaces the
    * whole map. Keeping learned entries in a separate field is what makes two
    * rules hold by construction: a human pin always wins over a learned one,
    * and clearing human pins never touches what was learned. The planner reads
@@ -900,50 +892,6 @@ let renderPolicy: RenderPolicy = {
   note: "default — no override; the built-in heuristic is in force",
 };
 
-/**
- * A typed instruction and what it actually did.
- *
- * Kept because a render change with no record of who asked for it, in what
- * words, is exactly the untraced mutation the surface is forbidden to make.
- * `unparsed` is stored alongside `changedFields` on purpose: the instructions
- * the parser could NOT read are the demand signal for the next rule, and they
- * are only a signal if they survive the request that produced them.
- */
-export interface SurfaceIntentRecord {
-  id: string;
-  text: string;
-  changedFields: string[];
-  unparsed: string[];
-  /** The revision this instruction produced, or null when it moved nothing. */
-  appliedRevision: number | null;
-  visibility: Visibility;
-  receivedAt: number;
-}
-
-const intents: SurfaceIntentRecord[] = [];
-
-export function recordSurfaceIntent(
-  i: Omit<SurfaceIntentRecord, "id" | "receivedAt" | "visibility"> & {
-    id?: string;
-    visibility?: Visibility;
-  },
-): SurfaceIntentRecord {
-  const entry: SurfaceIntentRecord = {
-    ...i,
-    id: i.id ?? rid("int"),
-    visibility: asVisibility(i.visibility, "public"),
-    receivedAt: Date.now(),
-  };
-  intents.push(entry);
-  if (intents.length > MAX_HISTORY) intents.shift();
-  emit("surface_intent", entry);
-  return entry;
-}
-
-export function recentSurfaceIntents(limit = 50): SurfaceIntentRecord[] {
-  return intents.slice(-limit).reverse();
-}
-
 export function getRenderPolicy(): RenderPolicy {
   return renderPolicy;
 }
@@ -991,11 +939,8 @@ function sameFieldValue(a: unknown, b: unknown): boolean {
  *    link 2: status 200, revision 0 → 1, zero fields recorded).
  *
  * 2. A write that moves nothing is REFUSED and says what this writer reads,
- *    rather than being accepted hollowly. This is the surfaceIntent
- *    unparsed-clause precedent in this same vessel (src/routes/impulses.ts:485-510
- *    — nothing moved, so nothing is written, the revision does not advance, and
- *    the caller is told what the parser does read) applied to the impulse write
- *    path. A refusal that also names the assignment currently in force lets the
+ *    rather than being accepted hollowly: nothing moved, so nothing is written
+ *    and the revision does not advance. A refusal that also names the assignment currently in force lets the
  *    caller see whose decision their no-op was about to overwrite.
  *
  * Accepted writes are journaled as a SNAPSHOT and replayed at module init, so a

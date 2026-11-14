@@ -22,7 +22,6 @@ import { useTokenOverrides } from "./lib/useTokenOverrides";
 import { useLiveControls } from "./state/liveControls";
 import { useStoreStream } from "./state/stream";
 import { QuestionsProvider, useQuestions } from "./state/questions";
-import { OnScreenProvider } from "./state/onScreen";
 
 /**
  * The layout this build renders, published for exposure records. Records made
@@ -133,9 +132,7 @@ function useNarrow(): boolean {
 export function Surface(): ReactNode {
   return (
     <QuestionsProvider>
-      <OnScreenProvider>
-        <Workbench />
-      </OnScreenProvider>
+      <Workbench />
     </QuestionsProvider>
   );
 }

@@ -62,8 +62,6 @@ export const BROWSER_WRITE_ALLOWLIST: ReadonlyArray<{ readonly route: string }> 
   { route: "/api/participation" },
   // ui/src/api/exposure.ts (exposure ticks and outcomes)
   { route: "/api/observations" },
-  // ui/src/api/client.ts trySurfaceIntent (an instruction to change the interface)
-  { route: "/api/surface-intent" },
   // ui/src/api/session.ts (a person signing in with their key and out; the key goes to identity, never to a store)
   { route: "/api/session/key" },
   { route: "/api/session/logout" },

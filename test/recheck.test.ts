@@ -81,7 +81,7 @@ const BOOTSTRAP = new Set([
 ]);
 /**
  * Law-1 debt: auth limits are constants. Their proper home is an owner-role row read at use
- * time, writable only by the owner credential, never by surfaceIntent.
+ * time, writable only by the owner credential.
  */
 const DEBT_AUTH = new Set([
   "LOGIN_FAILURES_PER_WINDOW", "LOGIN_WINDOW_MS", "MAX_SESSIONS", "KEY_SESSION_MS",
@@ -146,7 +146,7 @@ describe("no behaviour constant outside the named lists", () => {
 /**
  * Hollow fields, named: written to the render policy and read by nothing on the page. The
  * test holds the statement true; a reader added (or the field removed, 3.3) updates the list.
- * maxPreviewChars: written by the sentence parser (surfaceIntent); its fix moves with 3.3.
+ * maxPreviewChars: no writer on the page since the sentence parser left; its removal moves with 3.3.
  */
 const HOLLOW_POLICY_FIELDS = ["maxPreviewChars"];
 

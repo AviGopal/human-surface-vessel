@@ -10,7 +10,6 @@
  *    bundled.
  */
 
-import type { DispatchOutcome, OnScreenReport, UnparsedClause } from "./types";
 
 export class SurfaceError extends Error {
   readonly httpStatus: number;
@@ -32,108 +31,6 @@ async function readJson(res: Response): Promise<Record<string, unknown>> {
     // "undefined" into a failure slot.
     return { error: text.slice(0, 400) };
   }
-}
-
-function str(v: unknown): string | null {
-  return typeof v === "string" && v.length > 0 ? v : null;
-}
-
-/**
- * Normalize the `unparsed` array off the wire.
- *
- * Tolerates a bare string as well as the record, because an older vessel on the
- * other end of this proxy sends strings — and a surface that renders nothing at
- * all when a clause was refused is worse than one that renders the clause with
- * no reason attached.
- */
-function asClauses(raw: unknown): readonly UnparsedClause[] {
-  if (!Array.isArray(raw)) return [];
-  const out: UnparsedClause[] = [];
-  for (const item of raw) {
-    if (typeof item === "string") {
-      out.push({ text: item, reason: "", suggestedGoal: "" });
-      continue;
-    }
-    if (typeof item !== "object" || item === null) continue;
-    const rec = item as Record<string, unknown>;
-    const text = str(rec["text"]);
-    if (!text) continue;
-    out.push({
-      text,
-      reason: str(rec["reason"]) ?? "",
-      suggestedGoal: str(rec["suggested_goal"]) ?? "",
-    });
-  }
-  return out;
-}
-
-/* ────────────────────────────── dispatch ─────────────────────────────────── */
-
-/**
- * `POST /api/run-goal`.
- *
- * Returns a discriminated outcome rather than throwing, because three of the
- * four responses are things the reader needs told honestly — a coalesced
- * dispatch is somebody ELSE'S older run and claiming credit for it is a lie; a
- * refusal is terminal and arrives as 200; a drain is temporary and retryable.
- */
-/**
- * An instruction about the SURFACE is tried against the surface first.
- *
- * Order matters and is deliberate. The parser is a deterministic, closed set of
- * rules; it either understands an instruction or refuses it, cheaply and
- * without an LLM. Only what it refuses becomes a goal. That is the floor-first
- * arrangement the substrate asks for everywhere else — the LLM is one resolver
- * among many, never the controller — applied to the surface's own controls.
- *
- * A refusal here is NOT an error: it means "this was not about me", and the
- * instruction goes to the walk unchanged. Anything the parser understood only
- * PARTLY is reported with the clause it dropped, because silently applying half
- * an instruction is worse than applying none.
- */
-export async function trySurfaceIntent(instruction: string, onScreen: OnScreenReport | null = null): Promise<DispatchOutcome | null> {
-  let res: Response;
-  try {
-    res = await fetch("/api/surface-intent", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ instruction, onScreen }),
-    });
-  } catch {
-    // The surface being unreachable must not swallow the instruction; let the
-    // normal dispatch path run and report its own failure honestly.
-    return null;
-  }
-  if (res.status === 422) return null; // not about the surface — send it to the walk
-  if (!res.ok) return null;
-  const body = (await res.json().catch(() => null)) as null | {
-    applied?: boolean;
-    changes?: Array<{ field?: string; from?: string; to?: string; because?: string }>;
-    unparsed?: string[];
-    policy?: { revision?: number };
-    view?: { form?: string };
-    refused?: { reason?: string };
-  };
-  // About the output on screen: one view changes and nothing is written.
-  if (body?.view && typeof body.view.form === "string") return { kind: "view", form: body.view.form };
-  if (body?.refused) return { kind: "viewRefused", reason: String(body.refused.reason ?? "") };
-  if (!body || body.applied !== true) return null;
-  return {
-    kind: "reshaped",
-    changes: (body.changes ?? []).map((c) => ({
-      field: String(c.field ?? ""),
-      from: String(c.from ?? ""),
-      to: String(c.to ?? ""),
-      because: String(c.because ?? ""),
-    })),
-    // Read the clause RECORD. The wire has always carried {text, reason,
-    // suggested_goal} on both the 200 and the 422 branch; this used to be
-    // `.map(String)`, which turned each one into the literal `[object Object]`
-    // and discarded the only two fields that tell a person what to do next.
-    unparsed: asClauses(body.unparsed),
-    revision: typeof body.policy?.revision === "number" ? body.policy.revision : -1,
-  };
 }
 
 export interface RenderPolicy {

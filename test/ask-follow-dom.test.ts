@@ -25,7 +25,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const person = { userId: "user:person-a", name: "Person A", expiresAt: Date.now() + 900_000 };
   if (url.endsWith("/api/session")) return Response.json({ keySignIn: true, signedIn: true, person });
   if (url.includes("/api/ui-view?region=ask")) return Response.json({ region: "ask", revision: 1, id: "ask@1", ...askView });
-  if (url.endsWith("/api/surface-intent")) return new Response("{}", { status: 422 });
   if (url.endsWith("/api/discovery/resolve")) {
     const pointer = body["pointer"] as Record<string, unknown>;
     if (pointer["type"] === "record_write") return Response.json({ resolved: true, success: true, body: { ...(pointer["row"] as object), seq: 2434, id: ASK_ID } });

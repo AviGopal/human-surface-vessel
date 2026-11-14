@@ -18,10 +18,8 @@
  *      `policy` object got 200, a bumped revision, and nothing recorded. That is the
  *      exact pointer validation/human-participation/stage4-trace.ts:62-65 sends, and
  *      it is why TRACE-2026-09-20.md records link 2 as MISSING. A write that moved no
- *      field must refuse — non-2xx, revision unchanged, naming the keys it accepts —
- *      following the surfaceIntent unparsed-clause precedent in this same vessel
- *      (src/routes/impulses.ts:485-510: nothing moved, so nothing is written, the
- *      revision does not advance, and the caller is told what the parser does read).
+ *      field must refuse — non-2xx, revision unchanged, naming the keys it accepts:
+ *      nothing moved, so nothing is written and the revision does not advance.
  */
 import { describe, expect, test } from "bun:test";
 import { testAuth } from "./setup.ts";

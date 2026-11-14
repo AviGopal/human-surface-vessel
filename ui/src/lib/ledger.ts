@@ -191,7 +191,7 @@ export type MetaChip =
 export type FormDecisionSource =
   /** Nothing arrived. */
   | "empty_preview"
-  /** A human pinned this shape through `surfaceIntent`. The strongest evidence there is. */
+  /** A human pinned this shape (`formByShape`). The strongest evidence there is. */
   | "pin"
   /** Payload unwrapped from a command envelope inside a truncated preview. */
   | "truncated_envelope"

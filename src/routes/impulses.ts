@@ -36,14 +36,12 @@ import {
   getRenderPolicy,
   writeRenderPolicy,
   RENDER_POLICY_PATCH_KEYS,
-  recordSurfaceIntent,
 } from "../store.ts";
 import { explainRanking, rankPanels, type ImportanceWeights } from "../importance.ts";
 import { MIN_KIND_WEIGHT, runImportanceLearningPass } from "../importance-learn.ts";
 import { knownGapStatus, listedShapes, refreshGapStatuses } from "./proxy.ts";
 import { classifyQuestion, gapIdForPanel, isUnfilledTemplate, type QuestionClass } from "../question-class.ts";
 import { FORM_LEARNER_ID, runFormLearningPass } from "../form-learn.ts";
-import { GRAMMAR, readSurfaceIntent } from "../surface-intent.ts";
 import { buildUiView } from "../ui-view.ts";
 import { recheckPatch } from "../recheck.ts";
 import { LIMITS } from "../limits.ts";
@@ -160,8 +158,6 @@ const OBSERVATION_TYPES = [
   "form_choice",
   /** A verdict on a run from any source, kept as an observation (body: dispatch_id, verdict, source, …). */
   "verdict",
-  /** The box refused a reading about the output on screen (body: text, reason, shape, region, origin). */
-  "surface_intent_refused",
   /** What upstream answered when a verdict was forwarded (body: dispatch_id, verdict_at, status, recorded, reason). */
   "verdict_delivery",
 ] as const;
@@ -1128,106 +1124,8 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         changed_fields: write.changedFields,
         // Reported on the SUCCESS path too: a partially-read weight table that
         // still moved a field is applied-but-partial, and that must not be
-        // invisible under a green result (same rule the surfaceIntent branch
-        // below applies to a partially parsed instruction).
+        // invisible under a green result.
         ...(rejected.length > 0 ? { rejected_values: rejected, partial: true } : {}),
-      });
-    }
-
-    case "surfaceIntent": {
-      // Prose in, interface change out. Deterministic parse FIRST: the LLM is
-      // one resolver among many and never the controller, and "make the text
-      // bigger" is a parse, not a reasoning problem.
-      const text = optStr(pointer, "text") ?? optStr(pointer, "instruction") ?? optStr(pointer, "body");
-      if (!text || text.trim() === "") {
-        return c.json(
-          {
-            resolved: false,
-            success: false,
-            shape: type,
-            error: "text required — the instruction to read",
-            grammar: GRAMMAR,
-          },
-          400,
-        );
-      }
-      const reading = readSurfaceIntent(text, getRenderPolicy());
-
-      if (!reading.understood) {
-        // NOT a no-op reported as success. Nothing moved, so nothing is
-        // written, the revision does not advance, and the caller is told
-        // exactly which words were not read and what this parser does read.
-        recordSurfaceIntent({
-          text,
-          changedFields: [],
-          unparsed: reading.unparsed.map((u) => u.text),
-          appliedRevision: null,
-        });
-        return c.json(
-          {
-            resolved: false,
-            success: false,
-            shape: type,
-            understood: false,
-            applied: false,
-            error: "no part of this instruction could be read",
-            changes: [],
-            unparsed: reading.unparsed,
-            grammar: reading.grammar,
-            policy_revision: getRenderPolicy().revision,
-          },
-          422,
-        );
-      }
-
-      // Writes through the SAME shaped impulse every other author uses, so the
-      // surface picks it up on its next read with no rebuild and no deploy.
-      const write = writeRenderPolicy(reading.patch);
-      if (!write.changed) {
-        // The parser read the words and they asked for what is already in force.
-        // Reported as understood-but-not-applied, on the same 422 as an unread
-        // instruction: nothing happened, so nothing may read as applied.
-        recordSurfaceIntent({
-          text,
-          changedFields: [],
-          unparsed: reading.unparsed.map((u) => u.text),
-          appliedRevision: null,
-        });
-        return c.json(
-          {
-            resolved: false,
-            success: false,
-            shape: type,
-            understood: true,
-            applied: false,
-            error: write.refusal?.reason ?? "this instruction moved no field",
-            changes: [],
-            unparsed: reading.unparsed,
-            policy_revision: write.policy.revision,
-          },
-          422,
-        );
-      }
-      const next = write.policy;
-      recordSurfaceIntent({
-        text,
-        changedFields: reading.changes.map((ch) => ch.field),
-        unparsed: reading.unparsed.map((u) => u.text),
-        appliedRevision: next.revision,
-      });
-      return c.json({
-        resolved: true,
-        success: true,
-        shape: type,
-        understood: true,
-        applied: true,
-        // A partial read is stated as partial. Some of what was asked for did
-        // not happen, and that must not be invisible under a green result.
-        partial: reading.unparsed.length > 0,
-        changes: reading.changes,
-        unparsed: reading.unparsed,
-        ...(reading.unparsed.length > 0 ? { grammar: reading.grammar } : {}),
-        body: next,
       });
     }
 

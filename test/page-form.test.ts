@@ -8,7 +8,6 @@ GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
-import { readSurfaceIntent, readViewIntent } from "../src/surface-intent.ts";
 import type { RenderPolicy } from "../src/store.ts";
 
 const framePosts: string[] = [];
@@ -34,7 +33,6 @@ const { QueryClient, QueryClientProvider } = await import(from("@tanstack/react-
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { ContentRender } = await import("../ui/src/components/ContentRender");
 const { Rendered } = await import("../ui/src/components/Rendered");
-const { OnScreenProvider, useOnScreen } = await import("../ui/src/state/onScreen");
 const { fromText } = await import("../ui/src/lib/content");
 const { planContent } = await import("../ui/src/lib/ledger");
 
@@ -76,39 +74,10 @@ describe("the page frame", () => {
   });
 });
 
-describe("asking for it", () => {
-  const POLICY = { tokenOverrides: {}, formByShape: {}, maxPreviewChars: null, ledgerDefaultExpanded: true, presentation: "onepage", revision: 0, updatedAt: 0, note: null } as unknown as RenderPolicy;
-  test("\"show svg as a page\" pins page for that shape", () => {
-    const r = readSurfaceIntent("show svg as a page", POLICY);
-    expect(r.patch.formByShape?.["svg"]).toBe("page");
-  });
-
-  test("\"as a page\" is taken where the answer on screen has markup, and refused on prose", async () => {
-    // What the lead answer reports to the box, then how the reader treats it.
-    const seen: { markup?: boolean }[] = [];
-    function Probe(): null {
-      const e = useOnScreen();
-      if (e) seen.push({ markup: e.markup });
-      return null;
-    }
-    const answer = (text: string) =>
-      React.createElement(OnScreenProvider, null,
-        React.createElement(Rendered, { content: fromText("svg", text), density: "full", header: false, region: "run_answer", lead: true }),
-        React.createElement(Probe, null));
-    await mount(answer(SVG));
-    expect(seen.at(-1)?.markup).toBe(true);
-    await mount(answer("## Summary\n\nPlain words, no markup at all."));
-    expect(seen.at(-1)?.markup).toBe(false);
-    const on = (markup: boolean) => ({ shape: "svg", form: "text", markup, region: "run_answer" });
-    expect(readViewIntent("show this as a page", on(true))).toMatchObject({ kind: "view", form: "page" });
-    expect(readViewIntent("show this as a page", on(false))).toMatchObject({ kind: "refused" });
-  });
-});
-
 describe("how much of a page is drawn", () => {
   const html = (n: number) => `<html><body><p>${"x".repeat(n)}</p></body></html>`;
   async function drawn(content: unknown): Promise<HTMLElement> {
-    return mount(React.createElement(Rendered, { content, density: "full", header: false, region: "run_answer", lead: true }));
+    return mount(React.createElement(Rendered, { content, density: "full", header: false, region: "run_answer" }));
   }
   test("must-fail: a page cut by the run's preview says so, with the run's own sizes", async () => {
     const el = await drawn({ shape: "http_fetch", origin: "impulse", body: html(1950), state: "truncated", size: { shown: 2000, total: 48907 } });

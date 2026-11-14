@@ -31,9 +31,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     signedIn = false;
     return Response.json({ signedIn: false });
   }
-  if (url.endsWith("/api/surface-intent")) {
-    return String(body["instruction"]) === "show this as a table" ? Response.json({ view: { form: "rows" } }) : new Response("{}", { status: 422 });
-  }
   // The ask region before any view is written: nothing follows the ask. A stored ask now mounts it.
   if (url.includes("/api/ui-view")) return Response.json({ region: "ask", revision: 0, id: "ask@0", notDrawn: null, entries: [] });
   if (url.endsWith("/api/discovery/resolve")) return signedIn ? Response.json({ ok: true, seq: 301, id: "row-301" }) : Response.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, { status: 401 });
@@ -119,10 +116,11 @@ describe("asking needs a signed-in person", () => {
     expect((el.querySelector("textarea") as HTMLTextAreaElement).value).toBe("");
   });
 
-  test("a phrase that only changes the view works signed out and asks nothing", async () => {
+  test("must-fail: a phrase about the view is an ask like any other: signed out, it waits for sign-in", async () => {
     const el = await mount();
     await typeInBox(el, "show this as a table");
-    expect(asks().length).toBe(0);
-    expect(el.querySelector("form[aria-label='Sign in']")).toBeNull();
+    expect(asks().length).toBe(1);
+    expect(asks()[0]?.body).toEqual({ pointer: { type: "record_write", row: { shape: "world_changed", what: "show this as a table", input_refs: [] } } });
+    expect(el.textContent).toContain("Not sent yet: sign in with your key, and your ask goes then.");
   });
 });

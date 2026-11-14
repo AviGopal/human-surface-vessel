@@ -674,7 +674,7 @@ export function anchorWeights(): { byKind: Record<string, number>; source: strin
 
     // A NON-LEARNER LINE IS THE ANCHOR ONLY IF IT ACTUALLY MOVED THE WEIGHTS.
     // `writeRenderPolicy` journals the WHOLE policy, so an operator flipping
-    // `presentation` — or a surfaceIntent patch changing a font token — emits a
+    // `presentation` — or a patch changing a font token — emits a
     // snapshot that carries the LEARNER's current byKind verbatim. Adopting
     // that as the human base would let each unrelated write ratchet the ceiling
     // to twice a table that already contains the learning, which is the

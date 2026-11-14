@@ -4,20 +4,18 @@
  * A person asks in their own words; nothing here asks them to name a shape. An ask is written
  * as one row (`world_changed`) under the person's own key, and the walk takes it up from its
  * pool: nothing is dispatched and nothing is polled. What the walk does with it arrives as rows
- * the view names. A change to this interface, or an ask that was not recorded, speaks here in
- * one line.
+ * the view names. Every sentence typed here is written whole, as the ask or the answer: the box
+ * reads none of it as a change to this page. An ask that was not recorded speaks here in one line.
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { bindAsk, trySurfaceIntent, writeAsk, writeComplaint, type RowWrite } from "../api/client";
+import { bindAsk, writeAsk, writeComplaint, type RowWrite } from "../api/client";
 import { useUiView } from "../api/queries";
 import { sendContribution } from "../api/participation";
-import { onScreenReport, useOnScreen } from "../state/onScreen";
-import type { DispatchOutcome } from "../api/types";
 import { contributionContent } from "../lib/interaction";
 import { reportExposureAct } from "../lib/exposure-reporter";
-import { barePrefix, boxWords, presentationScope, readComplaint, readReplyPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
+import { barePrefix, boxWords, readComplaint, readReplyPhrase, REPLY_PHRASES, type BoxContext, NEW_ASK } from "../lib/box";
 import { useLiveControls } from "../state/liveControls";
 import { useQuestions } from "../state/questions";
 import { SignIn } from "./SignIn";
@@ -28,64 +26,6 @@ import { Entries, Said } from "./Reports";
 
 /** The echo for a reply delivered to a waiting run. */
 const REPLY_ECHO: Readonly<Record<string, string>> = { answered: "Answer", declined: "Declined", insufficient_context: "Need more" };
-
-/** The word the echo uses for a form the box redrew the answer in. */
-const FORM_WORD: Readonly<Record<string, string>> = { rows: "table", record: "fields", text: "text", prose: "prose", page: "page", terminal: "terminal", diff: "diff", scalar: "value" };
-
-function OutcomeLine({
-  outcome,
-  onSuggest,
-  onDismiss,
-}: {
-  outcome: DispatchOutcome;
-  onSuggest: (text: string) => void;
-  onDismiss: () => void;
-}): ReactNode {
-  let body: ReactNode = null;
-  let tone = "error";
-  switch (outcome.kind) {
-    case "view":
-      return null;
-    case "viewRefused":
-      tone = "warn";
-      body = <>{outcome.reason}</>;
-      break;
-    case "reshaped":
-      tone = "ok";
-      body = (
-        <>
-          Interface changed:{" "}
-          {outcome.changes.map((c) => (
-            <span key={`${c.field}-${c.to}`} className="sf-chip sf-chip-quiet">
-              {c.field} → {c.to} · for {presentationScope(c.field)}
-            </span>
-          ))}
-          {outcome.unparsed.map((u) => (
-            <span key={u.text} className="sf-outcome-unparsed">
-              not understood: “{u.text}”
-              {u.suggestedGoal ? (
-                // Inserts into the box; it never sends.
-                <button type="button" className="sf-button sf-button-quiet" onClick={() => onSuggest(u.suggestedGoal)}>
-                  use “{u.suggestedGoal}”
-                </button>
-              ) : null}
-            </span>
-          ))}
-        </>
-      );
-      break;
-    default:
-      return null;
-  }
-  return (
-    <div className="sf-outcome-line" data-tone={tone} role="status">
-      <span>{body}</span>
-      <button type="button" className="sf-icon-button" aria-label="Dismiss" onClick={onDismiss}>
-        ×
-      </button>
-    </div>
-  );
-}
 
 export function TopBar({
   openIssues,
@@ -110,21 +50,15 @@ export function TopBar({
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
   const { paused, setPaused, intervalMs } = useLiveControls();
   const { recordReceipt } = useQuestions();
-  const onScreen = useOnScreen();
   const [echo, setEcho] = useState<string | null>(null);
   // A send that failed, held against the echo that says so: that echo is drawn as a failure, with what
   // the system itself said, when it said something, under "why".
   const [failed, setFailed] = useState<{ echo: string; said?: string } | null>(null);
   // The ask just written, followed under its echo by the rows that cite it, while that echo stands.
   const [asked, setAsked] = useState<{ id: string; echo: string } | null>(null);
-  const [reshaped, setReshaped] = useState<DispatchOutcome | null>(null);
   const answer = useMutation({
     retry: false,
-    // A presentation phrase is read as one in any context: checked before the text
-    // is taken as the run's answer, so "show this as a table" never reaches the run.
     mutationFn: async (args: { ctx: Extract<BoxContext, { kind: "reply" }>; text: string }) => {
-      const change = await trySurfaceIntent(args.text, onScreenReport(onScreen));
-      if (change) return { kind: "reshaped" as const, change };
       // "not now" and "need more", exactly, are the replies offered beside the box.
       const phrase = readReplyPhrase(args.text);
       const outcome = phrase?.outcome ?? "answered";
@@ -145,27 +79,13 @@ export function TopBar({
     retry: false,
     mutationFn: (args: { text: string; about: string | null }): Promise<RowWrite> => writeComplaint(args.text, args.about),
   });
-  // An ask: a presentation phrase changes this interface; anything else is written as the
-  // person's ask. Signed out, nothing is written.
+  // An ask: written whole as the person's ask. Signed out, nothing is written.
   const asking = useMutation({
     retry: false,
-    mutationFn: async (text: string): Promise<{ kind: "reshaped"; change: DispatchOutcome } | { kind: "written"; got: RowWrite }> => {
-      const change = await trySurfaceIntent(text, onScreenReport(onScreen));
-      if (change) return { kind: "reshaped", change };
-      return { kind: "written", got: await writeAsk(text) };
-    },
+    mutationFn: (text: string): Promise<RowWrite> => writeAsk(text),
   });
   const words = boxWords(context);
   const pending = asking.isPending || answer.isPending || complain.isPending;
-
-  // The box carries what "Show as" did: the answer on screen redraws, and the
-  // choice is recorded from the box, as a click on it was.
-  const redraw = (form: string): void => {
-    onScreen?.choose(form, "box");
-    setEcho(`Display: ${FORM_WORD[form] ?? form}`);
-    window.requestAnimationFrame(() => fit(boxRef.current));
-    setGoal("");
-  };
 
   // A chip elsewhere on the page (the Issues drawer, the questions page) fills the box.
   useEffect(() => {
@@ -211,7 +131,6 @@ export function TopBar({
     // An explicit complaint is a complaint in every context, never an answer or an ask.
     if (readComplaint(text)) {
       asking.reset();
-      setReshaped(null);
       complain.mutate(
         { text, about: complaintRegion },
         {
@@ -239,19 +158,11 @@ export function TopBar({
     if (context.kind === "reply") {
       const ctx = context;
       asking.reset();
-      setReshaped(null);
       answer.mutate(
         { ctx, text },
         {
           onSuccess: (r) => {
-            if (r.kind === "reshaped" && r.change.kind === "view") {
-              redraw(r.change.form);
-            } else if (r.kind === "reshaped") {
-              setEcho(null);
-              setReshaped(r.change);
-            } else {
-              setEcho(REPLY_ECHO[r.outcome] ?? "Answer");
-            }
+            setEcho(REPLY_ECHO[r.outcome] ?? "Answer");
             cleared();
           },
         },
@@ -260,20 +171,12 @@ export function TopBar({
     }
     answer.reset();
     setEcho(null);
-    setReshaped(null);
     ask(text);
   };
 
   const ask = (text: string): void => {
     asking.mutate(text, {
-      onSuccess: (r) => {
-        if (r.kind === "reshaped") {
-          if (r.change.kind === "view") redraw(r.change.form);
-          else setReshaped(r.change);
-          if (r.change.kind !== "viewRefused") cleared();
-          return;
-        }
-        const got = r.got;
+      onSuccess: (got) => {
         if (got.ok) {
           const said = `Asked (record #${got.seq}). What the system does with it appears below.`;
           setEcho(said);
@@ -415,7 +318,6 @@ export function TopBar({
         </div>
       ) : null}
       {asked && echo === asked.echo ? <AskFollow asked={asked} enabled={!paused} intervalMs={intervalMs} /> : null}
-      {reshaped ? <OutcomeLine outcome={reshaped} onSuggest={(t) => put(t, false)} onDismiss={() => setReshaped(null)} /> : null}
     </header>
   );
 }

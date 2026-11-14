@@ -13,14 +13,12 @@
  *   full   — full frame and body.
  */
 
-import { sendObservation } from "../api/exposure";
-import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 import { useRenderPolicy } from "../api/queries";
 import { contentText, type Content } from "../lib/content";
-import { CUT_KEY, findMarkup, planContent, type RenderPlan } from "../lib/ledger";
+import { CUT_KEY, planContent, type RenderPlan } from "../lib/ledger";
 import { formatChars } from "../lib/time";
 import { useLiveControls } from "../state/liveControls";
-import { useOnScreenRegistrar } from "../state/onScreen";
 import { ContentRender, CopyButton } from "./ContentRender";
 import { FormDecisionRecorder } from "./FormDecisionRecorder";
 
@@ -125,7 +123,6 @@ export function Rendered({
   region,
   header = true,
   extraHeader,
-  lead = false,
   dispatchId,
 }: {
   content: Content;
@@ -136,13 +133,6 @@ export function Rendered({
   header?: boolean;
   /** Caller-specific facts that belong in the header (e.g. a step's producer). */
   extraHeader?: ReactNode;
-  /**
-   * The run's lead answer: what "this" means in the one box ("show this as a
-   * table"). A choice made there redraws this payload at once and is recorded as
-   * a `form_choice` observation the form learner reads (src/form-learn.ts),
-   * previewed through the same path a pin or a learned form takes.
-   */
-  lead?: boolean;
   /** The run this content belongs to, when the caller knows it: recorded with the form decision. */
   dispatchId?: string;
 }): ReactNode {
@@ -150,35 +140,7 @@ export function Rendered({
   const policy = useRenderPolicy({ enabled: !paused, intervalMs }).data;
   const text = contentText(content);
   const truncated = content.state === "truncated";
-  const [chosen, setChosen] = useState<string | null>(null);
-  const planned = planFor(content, policy);
-  const plan = chosen
-    ? planFor(content, { ...(policy ?? {}), formByShape: { ...(policy?.formByShape ?? {}), [content.shape]: chosen } })
-    : planned;
-  const choose = (form: string, origin: "box"): void => {
-    if (form === plan.form) return;
-    sendObservation({
-      obs_type: "form_choice",
-      visibility: "operator_only",
-      shape: content.shape,
-      form_from: plan.form,
-      form_to: form,
-      ...(region ? { region } : {}),
-      origin,
-    });
-    setChosen(form);
-  };
-  // The lead answer is what the box's "this" means. The latest `choose` is read
-  // through a ref, so the registration follows the drawn form, not every render.
-  const register = useOnScreenRegistrar();
-  const chooseRef = useRef(choose);
-  chooseRef.current = choose;
-  const markup = findMarkup(text) !== null;
-  useEffect(() => {
-    if (!lead || !register) return;
-    register({ shape: content.shape, form: plan.form, markup, region: region ?? null, choose: (f, o) => chooseRef.current(f, o) });
-    return () => register(null);
-  }, [lead, register, content.shape, plan.form, markup, region]);
+  const plan = planFor(content, policy);
 
   if (density === "row") {
     return (

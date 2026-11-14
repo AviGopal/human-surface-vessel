@@ -23,12 +23,11 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { admittedCaller, carry, remoteOf, requireCaller, type Caller } from "../inbound-auth.ts";
 import { isWritePointerType } from "../caller-credential.ts";
 import { impulsesRouter } from "./impulses.ts";
-import { getRenderPolicy, recentSurfaceIntents, recordObservation, recordSurfaceIntent, writeRenderPolicy } from "../store.ts";
+import { getRenderPolicy, recordObservation } from "../store.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
 import { unnamed, unnamePeople } from "../unname.ts";
 import { arrivedOverTls, closeSession, keySignInAvailable, loginAllowed, noteLoginFailure, openSession, sessionOf, signInWithKey, viewOf } from "../person-session.ts";
 import { VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
-import { GRAMMAR, parseOnScreen, pinnedShapes, readSurfaceIntent, readViewIntent } from "../surface-intent.ts";
 import {
   DISCOVERY_ENDPOINT,
   HOST,
@@ -676,157 +675,6 @@ proxyRouter.get("/api/ui-view", (c) => {
   if (!(VIEW_REGIONS as readonly string[]).includes(region)) return c.json({ error: "unknown_region" }, 404);
   return c.json(unnamePeople(currentView(region as ViewRegion), sessionOf(c.req.header("Cookie"))?.userId ?? null), 200, corsHeaders(c.req.header("Origin")));
 });
-
-// ─── typed instruction → interface change (browser write) ───────────────────
-
-/**
- * The prose box. A person types "make the text bigger and show shellResult as
- * a table" and the interface changes.
- *
- * Resolved IN PROCESS rather than by dialling this vessel's own resolver over
- * HTTP, and that is the security-boundary decision this file exists to make:
- * a self-loopback would either need the API key in a request the browser can
- * see the shape of, or would have to trust an address the vessel advertises but
- * cannot always dial. Calling the parser directly keeps the key server-side by
- * construction — there is no outbound request to attach it to.
- *
- * `text` is the ONLY input accepted. The browser never sends a policy patch:
- * if it could, a hostile page could set any token to any value while the
- * response would still read as a human instruction. Everything the surface can
- * be told to do must survive the parser.
- */
-/** An instruction about this interface is a sentence or two; the cap keeps the readers cheap. */
-const SURFACE_INTENT_MAX_CHARS = 2_000;
-
-proxyRouter.post("/api/surface-intent", requireCaller("/api/surface-intent"), async (c) => {
-  const origin = c.req.header("Origin");
-  const body = (await c.req.json().catch(() => null)) as null | Record<string, unknown>;
-  const raw = body?.["text"] ?? body?.["instruction"];
-  const text = typeof raw === "string" ? raw : "";
-  // Before any reader runs: every reader here is synchronous on the event loop.
-  if (text.length > SURFACE_INTENT_MAX_CHARS) {
-    return c.json({ applied: false, understood: false, error: "too long" }, 413, corsHeaders(origin));
-  }
-  if (text.trim() === "") {
-    return c.json(
-      { applied: false, understood: false, error: "text required", grammar: GRAMMAR },
-      400,
-      corsHeaders(origin),
-    );
-  }
-
-  // About the output on screen: a whole-ask reading that changes one view and writes no policy.
-  const view = readViewIntent(text, parseOnScreen(body?.["onScreen"]));
-  if (view?.kind === "view") {
-    return c.json({ applied: false, understood: true, view: { shape: view.shape, form: view.form, region: view.region } }, 200, corsHeaders(origin));
-  }
-  if (view?.kind === "refused") {
-    recordObservation({
-      type: "surface_intent_refused",
-      caller: callerOf(admittedCaller(c)),
-      visibility: "operator_only",
-      body: { text, reason: view.reason, shape: view.shape, region: view.region, origin: "box" },
-    });
-    return c.json({ applied: false, understood: true, refused: { reason: view.reason } }, 200, corsHeaders(origin));
-  }
-
-  const reading = readSurfaceIntent(text, getRenderPolicy());
-
-  // A pin names a shape the registry knows, or the sentence was about something
-  // else and is a goal. Unread registries prove nothing, so they refuse the pin too.
-  const named = pinnedShapes(reading);
-  if (named.length > 0) {
-    const { union } = await readShapeVocabulary();
-    const unknown = named.filter((n) => !union.has(n));
-    if (unknown.length > 0) {
-      recordSurfaceIntent({ text, changedFields: [], unparsed: [text], appliedRevision: null });
-      return c.json(
-        { applied: false, understood: false, changes: [], unparsed: [], error: `not a shape: ${unknown.join(", ")}` },
-        422,
-        corsHeaders(origin),
-      );
-    }
-  }
-
-  if (!reading.understood) {
-    recordSurfaceIntent({
-      text,
-      changedFields: [],
-      unparsed: reading.unparsed.map((u) => u.text),
-      appliedRevision: null,
-    });
-    // 422, not 200: the reader asked for something and it did not happen.
-    // `suggested_goal` rides along so the surface can OFFER a dispatch — P2
-    // says a suggestion inserts into the input, it never sends. Nothing here
-    // dispatches, and nothing here may be changed to.
-    return c.json(
-      {
-        applied: false,
-        understood: false,
-        changes: [],
-        unparsed: reading.unparsed,
-        grammar: reading.grammar,
-        policy: getRenderPolicy(),
-      },
-      422,
-      corsHeaders(origin),
-    );
-  }
-
-  const write = writeRenderPolicy(reading.patch);
-  if (!write.changed) {
-    // Understood, and already in force. 422 for the same reason as the branch
-    // above: the reader asked for something and nothing happened, so nothing
-    // may be reported as applied. The revision does not move either.
-    recordSurfaceIntent({
-      text,
-      changedFields: [],
-      unparsed: reading.unparsed.map((u) => u.text),
-      appliedRevision: null,
-    });
-    return c.json(
-      {
-        applied: false,
-        understood: true,
-        changes: [],
-        unparsed: reading.unparsed,
-        error: write.refusal?.reason ?? "this instruction moved no field",
-        policy: write.policy,
-      },
-      422,
-      corsHeaders(origin),
-    );
-  }
-  const next = write.policy;
-  recordSurfaceIntent({
-    text,
-    changedFields: reading.changes.map((ch) => ch.field),
-    unparsed: reading.unparsed.map((u) => u.text),
-    appliedRevision: next.revision,
-  });
-  return c.json(
-    {
-      applied: true,
-      understood: true,
-      partial: reading.unparsed.length > 0,
-      changes: reading.changes,
-      unparsed: reading.unparsed,
-      ...(reading.unparsed.length > 0 ? { grammar: reading.grammar } : {}),
-      policy: next,
-    },
-    200,
-    corsHeaders(origin),
-  );
-});
-
-/** What the box understands, so the surface can say so without guessing. */
-proxyRouter.get("/api/surface-intent/grammar", (c) =>
-  c.json(
-    { grammar: GRAMMAR, recent: unnamePeople(recentSurfaceIntents(20), sessionOf(c.req.header("Cookie"))?.userId ?? null) },
-    200,
-    corsHeaders(c.req.header("Origin")),
-  ),
-);
 
 // ─── calibration (blind grading of a declared sample) ────────────────────────
 

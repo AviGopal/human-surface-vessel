@@ -35,9 +35,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     signedIn = false;
     return Response.json({ signedIn: false });
   }
-  if (url.endsWith("/api/surface-intent")) {
-    return String(body["instruction"]) === "show this as a table" ? Response.json({ view: { form: "rows" } }) : new Response("{}", { status: 422 });
-  }
   // The ask region before any view is written: nothing follows the ask. A stored ask now mounts it.
   if (url.includes("/api/ui-view")) return Response.json({ region: "ask", revision: 0, id: "ask@0", notDrawn: null, entries: [] });
   if (url.endsWith("/api/discovery/resolve")) return ANSWER();

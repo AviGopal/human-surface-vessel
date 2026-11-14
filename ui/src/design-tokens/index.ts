@@ -130,43 +130,6 @@ export const PINNABLE_FORMS: readonly ContentForm[] = CONTENT_FORMS.filter(
 );
 
 /**
- * MIRROR ASSERTION.
- *
- * `repos/human-surface-vessel/src/surface-intent.ts` carries a byte-identical
- * copy of the block above, because the vessel is a submodule that must not
- * reach into the super-repo for a runtime import (law 11) — and neither of the
- * two build graphs that compile these files can see the other's directory: the
- * vessel typechecks with only its own repo mounted, the UI builds with only
- * `ui/` and this package on the path. A shared import is therefore not
- * available, and this assertion is honest about what it does and does not buy:
- *
- *   it PROVES  — this file's array and its written-out union agree, so the
- *                half-edit that grows one without the other fails to compile
- *                here AND, identically, over there;
- *   it does NOT prove the two FILES agree. That is convention, and the
- *                assertion text is duplicated verbatim so the two blocks diff
- *                cleanly against each other.
- */
-type MirroredForm =
-  | "prose"
-  | "text"
-  | "rows"
-  | "diff"
-  | "empty"
-  | "terminal"
-  | "record"
-  | "scalar"
-  | "stub"
-  | "page"
-  | "brief";
-type FormsMirrorOk = [ContentForm] extends [MirroredForm]
-  ? [MirroredForm] extends [ContentForm]
-    ? true
-    : never
-  : never;
-export const CONTENT_FORMS_MIRRORED: FormsMirrorOk = true;
-
-/**
  * Verdict options offered when a human grades a terminal run.
  *
  * Mutually exclusive and collectively exhaustive, and there is deliberately no
