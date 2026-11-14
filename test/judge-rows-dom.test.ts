@@ -140,6 +140,7 @@ describe("rows drawn in full, with a person's verdict", () => {
     await act(async () => button(el, "Right").click());
     await settle();
     expect(el.textContent).toContain("Your verdict was not recorded: you are no longer signed in");
+    expect([...el.querySelectorAll("[data-refused]")].some((n) => n.textContent!.startsWith("Your verdict was not recorded"))).toBe(true);
     expect(el.textContent).not.toContain("sign_in_required");
     expect(sessionReads).toBeGreaterThan(before);
     expect(button(el, "Right").disabled).toBe(true);

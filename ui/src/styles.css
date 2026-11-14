@@ -1541,7 +1541,6 @@ body { overflow: hidden; }
 .sf-outcome-said { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sf-space-2); min-width: 0; }
 .sf-outcome-said > details[open] { flex-basis: 100%; }
 /* A refused verdict's note keeps its own line under the buttons; its words and "why" share it. */
-.sf-row-judge > .sf-outcome-said { flex-basis: 100%; }
 .sf-outcome-said > .sf-row-note { flex-basis: auto; }
 .sf-icon-button {
   font: inherit;
@@ -2143,6 +2142,7 @@ body { overflow: hidden; }
 .sf-row-meta > .sf-row-details { order: 1; }
 .sf-row-meta > .sf-row-judge { order: 2; margin-left: auto; justify-content: flex-end; }
 .sf-row-meta > .sf-row-details[open] { order: 3; flex-basis: 100%; }
+.sf-row-meta > .sf-judge-refused { order: 3; flex-basis: 100%; }
 .sf-row-meta > .sf-row-system-grade { order: 4; flex-basis: 100%; }
 .sf-row-time { margin: 0; font-size: var(--sf-text-sm); }
 /* A row of an entry that declares a thread (an ask) reads above the rows under it (its replies). */
@@ -2190,7 +2190,8 @@ body { overflow: hidden; }
 .sf-judge-word:disabled { color: var(--sf-ink-3); text-decoration: none; cursor: not-allowed; }
 .sf-judge-given { font-size: var(--sf-text-sm); color: var(--sf-ink-3); font-variant-numeric: tabular-nums; }
 .sf-row-note { margin: 0; flex-basis: 100%; font-size: var(--sf-text-sm); overflow-wrap: anywhere; }
-/* A read the producer refused, though the reply came as a success: said as a failure, not as an empty answer. */
+/* A refusal (a read the producer refused though the reply came as a success, a verdict not recorded):
+   said in the one failure colour, as a failed send is, never in the grey of ordinary words. */
 [data-refused], .sf-muted[data-refused] { color: var(--sf-not-reached); }
 
 /* A folded read's strip: when its rows came, one bar per hour, in its summary after the count. */

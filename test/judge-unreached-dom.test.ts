@@ -59,6 +59,8 @@ describe("a verdict nothing took", () => {
     expect(writes).toEqual([{ shape: "outcome", r: 0, input_refs: [GAP.id] }]);
     const alert = el.querySelector('[role="alert"]') as HTMLElement;
     expect(alert.querySelector("p")!.textContent).toBe("Not recorded: the system couldn't be reached.");
+    // A refusal is said in the failure colour, not the grey of ordinary words.
+    expect(alert.querySelector("p")!.hasAttribute("data-refused")).toBe(true);
     const why = alert.querySelector("details[data-said]") as HTMLDetailsElement;
     expect(why.querySelector("summary")!.textContent).toBe("why");
     expect(why.querySelector("p")!.textContent).toBe(LINK);

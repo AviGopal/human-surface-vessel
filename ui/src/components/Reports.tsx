@@ -190,18 +190,19 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
       <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(0)}>
         Wrong
       </button>
-      {verdict.state === "signedOut" ? (
-        <p className="sf-row-note" role="alert">
-          Your verdict was not recorded: you are no longer signed in (the surface may have restarted). Sign in with your key and judge again.
-        </p>
-      ) : null}
-      {verdict.state === "refused" ? (
-        <div className="sf-outcome-said" role="alert">
-          <p className="sf-row-note">Not recorded: {verdict.reason}</p>
-          <Said said={verdict.said} />
-        </div>
-      ) : null}
     </div>
+    {/* Under the row's line, so Right and Wrong keep their place beside the time. */}
+    {verdict.state === "signedOut" ? (
+      <p className="sf-row-note sf-judge-refused" role="alert" data-refused="">
+        Your verdict was not recorded: you are no longer signed in (the surface may have restarted). Sign in with your key and judge again.
+      </p>
+    ) : null}
+    {verdict.state === "refused" ? (
+      <div className="sf-outcome-said sf-judge-refused" role="alert">
+        <p className="sf-row-note" data-refused="">Not recorded: {verdict.reason}</p>
+        <Said said={verdict.said} />
+      </div>
+    ) : null}
     {verdict.state === "done" && graded ? <SystemGrade graded={graded} rowId={rowId} reading={reading} /> : null}
     </>
   );
