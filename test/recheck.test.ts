@@ -85,7 +85,7 @@ const BOOTSTRAP = new Set([
  */
 const DEBT_AUTH = new Set([
   "LOGIN_FAILURES_PER_WINDOW", "LOGIN_WINDOW_MS", "MAX_SESSIONS", "KEY_SESSION_MS",
-  "CREDENTIAL_VALIDATION_TTL_MS", "CREDENTIAL_CACHE_MAX_ENTRIES",
+  "CREDENTIAL_VALIDATION_TTL_MS", "CREDENTIAL_CACHE_MAX_ENTRIES", "CREDENTIAL_SEND_LOOKUP_TIMEOUT_MS",
 ]);
 /** Learner, parser and form-planner thresholds: they become activity input when those leave (3.2, 3.3). */
 const DEBT_LEARNERS = new Set([
