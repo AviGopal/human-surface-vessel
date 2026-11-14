@@ -98,7 +98,7 @@ describe("rows drawn in full, with a person's verdict", () => {
     await act(async () => button(el, "Right").click());
     await settle();
     expect(sent.filter((p) => p["type"] === "record_write")).toEqual([{ type: "record_write", row: { shape: "outcome", r: 1, input_refs: ["01ca30b1"] } }]);
-    expect(el.querySelector(".sf-verdict-given")!.textContent).toBe("record #205");
+    expect(el.querySelector(".sf-judge-given")!.textContent).toBe("record #205");
     expect(button(el, "Right").getAttribute("aria-pressed")).toBe("true");
     await act(async () => button(el, "Wrong").click());
     await settle();

@@ -183,11 +183,11 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
     <>
     <div className="sf-row-judge" role="group" aria-label="Your verdict on this">
       {/* The verdict given is the marked word (aria-pressed); beside it, the record it was stored as. */}
-      {verdict.state === "done" ? <span className="sf-verdict-given">record #{verdict.seq}</span> : null}
-      <button type="button" className="sf-verdict" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(1)}>
+      {verdict.state === "done" ? <span className="sf-judge-given">record #{verdict.seq}</span> : null}
+      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(1)}>
         Right
       </button>
-      <button type="button" className="sf-verdict" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(0)}>
+      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(0)}>
         Wrong
       </button>
       {verdict.state === "signedOut" ? (

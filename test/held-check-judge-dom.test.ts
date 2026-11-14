@@ -107,7 +107,7 @@ describe("checks held for a person", () => {
     const right = button(h, "Right");
     const wrong = button(h, "Wrong");
     for (const b of [right, wrong]) {
-      expect(b.classList.contains("sf-verdict")).toBe(true);
+      expect(b.classList.contains("sf-judge-word")).toBe(true);
       expect(b.classList.contains("sf-button")).toBe(false);
       expect(b.getAttribute("aria-pressed")).toBe("false");
     }
