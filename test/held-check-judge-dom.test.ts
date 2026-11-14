@@ -109,11 +109,15 @@ describe("checks held for a person", () => {
     for (const b of [right, wrong]) {
       expect(b.classList.contains("sf-judge-word")).toBe(true);
       expect(b.classList.contains("sf-button")).toBe(false);
+      // .sf-verdict is the reached/not-reached badge's class; its rule must not reach these words.
+      expect(b.classList.contains("sf-verdict")).toBe(false);
       expect(b.getAttribute("aria-pressed")).toBe("false");
     }
     await act(async () => wrong.click());
     await settle();
     expect(button(row(el, HELD.id), "Wrong").getAttribute("aria-pressed")).toBe("true");
+    expect(button(row(el, HELD.id), "Wrong").title).toBe("Your verdict. Choosing the other replaces it.");
+    expect(button(row(el, HELD.id), "Right").title).toBe("");
     expect(button(row(el, HELD.id), "Right").getAttribute("aria-pressed")).toBe("false");
   });
 

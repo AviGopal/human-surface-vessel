@@ -162,6 +162,9 @@ export function Said({ said }: { said: string | undefined }): ReactNode {
   );
 }
 
+/** On the verdict given: what it is, and that the other word replaces it. */
+const VERDICT_GIVEN = "Your verdict. Choosing the other replaces it.";
+
 function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["graded"]; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
   const session = useSession();
   const client = useQueryClient();
@@ -184,10 +187,10 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
     <div className="sf-row-judge" role="group" aria-label="Your verdict on this">
       {/* The verdict given is the marked word (aria-pressed); beside it, the record it was stored as. */}
       {verdict.state === "done" ? <span className="sf-judge-given">record #{verdict.seq}</span> : null}
-      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(1)}>
+      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending"} title={!signedIn ? SIGN_IN_TO_JUDGE : verdict.state === "done" && verdict.r === 1 ? VERDICT_GIVEN : undefined} onClick={() => void give(1)}>
         Right
       </button>
-      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={signedIn ? undefined : SIGN_IN_TO_JUDGE} onClick={() => void give(0)}>
+      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={!signedIn ? SIGN_IN_TO_JUDGE : verdict.state === "done" && verdict.r === 0 ? VERDICT_GIVEN : undefined} onClick={() => void give(0)}>
         Wrong
       </button>
     </div>
