@@ -116,7 +116,7 @@ describe("asking needs a signed-in person", () => {
     expect((el.querySelector("textarea") as HTMLTextAreaElement).value).toBe("");
   });
 
-  test("must-fail: a phrase about the view is an ask like any other: signed out, it waits for sign-in", async () => {
+  test("control: a phrase about the view is an ask like any other: signed out, it waits for sign-in", async () => {
     const el = await mount();
     await typeInBox(el, "show this as a table");
     expect(asks().length).toBe(1);
