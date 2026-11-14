@@ -241,15 +241,17 @@ export function producerAnswer(json: Record<string, unknown>): unknown {
 }
 
 /**
- * A producer's refusal, as records answers one: `{failure: {status, body}}`. The transport passes
- * it on as a success, so it is read here, from the answer and from the reply around it.
+ * A producer's refusal, as records answers one: `{failure: {status, body}}` with an error status.
+ * The transport passes it on as a success, so it is read here, from the answer and from the reply
+ * around it. A field named `failure` without an error status is part of an answer, not a refusal.
  */
-export function failureOf(...answers: unknown[]): { status: number | null; said: string } | null {
+export function failureOf(...answers: unknown[]): { status: number; said: string } | null {
   for (const a of answers) {
     const f = typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>)["failure"] : undefined;
     if (typeof f !== "object" || f === null) continue;
     const r = f as Record<string, unknown>;
-    return { status: typeof r["status"] === "number" ? r["status"] : null, said: typeof r["body"] === "string" && r["body"] ? r["body"] : "refused" };
+    if (typeof r["status"] !== "number" || r["status"] < 400) continue;
+    return { status: r["status"], said: typeof r["body"] === "string" && r["body"] ? r["body"] : "refused" };
   }
   return null;
 }
@@ -282,7 +284,7 @@ async function writeRow(row: Record<string, unknown>): Promise<RowWrite> {
   if (res.ok && said.length === 0 && body["success"] !== false && typeof inner["seq"] === "number" && typeof inner["id"] === "string") {
     return { ok: true, seq: inner["seq"], id: inner["id"] };
   }
-  return { ok: false, reason: [...new Set(said)].join(": ") || "records did not say it was stored", said: failure?.status != null ? `status ${failure.status}` : res.ok ? undefined : `status ${res.status}` };
+  return { ok: false, reason: [...new Set(said)].join(": ") || "records did not say it was stored", said: failure ? `status ${failure.status}` : res.ok ? undefined : `status ${res.status}` };
 }
 
 /** A person's verdict on a row: an outcome row citing exactly that row. */

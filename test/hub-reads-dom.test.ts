@@ -95,6 +95,23 @@ describe("a read answered through the hub", () => {
     expect(fold.textContent).not.toContain("1 in all");
   });
 
+  test("must-fail: a field named failure without an error status is an answer, not a refusal", async () => {
+    for (const answer of [{ failure: { count: 3 } }, viaHub({ failure: { count: 3 } }), { failure: { status: 200, body: "fine" } }]) {
+      ANSWER = answer;
+      document.body.replaceChildren();
+      const el = await mount(asks);
+      expect(el.querySelector("[data-refused]")).toBeNull();
+      expect(el.textContent).not.toContain("Not read");
+      expect(el.querySelector("details[data-not-rows]")).not.toBeNull();
+    }
+  });
+
+  test("control: a failure with an error status is said as not read", async () => {
+    ANSWER = { failure: { status: 403, body: "a read is refused here" } };
+    const el = await mount(asks);
+    expect(el.querySelector("[data-refused]")!.textContent).toBe("Not read: a read is refused here");
+  });
+
   test("control: rows answered directly are drawn as before", async () => {
     ANSWER = [ASK];
     const el = await mount(asks);
