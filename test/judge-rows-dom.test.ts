@@ -61,7 +61,7 @@ afterAll(async () => {
 beforeEach(() => {
   signedIn = true;
   serverLost = false;
-  writeAnswer = { ok: true, seq: 205 };
+  writeAnswer = { ok: true, seq: 205, id: "row-205" };
   sent.length = 0;
 });
 const settle = async () => {

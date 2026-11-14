@@ -40,7 +40,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const pointer = JSON.parse(String(init?.body)).pointer as Record<string, unknown>;
     sent.push(pointer);
     if (pointer["type"] === "record_read") return Response.json(pointer["shape"] === "answer" ? [ANSWER] : read(pointer));
-    if (pointer["type"] === "record_write") return Response.json({ ok: true, seq: 5600 });
+    if (pointer["type"] === "record_write") return Response.json({ ok: true, seq: 5600, id: "row-5600" });
   }
   return Response.json({});
 }) as typeof fetch;

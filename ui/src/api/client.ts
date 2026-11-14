@@ -217,7 +217,7 @@ export type ViewEntry = {
 };
 
 /** What a person's row write came to: its record number and id, or why it was not recorded. */
-export type RowWrite = { ok: true; seq: number | null; id: string | null } | { ok: false; reason: string; signedOut?: true; said?: string };
+export type RowWrite = { ok: true; seq: number; id: string } | { ok: false; reason: string; signedOut?: true; said?: string };
 
 /**
  * A gateway's statuses: the write went out but no producer answered it (a link between machines
@@ -226,6 +226,33 @@ export type RowWrite = { ok: true; seq: number | null; id: string | null } | { o
  */
 const UNREACHED = new Set([502, 503, 504]);
 export const NOT_REACHED = "the system couldn't be reached.";
+
+/**
+ * A producer's answer out of what discovery returns: its `body` or `content`, and inside that,
+ * for a call a vessel on another node answered, the federation transport's proxied answer
+ * `{shape, produced_by, body | value, note}` (federation-transport-server.ts proxyToVessel).
+ * Through the hub the rows, a stored write's `{seq, id}` and a producer's refusal all sit there.
+ */
+export function producerAnswer(json: Record<string, unknown>): unknown {
+  const outer = json["body"] ?? json["content"] ?? json;
+  if (typeof outer !== "object" || outer === null || Array.isArray(outer)) return outer;
+  const o = outer as Record<string, unknown>;
+  return typeof o["produced_by"] === "string" && ("body" in o || "value" in o) ? (o["body"] ?? o["value"]) : outer;
+}
+
+/**
+ * A producer's refusal, as records answers one: `{failure: {status, body}}`. The transport passes
+ * it on as a success, so it is read here, from the answer and from the reply around it.
+ */
+export function failureOf(...answers: unknown[]): { status: number | null; said: string } | null {
+  for (const a of answers) {
+    const f = typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>)["failure"] : undefined;
+    if (typeof f !== "object" || f === null) continue;
+    const r = f as Record<string, unknown>;
+    return { status: typeof r["status"] === "number" ? r["status"] : null, said: typeof r["body"] === "string" && r["body"] ? r["body"] : "refused" };
+  }
+  return null;
+}
 
 /**
  * A row a person writes to records, through discovery. The surface sends it under the
@@ -245,16 +272,17 @@ async function writeRow(row: Record<string, unknown>): Promise<RowWrite> {
     return { ok: false, reason: NOT_REACHED, said: "the surface did not answer" };
   }
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  const inner = (body["body"] ?? body["content"] ?? body) as Record<string, unknown>;
-  const said = [body["error"], body["reason"], body["detail"], inner?.["error"], inner?.["detail"]].filter((x): x is string => typeof x === "string" && x.length > 0);
+  const answer = producerAnswer(body);
+  const inner = (typeof answer === "object" && answer !== null ? answer : {}) as Record<string, unknown>;
+  const failure = failureOf(answer, body["body"] ?? body["content"], body);
+  const said = [body["error"], body["reason"], body["detail"], inner["error"], inner["detail"], failure?.said].filter((x): x is string => typeof x === "string" && x.length > 0);
   if (res.status === 401 && body["error"] === "sign_in_required") return { ok: false, reason: "you are no longer signed in", signedOut: true };
   if (UNREACHED.has(res.status)) return { ok: false, reason: NOT_REACHED, said: [...new Set(said)].join(": ") || `status ${res.status}` };
-  if (!res.ok || said.length > 0 || body["success"] === false) return { ok: false, reason: [...new Set(said)].join(": ") || `not recorded (${res.status})` };
-  return {
-    ok: true,
-    seq: typeof inner?.["seq"] === "number" ? (inner["seq"] as number) : null,
-    id: typeof inner?.["id"] === "string" ? (inner["id"] as string) : null,
-  };
+  // Recorded is a fact records states: the stored row's seq and id. Any other answer, a 200 among them, is not a stored row.
+  if (res.ok && said.length === 0 && body["success"] !== false && typeof inner["seq"] === "number" && typeof inner["id"] === "string") {
+    return { ok: true, seq: inner["seq"], id: inner["id"] };
+  }
+  return { ok: false, reason: [...new Set(said)].join(": ") || "records did not say it was stored", said: failure?.status != null ? `status ${failure.status}` : res.ok ? undefined : `status ${res.status}` };
 }
 
 /** A person's verdict on a row: an outcome row citing exactly that row. */
@@ -286,7 +314,7 @@ export function writeComplaint(text: string, about: string | null): Promise<RowW
  * signed-in person's own key (src/routes/proxy.ts), and with no one signed in it answers 401
  * `sign_in_required`. The page says "sign in" for it, in a person's words, not the refusal's.
  */
-export type ReportAnswer = { readonly ok: true; readonly shape: string; readonly answer: unknown } | { readonly ok: false; readonly reason: string; readonly signIn?: true };
+export type ReportAnswer = { readonly ok: true; readonly shape: string; readonly answer: unknown } | { readonly ok: false; readonly reason: string; readonly signIn?: true; readonly refused?: true };
 
 /**
  * One report, resolved by shape through discovery (the surface's own passthrough), so
@@ -313,11 +341,17 @@ export async function fetchReport(pointer: ReportPointer): Promise<ReportAnswer>
     return parts.length ? [...new Set(parts)].join(": ") : null;
   };
   if (res.status === 401 && body["error"] === "sign_in_required") return { ok: false, reason: said(body) ?? "sign in", signIn: true };
-  if (!res.ok) return { ok: false, reason: said(body) ?? `no answer (${res.status})` };
+  if (!res.ok) {
+    const failure = failureOf(body);
+    return failure ? { ok: false, reason: failure.said, refused: true } : { ok: false, reason: said(body) ?? `no answer (${res.status})` };
+  }
   const content = body["content"];
   if (typeof content === "object" && content !== null && "error" in content) return { ok: false, reason: said(content) ?? "refused" };
   if (body["success"] === false || body["resolved"] === false) return { ok: false, reason: said(body["body"]) ?? said(body) ?? "refused" };
-  const answer = body["body"] ?? content ?? body;
+  const answer = producerAnswer(body);
+  // A producer's refusal the transport passed on as a success is a refusal, not an answer.
+  const failure = failureOf(answer, body["body"] ?? content, body);
+  if (failure) return { ok: false, reason: failure.said, refused: true };
   if (typeof answer === "object" && answer !== null && !Array.isArray(answer) && "error" in answer) {
     return { ok: false, reason: said(answer) ?? "refused" };
   }

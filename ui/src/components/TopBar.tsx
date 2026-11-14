@@ -218,7 +218,7 @@ export function TopBar({
           onSuccess: (got) => {
             if (got.ok) {
               if (complaintRegion) reportExposureAct(complaintRegion, "complained");
-              setEcho(`Complaint recorded${got.seq !== null ? ` (record #${got.seq})` : ""}.`);
+              setEcho(`Complaint recorded (record #${got.seq}).`);
               cleared();
               return;
             }
@@ -275,9 +275,9 @@ export function TopBar({
         }
         const got = r.got;
         if (got.ok) {
-          const said = `Asked${got.seq !== null ? ` (record #${got.seq})` : ""}. What the system does with it appears below.`;
+          const said = `Asked (record #${got.seq}). What the system does with it appears below.`;
           setEcho(said);
-          setAsked(got.id ? { id: got.id, echo: said } : null);
+          setAsked({ id: got.id, echo: said });
           cleared();
           return;
         }

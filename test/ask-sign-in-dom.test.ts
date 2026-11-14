@@ -34,7 +34,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.endsWith("/api/surface-intent")) {
     return String(body["instruction"]) === "show this as a table" ? Response.json({ view: { form: "rows" } }) : new Response("{}", { status: 422 });
   }
-  if (url.endsWith("/api/discovery/resolve")) return signedIn ? Response.json({ ok: true, seq: 301 }) : Response.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, { status: 401 });
+  // The ask region before any view is written: nothing follows the ask. A stored ask now mounts it.
+  if (url.includes("/api/ui-view")) return Response.json({ region: "ask", revision: 0, id: "ask@0", notDrawn: null, entries: [] });
+  if (url.endsWith("/api/discovery/resolve")) return signedIn ? Response.json({ ok: true, seq: 301, id: "row-301" }) : Response.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, { status: 401 });
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [] } });
   return Response.json({ resolved: true, success: true, body: {} });
 }) as typeof fetch;
@@ -91,7 +93,8 @@ async function typeInBox(el: HTMLElement, text: string): Promise<void> {
 const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement | undefined;
 
 describe("asking needs a signed-in person", () => {
-  const asks = () => calls.filter((c) => c.url.endsWith("/api/discovery/resolve"));
+  // Sends only: once an ask is stored, what follows it reads through the same route.
+  const asks = () => calls.filter((c) => c.url.endsWith("/api/discovery/resolve") && (c.body["pointer"] as { type?: string } | undefined)?.type !== "record_read");
 
   test("must-fail: an ask typed signed out is not recorded and opens sign-in, the ask still in the box", async () => {
     const el = await mount();

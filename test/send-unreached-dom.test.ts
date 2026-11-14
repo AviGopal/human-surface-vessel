@@ -38,6 +38,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.endsWith("/api/surface-intent")) {
     return String(body["instruction"]) === "show this as a table" ? Response.json({ view: { form: "rows" } }) : new Response("{}", { status: 422 });
   }
+  // The ask region before any view is written: nothing follows the ask. A stored ask now mounts it.
+  if (url.includes("/api/ui-view")) return Response.json({ region: "ask", revision: 0, id: "ask@0", notDrawn: null, entries: [] });
   if (url.endsWith("/api/discovery/resolve")) return ANSWER();
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [] } });
   return Response.json({ resolved: true, success: true, body: {} });
@@ -127,8 +129,41 @@ describe("a send nothing answered", () => {
     expect(el.querySelector(".sf-outcome-line")!.getAttribute("data-tone")).toBe("error");
   });
 
+  // Through the hub, a call node1's records answered comes back as the transport's proxied answer
+  // inside discovery's content, with records' own answer in its body (federation-transport-server.ts).
+  const viaHub = (answer: unknown) => ({ content: { shape: "record_write", produced_by: "records-vessel@a-node", body: answer, note: "proxied to the owning vessel on the peer substrate over libp2p" } });
+  const REFUSED = { failure: { status: 403, body: "cross-node writes wait for person marking" } };
+
+  test("must-fail: a refusal the transport passed on as a success is not sent, in records' words, drawn as a failure", async () => {
+    for (const answer of [REFUSED, { content: REFUSED }, viaHub(REFUSED)]) {
+      document.body.replaceChildren();
+      ANSWER = () => Response.json(answer);
+      const el = await mount();
+      await typeInBox(el, "What time is it in Lisbon?");
+      expect(el.querySelector(".sf-outcome-line span")!.textContent).toBe("Not sent: cross-node writes wait for person marking");
+      expect(el.querySelector(".sf-outcome-line")!.getAttribute("data-tone")).toBe("error");
+      expect((el.querySelector("textarea") as HTMLTextAreaElement).value).toBe("What time is it in Lisbon?");
+    }
+  });
+
+  test("must-fail: a 200 that names no stored row is not sent", async () => {
+    ANSWER = () => Response.json({});
+    const el = await mount();
+    await typeInBox(el, "What time is it in Lisbon?");
+    expect(el.querySelector(".sf-outcome-line span")!.textContent).toBe("Not sent: records did not say it was stored");
+    expect((el.querySelector("textarea") as HTMLTextAreaElement).value).toBe("What time is it in Lisbon?");
+  });
+
+  test("control: a row stored through the hub is drawn as sent", async () => {
+    ANSWER = () => Response.json(viaHub({ input_refs: [], shape: "world_changed", what: "What time is it in Lisbon?", seq: 401, t: "2026-11-14T00:33:19.000Z", writer: "a person", role: "person", id: "row-401" }));
+    const el = await mount();
+    await typeInBox(el, "What time is it in Lisbon?");
+    expect(el.querySelector(".sf-outcome-line span")!.textContent).toContain("Asked (record #401).");
+    expect(el.querySelector(".sf-outcome-line")!.getAttribute("data-tone")).toBe("ok");
+  });
+
   test("control: a send that went is drawn as one", async () => {
-    ANSWER = () => Response.json({ ok: true, seq: 301 });
+    ANSWER = () => Response.json({ ok: true, seq: 301, id: "row-301" });
     const el = await mount();
     await typeInBox(el, "What time is it in Lisbon?");
     expect(el.querySelector(".sf-outcome-line span")!.textContent).toContain("Asked (record #301).");

@@ -22,7 +22,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   calls.push({ url, body });
   if (url.includes("/api/surface-intent")) return new Response(JSON.stringify({ applied: false, unparsed: [] }), { status: 422 });
-  if (url.includes("/api/discovery/resolve")) return Response.json({ ok: true, seq: 302 });
+  // The ask region before any view is written: nothing follows the ask. A stored ask now mounts it.
+  if (url.includes("/api/ui-view")) return Response.json({ region: "ask", revision: 0, id: "ask@0", notDrawn: null, entries: [] });
+  if (url.includes("/api/discovery/resolve")) return Response.json({ ok: true, seq: 302, id: "row-302" });
   if (url.includes("/api/questions")) return new Response(JSON.stringify({ resolved: true, success: true, body: { questions: [] } }), { status: 200 });
   return new Response(JSON.stringify({ resolved: true, success: true, body: {} }), { status: 200 });
 }) as typeof fetch;

@@ -101,6 +101,7 @@ const SIGN_IN_TO_SEE = "sign in to see";
 
 /** Why a read drew nothing, in a person's words where they can act on it, else the producer's. */
 function Unanswered({ a, className }: { a: Extract<ReportAnswer, { ok: false }>; className: string }): ReactNode {
+  if (a.refused) return <p className={className} data-refused="">Not read: {a.reason}</p>;
   return a.signIn ? <p className={className} data-sign-in-to-see="">Sign in to see this.</p> : <p className={className}>no answer: {a.reason}</p>;
 }
 
@@ -216,9 +217,11 @@ function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["
  * copy, so the cut stays the producer's. `earlier` is what the cut left out, in the same order,
  * drawn folded rather than dropped. Null when there are no rows to draw, with what was found instead.
  */
-export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show" | "newest">): { rows: readonly unknown[]; earlier: readonly unknown[]; total: number } | { missing: string } {
+export function rowsOf(answer: unknown, entry: Pick<ViewEntry, "field" | "show" | "newest">): { rows: readonly unknown[]; earlier: readonly unknown[]; total: number } | { missing: string; notRows?: true } {
   const at = entry.field === undefined ? answer : typeof answer === "object" && answer !== null && !Array.isArray(answer) ? (answer as Record<string, unknown>)[entry.field] : undefined;
   if (at === undefined || at === null) return { missing: entry.field === undefined ? "answered with nothing" : `the answer has no ${entry.field}` };
+  // A read the view names with no field answers rows; anything else it answered is not one row of them.
+  if (entry.field === undefined && !Array.isArray(at)) return { missing: "answered with something that is not rows", notRows: true };
   const all = Array.isArray(at) ? at : [at];
   const cut = entry.show === undefined ? 0 : Math.max(0, all.length - entry.show);
   const kept = all.slice(cut);
@@ -453,7 +456,19 @@ function Empty({ said, why, counted }: { said: string | undefined; why: string |
 function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; reading: Reading }): ReactNode {
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
-  if ("missing" in got) return <p className="sf-muted sf-report-note">{got.missing}</p>;
+  if ("missing" in got) {
+    return (
+      <>
+        <p className="sf-muted sf-report-note">{got.missing}</p>
+        {got.notRows ? (
+          <details className="sf-row-details" data-not-rows="">
+            <summary>details</summary>
+            <FieldValue v={answer} />
+          </details>
+        ) : null}
+      </>
+    );
+  }
   if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} counted={entry.folded === true} />;
   const draw = (rows: readonly unknown[]): ReactNode =>
     entry.form === "questions" ? <Questions rows={rows} onOpen={reading.onOpenQuestion} /> : <Rows rows={rows} entry={entry} reading={reading} />;
@@ -546,6 +561,7 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
   let inner: ReactNode;
   if (!a) inner = <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>;
   else if (!a.ok && a.signIn) inner = null;
+  else if (!a.ok && a.refused) inner = <p className="sf-report-note" data-refused="">Not read: {a.reason}</p>;
   else if (!a.ok) inner = <p className="sf-muted sf-report-note">no answer: {a.reason}</p>;
   else inner = <Drawn entry={entry} answer={a.answer} reading={reading} />;
   if (entry.folded) {
@@ -563,7 +579,7 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
           {entry.strip && got && "total" in got ? (
             <Strip rows={[...got.earlier, ...got.rows]} hours={entry.strip.hours} last={typeof pointer["last"] === "number" ? (pointer["last"] as number) : undefined} />
           ) : null}
-          {a && !a.ok ? a.signIn ? <span className="sf-report-count" data-sign-in-to-see="">{SIGN_IN_TO_SEE}</span> : <span className="sf-report-count" data-no-answer="">no answer</span> : null}
+          {a && !a.ok ? a.signIn ? <span className="sf-report-count" data-sign-in-to-see="">{SIGN_IN_TO_SEE}</span> : a.refused ? <span className="sf-report-count" data-refused="">not read</span> : <span className="sf-report-count" data-no-answer="">no answer</span> : null}
         </summary>
         {inner}
       </details>
