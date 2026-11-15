@@ -288,6 +288,22 @@ function FieldValue({ v }: { v: unknown }): ReactNode {
   return fieldText(v);
 }
 
+/** A list of text that is not all ids: what a producer wrote one item at a time, such as steps. Details keep every field as one value. */
+function isTextList(v: unknown): v is string[] {
+  return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string") && !v.every((x) => HEX_ID.test(x as string));
+}
+
+/** A list of text, one item to a line, in the order its producer wrote them. */
+function Items({ items }: { items: readonly string[] }): ReactNode {
+  return (
+    <ol className="sf-row-items">
+      {items.map((x, i) => (
+        <li key={i}>{x}</li>
+      ))}
+    </ol>
+  );
+}
+
 /**
  * A row's time as an age ("12m ago"), the exact instant with its zone on hover and in the DOM, so
  * it takes a few characters of the row's line and can still be lined up with times elsewhere.
@@ -305,9 +321,11 @@ function RowTime({ t, full }: { t: string; full: string }): ReactNode {
 
 /**
  * One declared field as words: text as its writer formatted it, line breaks kept, through Prose,
- * which builds elements and draws markup and links as text; any other value as one line with its field's name.
+ * which builds elements and draws markup and links as text; a list of text as its items, one to a
+ * line; any other value as one line with its field's name.
  */
 function Word({ k, v }: { k: string; v: unknown }): ReactNode {
+  if (isTextList(v)) return <div className="sf-row-words"><Items items={v} /></div>;
   return typeof v === "string" ? (
     <div className="sf-row-words sf-row-prose">
       <Prose source={v} breaks />

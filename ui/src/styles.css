@@ -2156,6 +2156,10 @@ body { overflow: hidden; }
 .sf-row-prose { white-space: normal; }
 .sf-row-prose > .sf-prose { font: inherit; color: inherit; max-width: none; }
 .sf-row-prose > .sf-prose > :last-child { margin-bottom: 0; }
+/* A list of text a producer wrote item by item (steps): one to a line, numbered, in its order. */
+.sf-row-items { margin: 0; padding-left: 1.5em; list-style: decimal; white-space: normal; }
+.sf-row-items > li::marker { color: var(--sf-ink-3); font-variant-numeric: tabular-nums; }
+.sf-row-items > li + li { margin-top: 0.125rem; }
 /* A row's time, its details and the person's verdict share one line; what opens takes the
    full width under it. */
 .sf-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-1) var(--sf-space-3); min-width: 0; }
