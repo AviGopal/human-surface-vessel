@@ -1642,8 +1642,10 @@ body { overflow: hidden; }
 .sf-qgroup-count { font-variant-numeric: tabular-nums; color: var(--sf-ink-3); }
 /* Heads are words, not labels: sentence case, each with the swatch of its share of the split. */
 .sf-qgroup-head { text-transform: none; letter-spacing: normal; font-size: var(--sf-text-sm); }
+/* Only the group that waits on the person keeps the head's weight; the rest read as a quiet tally. */
+.sf-qgroup:not(:has(.sf-qswatch[data-fill="ask"])) > .sf-qgroup-head { font-weight: 400; color: var(--sf-ink-3); }
 .sf-qgroup-label { display: inline-flex; align-items: center; gap: var(--sf-space-2); min-width: 0; }
-.sf-qsplit { display: flex; gap: 2px; height: 10px; margin: var(--sf-space-3) var(--sf-space-4) var(--sf-space-2); border-radius: 3px; overflow: hidden; }
+.sf-qsplit { display: flex; gap: 2px; height: 6px; margin: var(--sf-space-3) var(--sf-space-4) var(--sf-space-2); border-radius: 3px; overflow: hidden; }
 .sf-qsplit-part { flex-basis: 0; min-width: 3px; }
 .sf-qswatch { flex: none; width: 10px; height: 10px; border-radius: 2px; }
 /* Neutral inks and shapes, not verdict colours: these groups are not verdicts. Only the asks,
@@ -2118,8 +2120,16 @@ body { overflow: hidden; }
    one close list under the open sections. */
 .sf-landing .sf-reports { gap: var(--sf-space-5); }
 .sf-landing .sf-report { background: none; border: 0; border-top: 1px solid var(--sf-rule-strong); border-radius: 0; padding: var(--sf-space-3) 0 0; }
-.sf-landing .sf-report:not(.sf-report-folded) > .sf-report-title { font-size: var(--sf-text-base); }
+.sf-landing .sf-report:not(.sf-report-folded) > .sf-report-title { font-size: var(--sf-text-xs); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; color: var(--sf-ink-3); }
+/* A section label is small and quiet, like the question page's eyebrow: the asks and answers are the
+   page's words, so they lead. A section with nothing in it is one quiet line, its label and its empty words side by
+   side, so an empty section never takes the height of a full one. */
+.sf-landing .sf-report:not(.sf-report-folded):not(:has(.sf-rows, .sf-landing-list)) { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--sf-space-1) var(--sf-space-3); padding-top: var(--sf-space-2); }
+.sf-landing .sf-report:not(.sf-report-folded):not(:has(.sf-rows, .sf-landing-list)) > .sf-report-note { color: var(--sf-ink-3); }
 .sf-landing .sf-report-folded { padding-top: var(--sf-space-2); }
+/* A folded read's name is a section label too, so every section on the landing is named the same way; its count stays words. */
+.sf-landing .sf-report-folded .sf-report-name { font-size: var(--sf-text-xs); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; color: var(--sf-ink-3); }
+.sf-landing .sf-report-folded .sf-report-count { margin-left: var(--sf-space-2); font-size: var(--sf-text-sm); letter-spacing: normal; text-transform: none; }
 .sf-landing .sf-report-folded + .sf-report-folded { margin-top: calc(var(--sf-space-2) - var(--sf-space-5)); }
 .sf-landing .sf-report[data-form="questions"]:has(.sf-landing-list > li) { background: var(--sf-panel); border: 1px solid var(--sf-accent); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); }
 /* A closed details still puts its hidden content in the column, so the card's gap would sit under the title: the open summary's margin is the only space. */
