@@ -88,6 +88,18 @@ describe("a thread that lists reads", () => {
     expect(buttons(STEP.id)).toEqual([]);
   });
 
+  test("must-fail: a thread the view folds is one closed line under the row, its title and count", async () => {
+    const el = await mount([asks([answers, { ...account, title: "What the walk did", folded: true }])]);
+    const fold = el.querySelector(`.sf-row[data-row="${ASK.id}"] > details.sf-thread`) as HTMLDetailsElement;
+    expect(fold).not.toBeNull();
+    expect(fold.open).toBe(false);
+    expect(fold.getAttribute("aria-label")).toBe("What the walk did");
+    expect(fold.querySelector("summary")!.textContent).toBe("What the walk did1");
+    expect(fold.querySelector("summary [data-count]")!.getAttribute("data-count")).toBe("1");
+    // The answer, which carries the verdict, stays open beside it.
+    expect(el.querySelector(`.sf-row[data-row="${ASK.id}"] > div.sf-thread .sf-row[data-row="${ANSWER.id}"]`)).not.toBeNull();
+  });
+
   test("control: a single thread is drawn as before", async () => {
     const el = await mount([asks(answers)]);
     expect(under(el)).toEqual(["answer"]);

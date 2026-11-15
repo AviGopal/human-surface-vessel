@@ -337,20 +337,39 @@ function Word({ k, v }: { k: string; v: unknown }): ReactNode {
 
 type Reading = { declared: ReadonlyMap<string, readonly string[]>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void };
 
-/** An entry's thread under one row: its read, bound to the row's id, drawn as its own entry. */
+/**
+ * An entry's thread under one row: its read, bound to the row's id, drawn as its own entry.
+ * Folded, it is one line of words under the row, its title and how many rows the read holds,
+ * opened by the person: what the walk did with an ask is there to look into, not to read first.
+ */
 function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; reading: Reading }): ReactNode {
   const pointer = bind(entry.pointer, ROW_BINDING, rowId);
   const q = useReport(pointer, { enabled: reading.enabled, intervalMs: reading.intervalMs });
   const a: ReportAnswer | undefined = q.data;
+  const inner = !a ? (
+    <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>
+  ) : !a.ok ? (
+    <Unanswered a={a} className="sf-muted sf-report-note" />
+  ) : (
+    <Drawn entry={entry} answer={a.answer} reading={reading} />
+  );
+  if (entry.folded) {
+    const got = a?.ok ? rowsOf(a.answer, entry) : null;
+    const count = got && "total" in got ? got.total : null;
+    const title = entry.title ?? reportTitle(entry.pointer.type);
+    return (
+      <details className="sf-thread sf-thread-folded" data-thread-of={rowId} aria-label={title}>
+        <summary>
+          {title}
+          {count !== null ? <span className="sf-report-count" data-count={count}>{count}</span> : null}
+        </summary>
+        {inner}
+      </details>
+    );
+  }
   return (
     <div className="sf-thread" data-thread-of={rowId}>
-      {!a ? (
-        <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>
-      ) : !a.ok ? (
-        <Unanswered a={a} className="sf-muted sf-report-note" />
-      ) : (
-        <Drawn entry={entry} answer={a.answer} reading={reading} />
-      )}
+      {inner}
     </div>
   );
 }
