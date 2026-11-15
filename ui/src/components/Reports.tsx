@@ -9,9 +9,10 @@
  * `rows`: each row as its words, every field as the producer wrote it folded under "details",
  * nothing chosen or reordered by the surface. Which fields are the words is declared, never
  * guessed (src/row-words.ts): the owner's `shape_description` row for the row's shape, else the
- * entry's `words`; with neither the row shows its shape and time. With `judge: "outcome"`
- * each row offers a person's verdict, outside the fold, written as an outcome row citing it
- * under their own key; when the entry names `words`, only a row holding one of them does.
+ * entry's `words`; with neither the row shows its shape and time. With `judge` each row offers
+ * a person's verdict, outside the fold, written under their own key as an outcome row citing it
+ * ("outcome") or a land_verdict citing it ("land"); when the entry names `words`, only a row
+ * holding one of them does. A word that is a diff is drawn as one, folded under its size.
  * `questions`: each row is a question this surface holds, opened on selection.
  * A folded entry with `strip: {hours}` draws in its summary one bar per hour of the last `hours`,
  * each as tall as the rows read whose `t` falls in it, on that strip's own scale; from the rows
@@ -22,7 +23,7 @@
  */
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { bind, ROW_BINDING, threadsOf, writeOutcome, type ReportAnswer, type ViewEntry } from "../api/client";
+import { bind, ROW_BINDING, threadsOf, writeLandVerdict, writeOutcome, type ReportAnswer, type ViewEntry } from "../api/client";
 import { useReport } from "../api/queries";
 import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
@@ -31,7 +32,8 @@ import { useLimits } from "../state/limits";
 import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
 import { askAbout, citesOf } from "../lib/box";
 import { Prose } from "./Prose";
-import { relative } from "./ContentRender";
+import { Diff, relative } from "./ContentRender";
+import { diffSize, heuristicForm, parseDiff } from "../lib/ledger";
 
 /** Where the owners' declarations of a row's words are read: records' `shape_description` rows. */
 const DECLARATIONS = { type: "record_read", shape: "shape_description" } as const;
@@ -108,7 +110,7 @@ function Unanswered({ a, className }: { a: Extract<ReportAnswer, { ok: false }>;
 
 /** Whether any entry, or its thread, offers a verdict: the page says how to sign in once, not under every row. */
 function offersVerdicts(entries: readonly ViewEntry[]): boolean {
-  return entries.some((e) => e.judge === "outcome" || threadsOf(e).some((t) => t.judge === "outcome"));
+  return entries.some((e) => e.judge !== undefined || threadsOf(e).some((t) => t.judge !== undefined));
 }
 
 /** An outcome's `r` as words: right for 1, wrong for 0, else the value as written. */
@@ -166,14 +168,14 @@ export function Said({ said }: { said: string | undefined }): ReactNode {
 /** On the verdict given: what it is, and that the other word replaces it. */
 const VERDICT_GIVEN = "Your verdict. Choosing the other replaces it.";
 
-function Judge({ rowId, graded, reading }: { rowId: string; graded?: ViewEntry["graded"]; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
+function Judge({ row, rowId, kind, graded, reading }: { row: Readonly<Record<string, unknown>>; rowId: string; kind: NonNullable<ViewEntry["judge"]>; graded?: ViewEntry["graded"]; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
   const session = useSession();
   const client = useQueryClient();
   const [verdict, setVerdict] = useState<Verdict>({ state: "idle" });
   const signedIn = session.data?.signedIn === true;
   const give = async (r: 0 | 1): Promise<void> => {
     setVerdict({ state: "sending", r });
-    const got = await writeOutcome(rowId, r);
+    const got = kind === "land" ? await writeLandVerdict(row, r) : await writeOutcome(rowId, r);
     if (!got.ok && got.signedOut) {
       // The page still showed a sign-in the surface no longer holds (it restarted, or the
       // sign-in ran out): read the session again so the page says so everywhere.
@@ -325,14 +327,32 @@ function RowTime({ t, full }: { t: string; full: string }): ReactNode {
  * which builds elements and draws markup and links as text; a list of text as its items, one to a
  * line; any other value as one line with its field's name.
  */
-function Word({ k, v }: { k: string; v: unknown }): ReactNode {
+function Word({ k, v, cut }: { k: string; v: unknown; cut: boolean }): ReactNode {
   if (isTextList(v)) return <div className="sf-row-words"><Items items={v} /></div>;
+  if (typeof v === "string" && heuristicForm(k, v, false) === "diff") return <DiffWord text={v} cut={cut} />;
   return typeof v === "string" ? (
     <div className="sf-row-words sf-row-prose">
       <Prose source={v} breaks />
     </div>
   ) : (
     <p className="sf-row-words">{`${k.replace(/_/g, " ")} ${fieldText(v)}`}</p>
+  );
+}
+
+/**
+ * A change, folded under its size: what it does is the row's headline, the change itself one tap
+ * away. A change the producer cut short says so on the fold, so it is never read as the whole.
+ */
+function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
+  const { added, removed } = diffSize(parseDiff(text));
+  return (
+    <details className="sf-row-words sf-row-diff" data-diff="">
+      <summary>
+        {`the change · +${added} −${removed} lines`}
+        {cut ? <span className="sf-row-diff-cut" data-cut="">{" · cut short: not the whole change"}</span> : null}
+      </summary>
+      <Diff text={text} />
+    </details>
   );
 }
 
@@ -352,7 +372,7 @@ function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; re
   ) : !a.ok ? (
     <Unanswered a={a} className="sf-muted sf-report-note" />
   ) : (
-    <Drawn entry={entry} answer={a.answer} reading={reading} />
+    <Drawn entry={entry} answer={a.answer} reading={reading} quiet />
   );
   if (entry.folded) {
     const got = a?.ok ? rowsOf(a.answer, entry) : null;
@@ -385,7 +405,7 @@ function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; re
 }
 
 function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewEntry; reading: Reading }): ReactNode {
-  const judge = entry.judge === "outcome";
+  const judge = entry.judge;
   const threads = threadsOf(entry);
   return (
     <ol className="sf-rows">
@@ -397,7 +417,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
         return (
           <li key={id ?? i} className={threads.length > 0 ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined}>
             {words.length > 0 ? (
-              words.map((w, j) => <Word key={j} k={w.field} v={w.value} />)
+              words.map((w, j) => <Word key={j} k={w.field} v={w.value} cut={o["truncated"] === true} />)
             ) : (
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
@@ -416,7 +436,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
                   ))}
                 </dl>
               </details>
-              {judge && id && (entry.words === undefined || entry.words.some((f) => o[f] !== undefined && o[f] !== null && o[f] !== "")) ? <Judge rowId={id} graded={entry.graded} reading={reading} /> : null}
+              {judge && id && (entry.words === undefined || entry.words.some((f) => o[f] !== undefined && o[f] !== null && o[f] !== "")) ? <Judge row={o} rowId={id} kind={judge} graded={entry.graded} reading={reading} /> : null}
               {entry.about && id ? <AboutThis rowId={id} words={words.map((w) => fieldText(w.value)).join(" ").trim() || (typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "this")} threads={threads} reading={reading} /> : null}
             </div>
             {id ? threads.map((t, j) => <Thread key={j} entry={t} rowId={id} reading={reading} />) : null}
@@ -520,7 +540,7 @@ function Empty({ said, why, counted }: { said: string | undefined; why: string |
 }
 
 /** The answer drawn in the entry's form, or what was found instead of rows. */
-function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; reading: Reading }): ReactNode {
+function Drawn({ entry, answer, reading, quiet = false }: { entry: ViewEntry; answer: unknown; reading: Reading; quiet?: boolean }): ReactNode {
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) {
@@ -536,7 +556,8 @@ function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; 
       </>
     );
   }
-  if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} counted={entry.folded === true} />;
+  // A thread under a row with nothing citing it and no words for that says nothing: an ask the walk made no change for has no line about changes.
+  if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} counted={entry.folded === true || quiet} />;
   const draw = (rows: readonly unknown[]): ReactNode =>
     entry.form === "questions" ? <Questions rows={rows} onOpen={reading.onOpenQuestion} /> : <Rows rows={rows} entry={entry} reading={reading} />;
   return (

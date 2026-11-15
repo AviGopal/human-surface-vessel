@@ -58,7 +58,10 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * `show` draws only the last n rows, in the order the producer returned them.
  * `judge: "outcome"` offers a person's verdict on each row, written as an outcome row
  * citing it under the person's own key; with `words` named, only on a row that holds one of
- * them, so a row with nothing to judge offers no verdict. `empty` is what the entry says when the read answers
+ * them, so a row with nothing to judge offers no verdict. `judge: "land"` offers the same on a
+ * change, written as a land_verdict row citing it and carrying the row's own `repo` and `tree`,
+ * the keys a landing reads verdicts by. Which changes may land on it is the landing's to decide:
+ * the page offers the verdict on every row the view judges, and refuses nothing. `empty` is what the entry says when the read answers
  * with no rows, so an empty read carries its reason rather than a bare "no rows".
  * `words` names the fields that hold a row's words, in order, for a row whose shape has no
  * `shape_description` row declaring them (the owner's declaration comes first); a row with
@@ -77,7 +80,7 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * read returned fall in each of the last `hours` hours, by their `t`: a picture of when, from
  * rows already read, never a second read. When the read was cut to its newest rows and they do
  * not reach back to the window's start, the strip says so instead of looking whole.
- * `graded` (with `judge: "outcome"` only) is the read of the system's own grades of a row, its
+ * `graded` (with a `judge` only) is the read of the system's own grades of a row, its
  * pointer bound to the row through ROW_BINDING and narrowed by records' `where` (equality on a
  * row's fields; records stamps `role` from the writer's key). It is drawn only after this person
  * has given their verdict on the row, closed, so the system's grade cannot anchor the person's.
@@ -91,7 +94,7 @@ export type ViewEntry = {
   readonly title?: string;
   readonly field?: string;
   readonly show?: number;
-  readonly judge?: "outcome";
+  readonly judge?: JudgeKind;
   readonly empty?: string;
   readonly words?: readonly string[];
   readonly thread?: ViewEntry | readonly ViewEntry[];
@@ -106,11 +109,15 @@ type Plain = string | number | boolean;
 /** A row's grades as a read: a pointer bound to the row, with records' `where` by equality. */
 export type GradedRead = { readonly pointer: Readonly<Record<string, Plain | Readonly<Record<string, Plain>>>> & { readonly type: string } };
 
+/** What a person's verdict on a row is written as: an outcome on an answer or a check, a land_verdict on a change. */
+export const JUDGE_KINDS = ["outcome", "land"] as const;
+export type JudgeKind = (typeof JUDGE_KINDS)[number];
+
 /** How many entries one view may name, and how many rows `show` may ask for. */
 const MAX_ENTRIES = 8;
 const MAX_SHOW = 200;
 /** How many reads an entry's `thread` may list under each row. */
-export const MAX_THREADS = 2;
+export const MAX_THREADS = 3;
 /** The widest window a strip may draw: a week, an hour per bar. */
 const MAX_STRIP_HOURS = 168;
 const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_:.-]{0,79}$/;
@@ -133,6 +140,8 @@ const MAX_WHERE = 4;
 const DAY = { hours: 24 } as const;
 
 const WALK_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "outcome", where: { role: "described" } } };
+/** The walk's own grades of a change: land_verdicts citing it that the described-shape vessel wrote. */
+const LAND_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "land_verdict", where: { role: "described" } } };
 
 export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }> = {
   landing: {
@@ -157,6 +166,10 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
         // to look into, not to read before the answer. Its order and its cut are records'.
         thread: [
           { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
+          // Then the change the walk made for it, if any: its newest diff, judged under the ask it was
+          // made for, the grader's verdict closed until the person's. Where the landing stands is in
+          // what the walk did (its landing calls), not a second read here.
+          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "gitDiff" }, form: "rows", show: 1, newest: true, words: ["repo", "diff"], judge: "land", graded: LAND_GRADES },
           { pointer: { type: "record_read", root: ROW_BINDING, calls: "all", output: false }, form: "rows", show: 12, words: ["type", "state"], title: "What the walk did", folded: true },
         ],
       },
@@ -185,16 +198,16 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: "outcome", empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
-    `judge "outcome" (rows only) offers a person's verdict on each row; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; ` +
+    `judge (rows only) offers a person's verdict on each row: "outcome" writes an outcome citing it, "land" a land_verdict citing it with the row's repo and tree; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; ` +
     `words names the fields drawn as a row's words when its shape's shape_description row (records, written by the owner) names none in its own words field; ` +
     `a row with neither is drawn as its shape and time, every other field folded under details; ` +
     `newest: true (rows only) draws the rows show kept newest first, the reverse of the producer's order, which also decides which rows are kept; ` +
     `folded: true draws the entry closed under its title and the count of rows its read holds; ` +
     `strip (folded only) draws in that summary how many of the rows read fall in each of the last hours hours, by their t; ` +
-    `graded (with judge "outcome" only) is the read of the system's own grades of a row, its pointer naming "${ROW_BINDING}" and narrowed by where: {field: value} (equality, 1 to ${MAX_WHERE} fields), drawn closed only after the person has given their verdict on that row; ` +
+    `graded (with a judge only) is the read of the system's own grades of a row, its pointer naming "${ROW_BINDING}" and narrowed by where: {field: value} (equality, 1 to ${MAX_WHERE} fields), drawn closed only after the person has given their verdict on that row; ` +
     `thread (rows only) is read again under each row, its pointer argument "${ROW_BINDING}" replaced by that row's id, and drawn as its own entry, one level deep; a list is read entry by entry and drawn in list order; ` +
     `about: true (rows only, not in a thread) offers on each row a control that sets the person's box to a new ask about that row, citing it and the rows its judged thread drew under it`;
   const defaults = contract.regions
@@ -339,7 +352,7 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
   if (title !== undefined && (typeof title !== "string" || !title.trim() || title.length > 80)) return { detail: "title: 1 to 80 characters" };
   if (field !== undefined && (typeof field !== "string" || !FIELD_NAME.test(field))) return { detail: "field: a field name" };
   if (show !== undefined && (typeof show !== "number" || !Number.isInteger(show) || show < 1 || show > MAX_SHOW)) return { detail: `show: 1..${MAX_SHOW}` };
-  if (judge !== undefined && judge !== "outcome") return { detail: `judge: "outcome"` };
+  if (judge !== undefined && !(JUDGE_KINDS as readonly unknown[]).includes(judge)) return { detail: `judge: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" or ")}` };
   if (judge !== undefined && form !== "rows") return { detail: `judge needs form "rows": a verdict is on a row` };
   if (empty !== undefined && (typeof empty !== "string" || !empty.trim() || empty.length > 160)) return { detail: "empty: 1 to 160 characters" };
   if (words !== undefined && !wordFields(words)) return { detail: `words: 1 to ${MAX_WORDS} field names` };
@@ -354,7 +367,7 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
   if (about !== undefined && about !== true) return { detail: "about: true" };
   if (about !== undefined && form !== "rows") return { detail: `about needs form "rows": an ask is about a row` };
   if (about !== undefined && inThread) return { detail: "about: on a listed row, not in a thread" };
-  if (graded !== undefined && judge !== "outcome") return { detail: `graded needs judge "outcome": the system's grade is drawn after a person's verdict` };
+  if (graded !== undefined && judge === undefined) return { detail: `graded needs a judge: the system's grade is drawn after a person's verdict` };
   const grades = graded === undefined ? null : gradedOf(graded);
   if (grades && "detail" in grades) return grades;
   const listed = Array.isArray(thread);
@@ -370,7 +383,7 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
       ...(typeof title === "string" ? { title: title.trim() } : {}),
       ...(typeof field === "string" ? { field } : {}),
       ...(typeof show === "number" ? { show } : {}),
-      ...(judge === "outcome" ? { judge } : {}),
+      ...(judge !== undefined ? { judge: judge as JudgeKind } : {}),
       ...(typeof empty === "string" ? { empty: empty.trim() } : {}),
       ...(words !== undefined ? { words: words as string[] } : {}),
       ...(under.length > 0 ? { thread: listed ? under : under[0]! } : {}),

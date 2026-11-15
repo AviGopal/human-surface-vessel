@@ -78,7 +78,7 @@ function Rows({ text }: { text: string }): ReactNode {
   );
 }
 
-function Diff({ text }: { text: string }): ReactNode {
+export function Diff({ text }: { text: string }): ReactNode {
   const lines = parseDiff(text);
   return (
     <pre className="sf-diff">

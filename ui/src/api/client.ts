@@ -90,7 +90,8 @@ export type ViewEntry = {
   readonly title?: string;
   readonly field?: string;
   readonly show?: number;
-  readonly judge?: "outcome";
+  /** What a person's verdict on a row is written as: an outcome, or a land_verdict on a change. */
+  readonly judge?: "outcome" | "land";
   readonly empty?: string;
   /** The fields that hold a row's words when the owner declares none (src/row-words.ts). */
   readonly words?: readonly string[];
@@ -187,6 +188,16 @@ async function writeRow(row: Record<string, unknown>): Promise<RowWrite> {
 /** A person's verdict on a row: an outcome row citing exactly that row. */
 export function writeOutcome(rowId: string, r: 0 | 1): Promise<RowWrite> {
   return writeRow({ shape: "outcome", r, input_refs: [rowId] });
+}
+
+/**
+ * A person's verdict on a change: a land_verdict row citing exactly that row, carrying its `repo`
+ * and `tree` as the row has them, the keys a landing reads verdicts by. The page checks nothing
+ * else: whether the change may land on it is the landing's.
+ */
+export function writeLandVerdict(row: Readonly<Record<string, unknown>>, r: 0 | 1): Promise<RowWrite> {
+  const keys = Object.fromEntries((["repo", "tree"] as const).filter((k) => row[k] !== undefined).map((k) => [k, row[k]]));
+  return writeRow({ shape: "land_verdict", r, input_refs: [row["id"]], ...keys });
 }
 
 /**

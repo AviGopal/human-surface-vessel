@@ -1128,6 +1128,17 @@ export interface DiffLine {
   readonly text: string;
 }
 
+/** How many lines a diff adds and removes, from its parsed lines: the size a folded change is labelled with. */
+export function diffSize(lines: readonly DiffLine[]): { added: number; removed: number } {
+  let added = 0;
+  let removed = 0;
+  for (const l of lines) {
+    if (l.kind === "added") added++;
+    else if (l.kind === "removed") removed++;
+  }
+  return { added, removed };
+}
+
 export function parseDiff(text: string): readonly DiffLine[] {
   return text.split("\n").map((line): DiffLine => {
     if (line.startsWith("@@")) return { kind: "hunk", text: line };
