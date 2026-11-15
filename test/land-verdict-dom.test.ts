@@ -1,8 +1,9 @@
 /**
  * A change the walk made for an ask is drawn under that ask, and a person can judge it: `judge: "land"`
  * writes a land_verdict citing the change, carrying the row's own `repo` and `tree`, the keys a landing
- * reads verdicts by. The page copies no landing rule: it offers the verdict on every change the view
- * judges and refuses nothing, so a rule kept twice cannot drift. The change is drawn as a diff, folded
+ * reads verdicts by. The page copies one landing condition only, by the USER's ruling that a mark is
+ * offered only where it counts: a Right counts only on the whole change, so on one cut short Right is
+ * not offered and says why. Every other change is offered both, and nothing is refused. The change is drawn as a diff, folded
  * under its size, and one cut short says so. The system's own grade stays closed until the person has
  * judged, so it cannot anchor them.
  *
@@ -108,13 +109,28 @@ describe("a change judged under its ask", () => {
     expect(rowOf(written[0]!)).toEqual({ shape: "land_verdict", r: 1, input_refs: [DIFF.id], repo: DIFF.repo, tree: DIFF.tree });
   });
 
-  test("must-fail: the page copies no landing rule: a change cut short, or not the walk's, is offered the verdict, and a cut one says so", async () => {
-    diffs = [{ ...DIFF, truncated: true, role: "operator" }];
+  test("must-fail: on a change cut short, Right is not offered and says why; Wrong is, and writes as before", async () => {
+    diffs = [{ ...DIFF, truncated: true }];
     const el = await mount();
-    expect(change(el)!.querySelectorAll(".sf-judge-word")).toHaveLength(2);
+    const [right, wrong] = [...change(el)!.querySelectorAll(".sf-judge-word")] as HTMLButtonElement[];
+    expect(right!.textContent).toBe("Right");
+    expect(right!.disabled).toBe(true);
+    expect(change(el)!.querySelector("[data-right-needs-whole]")!.textContent).toBe("Right needs the whole change");
+    expect(right!.getAttribute("aria-describedby")).toBe(change(el)!.querySelector("[data-right-needs-whole]")!.id);
+    expect(wrong!.disabled).toBe(false);
     expect(change(el)!.querySelector("[data-diff] summary")!.textContent).toContain("cut short: not the whole change");
+    await judge(el, "Right");
+    expect(written).toEqual([]);
     await judge(el, "Wrong");
     expect(rowOf(written[0]!)).toEqual({ shape: "land_verdict", r: 0, input_refs: [DIFF.id], repo: DIFF.repo, tree: DIFF.tree });
+  });
+
+  test("the page copies no other landing rule: a change not the walk's is offered both", async () => {
+    diffs = [{ ...DIFF, role: "operator" }];
+    const el = await mount();
+    const words = [...change(el)!.querySelectorAll(".sf-judge-word")] as HTMLButtonElement[];
+    expect(words.map((b) => b.disabled)).toEqual([false, false]);
+    expect(change(el)!.querySelector("[data-right-needs-whole]")).toBeNull();
   });
 
   test("must-fail: the change is drawn as a diff, folded under its size", async () => {

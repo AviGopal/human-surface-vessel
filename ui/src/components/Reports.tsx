@@ -169,6 +169,15 @@ export function Said({ said }: { said: string | undefined }): ReactNode {
 const VERDICT_GIVEN = "Your verdict. Choosing the other replaces it.";
 
 /**
+ * Why Right is not offered on a change cut short. A landing counts a person's Right only when it
+ * was given on the walk's whole diff of the tree; a Wrong counts on any. The USER ruled (11-15) that
+ * a mark is offered only where it counts, so the page holds this one condition of the landing's.
+ * Named debt: the condition is the landing's, kept here as well; its exit is the landing declaring
+ * what a Right needs on its own row, read at use time like VERDICT_READERS.
+ */
+const RIGHT_NEEDS_WHOLE = "Right needs the whole change";
+
+/**
  * The one fact the verdict's reader leaves, under a verdict given (src/ui-views.ts VERDICT_READERS):
  * records' standing of the person's own grade, read back by its id; or the gap's newest detector
  * row, once one is newer than the row judged, as a plain fact: a detector writes newer rows on its
@@ -212,6 +221,7 @@ function Judge({ row, rowId, kind, graded, after, reading }: { row: Readonly<Rec
   const client = useQueryClient();
   const [verdict, setVerdict] = useState<Verdict>({ state: "idle" });
   const signedIn = session.data?.signedIn === true;
+  const rightCounts = !(kind === "land" && row["truncated"] === true);
   const give = async (r: 0 | 1): Promise<void> => {
     setVerdict({ state: "sending", r });
     const got = kind === "land" ? await writeLandVerdict(row, r) : await writeOutcome(rowId, r);
@@ -229,7 +239,8 @@ function Judge({ row, rowId, kind, graded, after, reading }: { row: Readonly<Rec
     <div className="sf-row-judge" role="group" aria-label="Your verdict on this">
       {/* The verdict given is the marked word (aria-pressed); beside it, the record it was stored as. */}
       {verdict.state === "done" ? <span className="sf-judge-given">record #{verdict.seq}</span> : null}
-      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending"} title={!signedIn ? SIGN_IN_TO_JUDGE : verdict.state === "done" && verdict.r === 1 ? VERDICT_GIVEN : undefined} onClick={() => void give(1)}>
+      {!rightCounts ? <span className="sf-judge-given" data-right-needs-whole="" id={`whole-${rowId}`}>{RIGHT_NEEDS_WHOLE}</span> : null}
+      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending" || !rightCounts} aria-describedby={!rightCounts ? `whole-${rowId}` : undefined} title={!signedIn ? SIGN_IN_TO_JUDGE : !rightCounts ? RIGHT_NEEDS_WHOLE : verdict.state === "done" && verdict.r === 1 ? VERDICT_GIVEN : undefined} onClick={() => void give(1)}>
         Right
       </button>
       <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={!signedIn ? SIGN_IN_TO_JUDGE : verdict.state === "done" && verdict.r === 0 ? VERDICT_GIVEN : undefined} onClick={() => void give(0)}>
