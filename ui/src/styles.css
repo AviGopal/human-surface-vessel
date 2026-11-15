@@ -2197,8 +2197,18 @@ body { overflow: hidden; }
 /* A folded thread is one quiet line of words under its row, its count after its title; opened, its rows follow. */
 .sf-thread-folded { display: block; }
 .sf-thread-folded > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
-.sf-thread-folded > summary .sf-report-count { margin-left: var(--sf-space-2); font-variant-numeric: tabular-nums; }
+.sf-thread-folded > summary .sf-report-count, p.sf-thread-folded > .sf-report-count { margin-left: var(--sf-space-2); font-variant-numeric: tabular-nums; }
 .sf-thread-folded[open] > summary { margin-bottom: var(--sf-space-2); }
+/* A read with nothing in it is the same quiet line, with no control: it has nothing to open. */
+p.sf-thread-folded { margin-block: 0; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
+/* Opened, each row is one line: its words, then its time and details, so twelve steps read as a list, not twelve cards. */
+.sf-thread-folded .sf-rows { gap: var(--sf-space-1); }
+.sf-thread-folded .sf-row { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 var(--sf-space-2); border-top: 0; padding-top: 0; font-size: var(--sf-text-sm); }
+.sf-thread-folded .sf-row-prose > .sf-prose, .sf-thread-folded .sf-row-prose > .sf-prose > p { display: inline; }
+.sf-thread-folded .sf-row-words + .sf-row-words::before { content: "· "; color: var(--sf-ink-3); }
+.sf-thread-folded .sf-row-meta { margin-left: auto; }
+.sf-thread-folded .sf-row-meta:has(> .sf-row-details[open]) { flex-basis: 100%; margin-left: 0; }
+.sf-thread-folded .sf-row-time { font-size: inherit; font-variant-numeric: tabular-nums; }
 .sf-row-judge { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-1) var(--sf-space-2); }
 /* Right and Wrong are words on the row's meta line, not boxes: a column of boxed buttons outweighed
    the claims they judge. The given verdict stays marked; hover and focus take the accent. */

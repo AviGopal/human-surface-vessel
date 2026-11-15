@@ -357,6 +357,15 @@ function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; re
     const got = a?.ok ? rowsOf(a.answer, entry) : null;
     const count = got && "total" in got ? got.total : null;
     const title = entry.title ?? reportTitle(entry.pointer.type);
+    // A read that holds nothing has nothing to open: its title and its 0, with no control that opens to nothing.
+    if (count === 0) {
+      return (
+        <p className="sf-thread sf-thread-folded" data-thread-of={rowId} aria-label={title}>
+          {title}
+          <span className="sf-report-count" data-count={0}>0</span>
+        </p>
+      );
+    }
     return (
       <details className="sf-thread sf-thread-folded" data-thread-of={rowId} aria-label={title}>
         <summary>

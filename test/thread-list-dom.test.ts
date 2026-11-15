@@ -100,6 +100,31 @@ describe("a thread that lists reads", () => {
     expect(el.querySelector(`.sf-row[data-row="${ASK.id}"] > div.sf-thread .sf-row[data-row="${ANSWER.id}"]`)).not.toBeNull();
   });
 
+  test("must-fail: a folded read that holds nothing is its title and 0, with nothing to open", async () => {
+    const none = { pointer: { type: "record_read", refs_to: "$row", shape: "nothing" }, form: "rows", title: "What the walk did", folded: true };
+    const el = await mount([asks([answers, none])]);
+    const line = el.querySelector(`.sf-row[data-row="${ASK.id}"] > .sf-thread-folded`) as HTMLElement;
+    expect(line).not.toBeNull();
+    expect(line.tagName).toBe("P");
+    expect(line.querySelector("summary, details, button")).toBeNull();
+    expect(line.textContent).toBe("What the walk did0");
+    expect(line.querySelector("[data-count]")!.getAttribute("data-count")).toBe("0");
+    // control: a read that holds a row still opens to it.
+    const el2 = await mount([asks([answers, { ...account, title: "What the walk did", folded: true }])]);
+    expect(el2.querySelector(`.sf-row[data-row="${ASK.id}"] > details.sf-thread-folded`)).not.toBeNull();
+  });
+
+  test("must-fail: an opened folded read draws each row as one line, not a card", () => {
+    const css = readFileSync(new URL("../ui/src/styles.css", import.meta.url), "utf8");
+    const rule = (selector: string): string => {
+      const at = css.indexOf(`${selector} {`);
+      return at < 0 ? "" : css.slice(at, css.indexOf("}", at));
+    };
+    expect(rule(".sf-thread-folded .sf-row")).toContain("flex-direction: row");
+    expect(rule(".sf-thread-folded .sf-row")).toContain("border-top: 0");
+    expect(rule(".sf-thread-folded .sf-row-words + .sf-row-words::before")).toContain('content: "· "');
+  });
+
   test("control: a single thread is drawn as before", async () => {
     const el = await mount([asks(answers)]);
     expect(under(el)).toEqual(["answer"]);
