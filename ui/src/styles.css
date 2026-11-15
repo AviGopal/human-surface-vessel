@@ -2036,6 +2036,15 @@ body { overflow: hidden; }
 /* The one box's context: what the next message will be read as. */
 .sf-box-chip { display: inline-flex; align-items: center; gap: var(--sf-space-1); align-self: center; max-width: 22rem; padding: var(--sf-space-1) var(--sf-space-2); border-radius: 999px; font-size: var(--sf-text-xs); color: var(--sf-ink-3); border: 1px solid var(--sf-rule); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
 .sf-box-chip[data-context="reply"] { color: var(--sf-ink); border-color: var(--sf-waiting); background: var(--sf-panel-alt); }
+.sf-box-chip[data-context="about"] { color: var(--sf-ink); border-color: var(--sf-accent); }
+.sf-box-chip-words { display: inline-block; min-width: 3em; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.sf-box-chip[data-context="about"] { flex: 0 1 auto; min-width: 0; }
+.sf-box-chip-about { display: inline-flex; min-width: 0; white-space: pre; }
+/* On a phone a chip that says what the box is about takes its own line above the box, so the box keeps its width. */
+@media (max-width: 480px) {
+  .sf-ask-bar:has(> .sf-box-chip:not([data-context="new"])) { flex-wrap: wrap; }
+  .sf-ask-bar > .sf-box-chip:not([data-context="new"]) { flex: 1 0 100%; max-width: 100%; }
+}
 
 /* Verdicts kept on a run, beside the judge's. */
 .sf-kept-verdicts { list-style: none; margin: 0 0 var(--sf-space-2); padding: 0; display: grid; gap: var(--sf-space-1); font-size: var(--sf-text-sm); }
@@ -2165,6 +2174,10 @@ body { overflow: hidden; }
    full width under it. */
 .sf-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sf-space-1) var(--sf-space-3); min-width: 0; }
 .sf-row-meta > .sf-row-details { order: 1; }
+/* "about this" only chooses what the box is about: a quiet word beside details, not a button's weight. */
+.sf-row-meta > .sf-row-about { order: 1; }
+.sf-row-about { padding: 0; border: 0; background: none; font: inherit; font-size: var(--sf-text-sm); color: var(--sf-ink-3); cursor: pointer; text-decoration: underline; text-decoration-color: var(--sf-rule); text-underline-offset: 2px; }
+.sf-row-about:hover, .sf-row-about:focus-visible { color: var(--sf-accent); text-decoration-color: currentColor; }
 .sf-row-meta > .sf-row-judge { order: 2; margin-left: auto; justify-content: flex-end; }
 .sf-row-meta > .sf-row-details[open] { order: 3; flex-basis: 100%; }
 .sf-row-meta > .sf-judge-refused { order: 3; flex-basis: 100%; }

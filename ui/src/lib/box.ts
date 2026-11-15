@@ -2,23 +2,50 @@
  * How the one box reads what a person types: by the context it shows beside it.
  *
  * A context is offered only where something reads the text. Today that is a new ask (a
- * world_changed row the walk takes up) and an open question (recorded on the question).
+ * world_changed row the walk takes up), a new ask about one already listed (the same row, citing
+ * that ask and the answer drawn under it), and an open question (recorded on the question).
  * A verdict is given on an answer row, not typed. Follow-ups and corrections have no reader
- * yet, so the box never reads text as them.
+ * yet, so the box never reads text as them: an ask about another starts fresh, and its chip says so.
  */
 
 import type { Question } from "../api/participation";
 
 export type BoxContext =
   | { readonly kind: "new" }
+  | { readonly kind: "about"; readonly about: About }
   | { readonly kind: "reply"; readonly question: Question; readonly goal: string | null };
+
+/** What an ask is about: the rows it cites (the ask, then the answer drawn under it), and that ask's words. */
+export type About = { readonly cites: readonly string[]; readonly words: string };
 
 export const NEW_ASK: BoxContext = { kind: "new" };
 
-/** The open question, unless the person set it aside; else a new ask. */
-export function boxContext(question: Question | null, goal: string | null, setAside: string | null): BoxContext {
+/** The open question, unless the person set it aside; else an ask about the one they chose; else a new ask. */
+export function boxContext(question: Question | null, goal: string | null, setAside: string | null, about: About | null = null): BoxContext {
   if (question && question.id !== setAside) return { kind: "reply", question, goal: goal?.trim() || null };
+  if (about) return { kind: "about", about };
   return NEW_ASK;
+}
+
+/**
+ * What a new ask about a listed one cites: that ask, then each answer drawn under it that cites
+ * it. A drawn row that does not cite the ask (a producer's slip) is never cited in the person's
+ * name: the write says only what the person saw about this ask. Which rows were drawn is the
+ * view's and the producer's; this only guards the write.
+ */
+export function citesOf(askId: string, drawn: readonly unknown[]): string[] {
+  const out = [askId];
+  for (const r of drawn) {
+    if (typeof r !== "object" || r === null || Array.isArray(r)) continue;
+    const row = r as Record<string, unknown>;
+    if (typeof row["id"] === "string" && Array.isArray(row["input_refs"]) && row["input_refs"].map(String).includes(askId)) out.push(row["id"]);
+  }
+  return out;
+}
+
+/** Ask the box to read the next message as a new ask about this one (a control on a listed ask); it sends nothing. */
+export function askAbout(about: About): void {
+  window.dispatchEvent(new CustomEvent("sf:box-about", { detail: about }));
 }
 
 /**
@@ -74,6 +101,8 @@ export interface BoxWords {
 
 export function boxWords(ctx: BoxContext): BoxWords {
   if (ctx.kind === "new") return { chip: "New ask", placeholder: "What do you want done?", send: "Send" };
+  // Not a follow-up: nothing reads one yet, so the walk takes it as a new ask that cites the old.
+  if (ctx.kind === "about") return { chip: `New ask about “${ctx.about.words}” · starts fresh`, placeholder: "What do you want done?", send: "Send" };
   const about = ctx.goal ?? ctx.question.title;
   return { chip: `Answering “${about}” · waiting on you`, placeholder: "Your answer", send: "Answer" };
 }
@@ -81,5 +110,6 @@ export function boxWords(ctx: BoxContext): BoxWords {
 /** The echo after a message is taken: how it was read. */
 export function readAs(ctx: BoxContext): string {
   if (ctx.kind === "new") return "Read as a new ask";
+  if (ctx.kind === "about") return `Read as a new ask about “${ctx.about.words}”`;
   return `Read as your answer to “${ctx.goal ?? ctx.question.title}”`;
 }

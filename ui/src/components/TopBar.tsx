@@ -33,11 +33,14 @@ export function TopBar({
   complaintRegion = null,
   context = NEW_ASK,
   onSetAside,
+  onAsked,
 }: {
   /** What the next message will be read as; the chip shows it. */
   context?: BoxContext;
   /** × on the chip: read the next message as a new ask instead. */
   onSetAside?: () => void;
+  /** An ask was stored: what the box was about is spent, and the next message is a new ask. */
+  onAsked?: () => void;
   openIssues: number | null;
   onToggleIssues: () => void;
   issuesOpen: boolean;
@@ -71,7 +74,7 @@ export function TopBar({
     },
   });
   // An ask sent signed out: nothing was written, sign-in opens, and the ask goes once signed in.
-  const [pendingAsk, setPendingAsk] = useState<string | null>(null);
+  const [pendingAsk, setPendingAsk] = useState<{ text: string; cites: readonly string[] } | null>(null);
   const [signInSignal, setSignInSignal] = useState(0);
   const queryClient = useQueryClient();
   // A complaint (16f-3): a row in the person's own words, about what is on screen, written as an ask is.
@@ -82,7 +85,7 @@ export function TopBar({
   // An ask: written whole as the person's ask. Signed out, nothing is written.
   const asking = useMutation({
     retry: false,
-    mutationFn: (text: string): Promise<RowWrite> => writeAsk(text),
+    mutationFn: (args: { text: string; cites: readonly string[] }): Promise<RowWrite> => writeAsk(args.text, args.cites),
   });
   const words = boxWords(context);
   const pending = asking.isPending || answer.isPending || complain.isPending;
@@ -171,15 +174,16 @@ export function TopBar({
     }
     answer.reset();
     setEcho(null);
-    ask(text);
+    ask(text, context.kind === "about" ? context.about.cites : []);
   };
 
-  const ask = (text: string): void => {
-    asking.mutate(text, {
+  const ask = (text: string, cites: readonly string[]): void => {
+    asking.mutate({ text, cites }, {
       onSuccess: (got) => {
         if (got.ok) {
           setEcho(null);
-          setSent(`Asked (record #${got.seq}).`);
+          setSent(cites.length > 0 ? `Asked (record #${got.seq}), about an earlier ask: the walk starts it fresh.` : `Asked (record #${got.seq}).`);
+          onAsked?.();
           // Read again now, so the ask is listed at once rather than at the next poll.
           void queryClient.invalidateQueries({ queryKey: ["report"] });
           cleared();
@@ -188,7 +192,7 @@ export function TopBar({
         if (got.signedOut) {
           // Kept in the box; it goes once the person signs in with their key.
           void queryClient.invalidateQueries({ queryKey: SESSION_KEY });
-          setPendingAsk(text);
+          setPendingAsk({ text, cites });
           setSignInSignal((n) => n + 1);
           setEcho("Not sent yet: sign in with your key, and your ask goes then.");
           return;
@@ -208,9 +212,18 @@ export function TopBar({
           submit();
         }}
       >
-        <span className="sf-box-chip" data-context={context.kind} aria-live="polite">
-          {words.chip}
-          {context.kind === "reply" && onSetAside ? (
+        <span className="sf-box-chip" data-context={context.kind} aria-live="polite" title={context.kind === "about" ? context.about.words : undefined}>
+          {context.kind === "about" ? (
+            // The ask's words take what room is left; what the chip says about them is never cut off.
+            <span className="sf-box-chip-about">
+              {"New ask about “"}
+              <span className="sf-box-chip-words">{context.about.words}</span>
+              {"” · starts fresh"}
+            </span>
+          ) : (
+            words.chip
+          )}
+          {context.kind !== "new" && onSetAside ? (
             <button type="button" className="sf-icon-button" aria-label="Ask something new instead" onClick={onSetAside}>
               ×
             </button>
@@ -266,9 +279,9 @@ export function TopBar({
           openSignal={signInSignal}
           onSignedIn={() => {
             if (pendingAsk) {
-              const text = pendingAsk;
+              const held = pendingAsk;
               setPendingAsk(null);
-              ask(text);
+              ask(held.text, held.cites);
             }
           }}
         />

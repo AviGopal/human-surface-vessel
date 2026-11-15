@@ -29,6 +29,7 @@ import type { Question } from "../api/participation";
 import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
 import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
+import { askAbout, citesOf } from "../lib/box";
 import { Prose } from "./Prose";
 import { relative } from "./ContentRender";
 
@@ -416,12 +417,31 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
                 </dl>
               </details>
               {judge && id && (entry.words === undefined || entry.words.some((f) => o[f] !== undefined && o[f] !== null && o[f] !== "")) ? <Judge rowId={id} graded={entry.graded} reading={reading} /> : null}
+              {entry.about && id ? <AboutThis rowId={id} words={words.map((w) => fieldText(w.value)).join(" ").trim() || (typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "this")} threads={threads} reading={reading} /> : null}
             </div>
             {id ? threads.map((t, j) => <Thread key={j} entry={t} rowId={id} reading={reading} />) : null}
           </li>
         );
       })}
     </ol>
+  );
+}
+
+/**
+ * A control that only chooses what the box is about: a new ask about this row. The ask cites the
+ * row, then the rows its judged thread drew under it (the answer the person sees), and only those
+ * that cite this row (citesOf), so nothing undrawn and nothing from another ask is cited. It reads that
+ * thread through the same query the thread itself drew from: no second read.
+ */
+function AboutThis({ rowId, words, threads, reading }: { rowId: string; words: string; threads: readonly ViewEntry[]; reading: Reading }): ReactNode {
+  const judged = threads.find((t) => t.judge === "outcome");
+  const q = useReport(judged ? bind(judged.pointer, ROW_BINDING, rowId) : { type: "record_read" }, { enabled: reading.enabled && judged !== undefined, intervalMs: reading.intervalMs });
+  const got = judged && q.data?.ok ? rowsOf(q.data.answer, judged) : null;
+  const drawn = got && "rows" in got ? got.rows : [];
+  return (
+    <button type="button" className="sf-row-about" onClick={() => askAbout({ cites: citesOf(rowId, drawn), words })}>
+      about this
+    </button>
   );
 }
 

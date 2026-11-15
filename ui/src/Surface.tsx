@@ -18,6 +18,7 @@ import { QuestionView } from "./components/QuestionView";
 import { Landing } from "./components/Landing";
 import { TopBar } from "./components/TopBar";
 import { boxContext } from "./lib/box";
+import { useAskAbout } from "./state/askAbout";
 import { useTokenOverrides } from "./lib/useTokenOverrides";
 import { useLiveControls } from "./state/liveControls";
 import { useStoreStream } from "./state/stream";
@@ -55,7 +56,9 @@ function Workbench(): ReactNode {
   // person set it aside. Other questions carry their own forms, so the box stays a new ask there.
   const [setAside, setSetAside] = useState<string | null>(null);
   const open = questionId ? (questions.query.data?.questions.find((q) => q.id === questionId && q.run !== undefined && !q.answered && !q.declined) ?? null) : null;
-  const context = boxContext(open, open?.title ?? null, setAside);
+  // A listed ask the person chose to ask about: the box's next ask cites it, until it is sent or set aside.
+  const [about, clearAbout] = useAskAbout();
+  const context = boxContext(open, open?.title ?? null, setAside, about);
 
   const narrow = useNarrow();
   const [railOpen, setRailOpen] = useState(false);
@@ -73,7 +76,8 @@ function Workbench(): ReactNode {
       <TopBar
         context={context}
         complaintRegion={questionId}
-        onSetAside={() => setSetAside(open?.id ?? null)}
+        onSetAside={() => (context.kind === "about" ? clearAbout() : setSetAside(open?.id ?? null))}
+        onAsked={clearAbout}
         openIssues={openGaps}
         issuesOpen={issuesOpen}
         onToggleIssues={() => setIssuesOpen((v) => !v)}

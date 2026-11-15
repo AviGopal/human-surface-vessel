@@ -104,6 +104,8 @@ export type ViewEntry = {
   readonly strip?: { readonly hours: number };
   /** The read of the system's own grades of a row (judged entries only), drawn after the person's verdict. */
   readonly graded?: { readonly pointer: ReportPointer };
+  /** Each row offers to set the box to a new ask about it (listed rows only). */
+  readonly about?: true;
 };
 
 /** An entry's thread as the reads drawn under each row, in its order: none, one, or the list written. */
@@ -189,10 +191,12 @@ export function writeOutcome(rowId: string, r: 0 | 1): Promise<RowWrite> {
 
 /**
  * A person's ask: one `world_changed` row with their words. Written under their key it is
- * exogenous, so the walk takes it up from its pool; nothing is dispatched or polled.
+ * exogenous, so the walk takes it up from its pool; nothing is dispatched or polled. An ask
+ * about another cites it (and the answer drawn under it) in `input_refs`. It carries no `r`:
+ * a row with one that cites rows is a verdict to records, and would close or debit them.
  */
-export function writeAsk(what: string): Promise<RowWrite> {
-  return writeRow({ shape: "world_changed", what, input_refs: [] });
+export function writeAsk(what: string, cites: readonly string[] = []): Promise<RowWrite> {
+  return writeRow({ shape: "world_changed", what, input_refs: [...cites] });
 }
 
 /**
