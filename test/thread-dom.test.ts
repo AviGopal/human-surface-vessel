@@ -83,8 +83,8 @@ describe("a person's ask is a thread", () => {
     const el = await mount([asked]);
     const threads = sent.filter((p) => p["refs_to"] !== undefined);
     expect(threads).toEqual(expect.arrayContaining([
-      { type: "record_read", refs_to: ASK_A.id, shape: "answer" },
-      { type: "record_read", refs_to: ASK_B.id, shape: "answer" },
+      { type: "record_read", refs_to: ASK_A.id, shape: "answer", where: { role: "described" } },
+      { type: "record_read", refs_to: ASK_B.id, shape: "answer", where: { role: "described" } },
     ]));
     expect(sent.some((p) => Object.values(p).includes("$row"))).toBe(false);
     expect([...threadOf(el, ASK_A.id).querySelectorAll(".sf-row-words")].map((p) => p.textContent)).toEqual(["Answer 4."]);

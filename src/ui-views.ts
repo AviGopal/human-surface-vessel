@@ -113,6 +113,30 @@ export type GradedRead = { readonly pointer: Readonly<Record<string, Plain | Rea
 export const JUDGE_KINDS = ["outcome", "land"] as const;
 export type JudgeKind = (typeof JUDGE_KINDS)[number];
 
+/**
+ * Who reads a person's verdict, by what it is written as and the shape of the row it judges, and
+ * which fields a row needs for that reader to read it. A view offers a verdict only where one of
+ * these reads it (the reachability test holds the default to it), and the page shows, under a
+ * verdict given, the one fact that reader leaves: records' standing of the grade, or the gap's
+ * newer detector row, or only the record it was stored as when the reader leaves none a read
+ * can reach. Served with the view, so the page reads it at use time and keeps no copy.
+ */
+export type VerdictReader = {
+  readonly judge: JudgeKind;
+  readonly shape: string;
+  readonly read_by: string;
+  readonly needs: Readonly<Record<string, Plain>>;
+  readonly after: "standing" | "gap" | "record";
+};
+export const VERDICT_READERS: readonly VerdictReader[] = [
+  { judge: "outcome", shape: "answer", read_by: "records' fold, as a person's grade of a described answer", needs: { role: "described" }, after: "standing" },
+  // The release reads a person's verdict only on a gap held for one, or marked before. Until the gap row says so in
+  // a field records can match (waits_for, the coordinator's gap), the default cannot narrow its read to those.
+  { judge: "outcome", shape: "gap", read_by: "pull-sync's release of a gap held for a person", needs: { waits_for: "person" }, after: "gap" },
+  // git_land's answer is a failure row naming the tree inside its body, which no read can match: only the record shows.
+  { judge: "land", shape: "gitDiff", read_by: "git_land, by the change's tree", needs: { role: "walk" }, after: "record" },
+];
+
 /** How many entries one view may name, and how many rows `show` may ask for. */
 const MAX_ENTRIES = 8;
 const MAX_SHOW = 200;
@@ -147,10 +171,11 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
   landing: {
     entries: [
       { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you", empty: "Nothing is waiting on you." },
-      // A detector's gap that is held for a person carries a `claim`: the person's Right or Wrong on it
-      // is read where holds are lifted. Records answers the held checks themselves: each gap's latest
-      // row, open, holding a claim. The page filters nothing; the newest three are drawn.
-      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Checks held for you", empty: "No check is held." },
+      // A detector's gap that states a `claim` (the test is right) can be judged: the person's Right or Wrong
+      // on a held one is read where holds are lifted. Records answers each gap's latest row, open, holding a
+      // claim; the newest three are drawn. Records cannot yet say which are held for a person (the hold is
+      // in each row's meta), so the title says what a verdict does on a held one rather than calling them all held.
+      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Failing checks · Right releases a held one, Wrong marks its test wrong", empty: "No check is failing." },
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
@@ -165,17 +190,17 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
         // Then what the walk did with it, records' calls under that root, folded and counted: there
         // to look into, not to read before the answer. Its order and its cut are records'.
         thread: [
-          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
+          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer", where: { role: "described" } }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
           // Then the change the walk made for it, if any: its newest diff, judged under the ask it was
           // made for, the grader's verdict closed until the person's. Where the landing stands is in
           // what the walk did (its landing calls), not a second read here.
-          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "gitDiff" }, form: "rows", show: 1, newest: true, words: ["repo", "diff"], judge: "land", graded: LAND_GRADES },
+          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "gitDiff", where: { role: "walk" } }, form: "rows", show: 1, newest: true, words: ["repo", "diff"], judge: "land", graded: LAND_GRADES },
           { pointer: { type: "record_read", root: ROW_BINDING, calls: "all", output: false }, form: "rows", show: 12, words: ["type", "state"], title: "What the walk did", folded: true },
         ],
       },
       // The raw reads, folded and counted under the asks. A line of how the system is doing comes
       // back only with a live writer of what it shows: a read nothing writes is a fossil.
-      { pointer: { type: "record_read", shape: "answer" }, form: "rows", show: 10, newest: true, judge: "outcome", graded: WALK_GRADES, title: "What the walk answered", words: ["text"], folded: true, strip: DAY },
+      { pointer: { type: "record_read", shape: "answer", where: { role: "described" } }, form: "rows", show: 10, newest: true, judge: "outcome", graded: WALK_GRADES, title: "What the walk answered", words: ["text"], folded: true, strip: DAY },
       { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, newest: true, title: "What failed", folded: true, strip: DAY },
       { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "Verdicts and outcomes", words: ["r"], folded: true, strip: DAY },
     ],
@@ -262,7 +287,7 @@ export interface NotDrawn {
 }
 
 /** The view in force, and the newest stored view that was passed over, if any. */
-export type ViewInForce = UiView & { readonly notDrawn: NotDrawn | null };
+export type ViewInForce = UiView & { readonly notDrawn: NotDrawn | null; readonly readers: readonly VerdictReader[] };
 
 export interface ViewRun {
   readonly dispatchId: string | null;
@@ -474,7 +499,7 @@ function defaultView(region: ViewRegion): UiView {
 export function currentView(region: ViewRegion): ViewInForce {
   load();
   const latest = history.get(region)?.at(-1) ?? defaultView(region);
-  return { ...latest, notDrawn: passedOver.get(region) ?? null };
+  return { ...latest, notDrawn: passedOver.get(region) ?? null, readers: VERDICT_READERS };
 }
 
 /** The next revision number: past every stored line, drawn or not. */

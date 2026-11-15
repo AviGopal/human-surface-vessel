@@ -2181,6 +2181,8 @@ body { overflow: hidden; }
 .sf-row-meta > .sf-row-judge { order: 2; margin-left: auto; justify-content: flex-end; }
 .sf-row-meta > .sf-row-details[open] { order: 3; flex-basis: 100%; }
 .sf-row-meta > .sf-judge-refused { order: 3; flex-basis: 100%; }
+/* What the verdict's reader left (records' standing, the gap's newer row): a line of its own under the verdict. */
+.sf-row-meta > [data-after-verdict] { order: 3; flex-basis: 100%; margin: 0; }
 .sf-row-meta > .sf-row-system-grade { order: 4; flex-basis: 100%; }
 .sf-row-time { margin: 0; font-size: var(--sf-text-sm); }
 /* A row of an entry that declares a thread (an ask) reads above the rows under it (its replies). */

@@ -70,7 +70,7 @@ export function Landing({
           ) : null}
         </div>
       </details>
-      <Entries entries={view.entries} enabled={live} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} />
+      <Entries entries={view.entries} readers={view.readers} enabled={live} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} />
     </div>
   );
 }

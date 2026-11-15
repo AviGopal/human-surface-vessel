@@ -70,7 +70,18 @@ export interface UiViewState {
   readonly writtenBy?: string | null;
   /** A newer stored view that is not drawn, and why; null when the newest is in force. */
   readonly notDrawn?: { readonly id: string; readonly refusal: string; readonly detail: string } | null;
+  /** Who reads a person's verdict, by how it is written and the shape it judges, and what it leaves to show after one. */
+  readonly readers?: readonly VerdictReader[];
 }
+
+/** src/ui-views.ts VERDICT_READERS, as served with the view. */
+export type VerdictReader = {
+  readonly judge: NonNullable<ViewEntry["judge"]>;
+  readonly shape: string;
+  readonly read_by: string;
+  readonly needs: Readonly<Record<string, unknown>>;
+  readonly after: "standing" | "gap" | "record";
+};
 
 type Plain = string | number | boolean;
 /** A read's pointer: plain arguments, and at most records' `where` ({field: value}, by equality) in a `graded` read. */

@@ -23,7 +23,7 @@
  */
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { bind, ROW_BINDING, threadsOf, writeLandVerdict, writeOutcome, type ReportAnswer, type ViewEntry } from "../api/client";
+import { bind, ROW_BINDING, threadsOf, writeLandVerdict, writeOutcome, type ReportAnswer, type ReportPointer, type VerdictReader, type ViewEntry } from "../api/client";
 import { useReport } from "../api/queries";
 import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
@@ -96,7 +96,7 @@ export function fieldText(v: unknown): string {
   return plain(v);
 }
 
-type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number } | { state: "refused"; reason: string; said?: string } | { state: "signedOut" };
+type Verdict = { state: "idle" } | { state: "sending"; r: 0 | 1 } | { state: "done"; r: 0 | 1; seq: number; id: string } | { state: "refused"; reason: string; said?: string } | { state: "signedOut" };
 
 const SIGN_IN_TO_JUDGE = "Sign in with your key to give a verdict.";
 /** What a read refused for want of a sign-in says: on the title's line, so a refused entry is one line high. */
@@ -168,7 +168,44 @@ export function Said({ said }: { said: string | undefined }): ReactNode {
 /** On the verdict given: what it is, and that the other word replaces it. */
 const VERDICT_GIVEN = "Your verdict. Choosing the other replaces it.";
 
-function Judge({ row, rowId, kind, graded, reading }: { row: Readonly<Record<string, unknown>>; rowId: string; kind: NonNullable<ViewEntry["judge"]>; graded?: ViewEntry["graded"]; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
+/**
+ * The one fact the verdict's reader leaves, under a verdict given (src/ui-views.ts VERDICT_READERS):
+ * records' standing of the person's own grade, read back by its id; or the gap's newest detector
+ * row, once one is newer than the row judged; or nothing past the record it was stored as, where
+ * the reader leaves nothing a read can reach. A field the row does not carry is not drawn, never as
+ * a "no".
+ */
+function AfterVerdict({ after, row, mine, reading }: { after: VerdictReader["after"]; row: Readonly<Record<string, unknown>>; mine: string; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
+  const gapId = typeof row["gap_id"] === "string" ? row["gap_id"] : null;
+  const pointer: ReportPointer | null =
+    after === "standing" ? { type: "record_read", refs_to: String(row["id"]), shape: "outcome" }
+    : after === "gap" && gapId ? { type: "record_read", shape: "gap", latest_by: "gap_id", where: { gap_id: gapId } }
+    : null;
+  const q = useReport(pointer ?? { type: "record_read" }, { enabled: reading.enabled && pointer !== null, intervalMs: reading.intervalMs });
+  if (!pointer) return null;
+  const a: ReportAnswer | undefined = q.data;
+  const got = a?.ok ? rowsOf(a.answer, {}) : null;
+  const rows = got && !("missing" in got) ? (got.rows as readonly Record<string, unknown>[]) : [];
+  let said: string | null = null;
+  if (after === "standing") {
+    const s = rows.find((r) => r["id"] === mine)?.["standing"] as { counted?: unknown; why?: unknown } | undefined;
+    if (s?.counted === true) said = "Your grade counted.";
+    else if (s?.counted === false) said = typeof s.why === "string" ? `Your grade did not count: ${s.why.replace(/_/g, " ")}.` : "Your grade did not count.";
+  } else {
+    const newer = rows.find((r) => typeof r["seq"] === "number" && typeof row["seq"] === "number" && r["seq"] > row["seq"]);
+    if (newer) {
+      const runnable = newer["check_runnable"] === false ? " · its test is set aside until a reviewed fix" : newer["check_runnable"] === true ? " · its test runs" : "";
+      said = `The release read it: the gap is now ${typeof newer["status"] === "string" ? newer["status"] : "changed"}${runnable}.`;
+    } else if (a?.ok) said = "Waiting for the release to read it.";
+  }
+  return said ? (
+    <p className="sf-muted sf-row-note" data-after-verdict={after}>
+      {said}
+    </p>
+  ) : null;
+}
+
+function Judge({ row, rowId, kind, graded, after, reading }: { row: Readonly<Record<string, unknown>>; rowId: string; kind: NonNullable<ViewEntry["judge"]>; graded?: ViewEntry["graded"]; after?: VerdictReader["after"]; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
   const session = useSession();
   const client = useQueryClient();
   const [verdict, setVerdict] = useState<Verdict>({ state: "idle" });
@@ -183,7 +220,7 @@ function Judge({ row, rowId, kind, graded, reading }: { row: Readonly<Record<str
       void client.invalidateQueries({ queryKey: SESSION_KEY });
       return;
     }
-    setVerdict(got.ok ? { state: "done", r, seq: got.seq } : { state: "refused", reason: got.reason, said: got.said });
+    setVerdict(got.ok ? { state: "done", r, seq: got.seq, id: got.id } : { state: "refused", reason: got.reason, said: got.said });
   };
   return (
     <>
@@ -209,6 +246,7 @@ function Judge({ row, rowId, kind, graded, reading }: { row: Readonly<Record<str
         <Said said={verdict.said} />
       </div>
     ) : null}
+    {verdict.state === "done" && after ? <AfterVerdict after={after} row={row} mine={verdict.id} reading={reading} /> : null}
     {verdict.state === "done" && graded ? <SystemGrade graded={graded} rowId={rowId} reading={reading} /> : null}
     </>
   );
@@ -356,7 +394,7 @@ function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
   );
 }
 
-type Reading = { declared: ReadonlyMap<string, readonly string[]>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void };
+type Reading = { declared: ReadonlyMap<string, readonly string[]>; readers: readonly VerdictReader[]; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void };
 
 /**
  * An entry's thread under one row: its read, bound to the row's id, drawn as its own entry.
@@ -436,7 +474,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
                   ))}
                 </dl>
               </details>
-              {judge && id && (entry.words === undefined || entry.words.some((f) => o[f] !== undefined && o[f] !== null && o[f] !== "")) ? <Judge row={o} rowId={id} kind={judge} graded={entry.graded} reading={reading} /> : null}
+              {judge && id && (entry.words === undefined || entry.words.some((f) => o[f] !== undefined && o[f] !== null && o[f] !== "")) ? <Judge row={o} rowId={id} kind={judge} graded={entry.graded} after={reading.readers.find((r) => r.judge === judge && r.shape === o["shape"])?.after} reading={reading} /> : null}
               {entry.about && id ? <AboutThis rowId={id} words={words.map((w) => fieldText(w.value)).join(" ").trim() || (typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "this")} threads={threads} reading={reading} /> : null}
             </div>
             {id ? threads.map((t, j) => <Thread key={j} entry={t} rowId={id} reading={reading} />) : null}
@@ -686,11 +724,13 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
 
 export function Entries({
   entries,
+  readers = [],
   enabled,
   intervalMs,
   onOpenQuestion,
 }: {
   entries: readonly ViewEntry[];
+  readers?: readonly VerdictReader[];
   enabled: boolean;
   intervalMs: number;
   onOpenQuestion: (id: string) => void;
@@ -698,7 +738,7 @@ export function Entries({
   // Read on the entries' cadence, so a declaration an owner writes later moves what is shown with no reload.
   const declarations = useReport(DECLARATIONS, { enabled, intervalMs }).data;
   const declared = declarations?.ok ? declaredWords(declarations.answer) : new Map<string, readonly string[]>();
-  const reading: Reading = { declared, enabled, intervalMs, onOpenQuestion };
+  const reading: Reading = { declared, readers, enabled, intervalMs, onOpenQuestion };
   const session = useSession();
   const signedOut = session.data !== undefined && session.data.signedIn !== true;
   return (
