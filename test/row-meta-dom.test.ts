@@ -32,13 +32,14 @@ function read(p: Record<string, unknown>): unknown[] {
 }
 
 const sent: Record<string, unknown>[] = [];
+let untimed = false;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   if (url.endsWith("/api/session")) return Response.json({ available: false, keySignIn: true, signedIn: true, person: { userId: "key_person_1", name: null, email: null, expiresAt: Date.now() + 900_000 } });
   if (url.includes("/api/discovery/resolve")) {
     const pointer = JSON.parse(String(init?.body)).pointer as Record<string, unknown>;
     sent.push(pointer);
-    if (pointer["type"] === "record_read") return Response.json(pointer["shape"] === "answer" ? [ANSWER] : read(pointer));
+    if (pointer["type"] === "record_read") return Response.json(pointer["shape"] === "answer" ? [untimed ? { ...ANSWER, t: undefined } : ANSWER] : read(pointer));
     if (pointer["type"] === "record_write") return Response.json({ ok: true, seq: 5600, id: "row-5600" });
   }
   return Response.json({});
@@ -59,6 +60,7 @@ afterAll(async () => {
 });
 beforeEach(() => {
   sent.length = 0;
+  untimed = false;
 });
 const settle = async () => {
   for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
@@ -79,11 +81,11 @@ const row = (el: HTMLElement) => el.querySelector(`.sf-row[data-row="${ANSWER.id
 const answered = { ...DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What the walk answered")!, folded: undefined };
 
 describe("a row's time, details and verdict share one line", () => {
-  test("must-fail: the time, the details and the verdict group are children of one line", async () => {
+  test("must-fail: the details (opened by the time) and the verdict group are children of one line", async () => {
     const el = await mount([answered]);
     const meta = [...row(el).children].find((c) => c.classList.contains("sf-row-meta"))!;
     expect(meta).toBeDefined();
-    expect([...meta.children].map((c) => c.className.split(" ").find((n) => n.startsWith("sf-row-")))).toEqual(["sf-row-time", "sf-row-details", "sf-row-judge"]);
+    expect([...meta.children].map((c) => c.className.split(" ").find((n) => n.startsWith("sf-row-")))).toEqual(["sf-row-details", "sf-row-judge"]);
     expect([...meta.children].some((c) => c.getAttribute("role") === "group")).toBe(true);
   });
 
@@ -105,6 +107,26 @@ describe("a row's time, details and verdict share one line", () => {
     const fold = row(el).querySelector("details[data-system-grade]")!;
     expect(fold.parentElement!.classList.contains("sf-row-meta")).toBe(true);
     expect(fold.closest('[role="group"]')).toBeNull();
+  });
+
+  test("must-fail: the time is what opens the fields: one control, its arrow and the word \"details\" gone", async () => {
+    const el = await mount([answered]);
+    const meta = row(el).querySelector(".sf-row-meta")!;
+    const summary = meta.querySelector("details.sf-row-details > summary")!;
+    expect(summary.parentElement!.hasAttribute("data-by-time")).toBe(true);
+    expect([...summary.children].map((c) => c.tagName)).toEqual(["TIME"]);
+    expect(summary.getAttribute("aria-label")).toMatch(/: details$/);
+    expect(meta.querySelectorAll(".sf-row-time")).toHaveLength(1);
+    await act(async () => (summary as HTMLElement).click());
+    expect((summary.parentElement as HTMLDetailsElement).open).toBe(true);
+  });
+
+  test("a row with no time keeps the word \"details\" and its arrow", async () => {
+    untimed = true;
+    const el = await mount([answered]);
+    const d = row(el).querySelector("details.sf-row-details")!;
+    expect(d.hasAttribute("data-by-time")).toBe(false);
+    expect(d.querySelector("summary")!.textContent).toBe("details");
   });
 
   test("the row's words stay above that line", async () => {

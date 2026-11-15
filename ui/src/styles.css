@@ -2193,10 +2193,29 @@ body { overflow: hidden; }
 .sf-row-parent > .sf-row-meta:has(> .sf-row-details[open]) { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
 .sf-row-parent > .sf-row-words, .sf-row-parent > .sf-thread { grid-column: 1 / -1; }
 .sf-row-parent > .sf-row-words:first-child { grid-column: 1; }
+/* A thread that draws nothing takes no line; an ask with no answer yet says so, and what the walk did, on one line. */
+.sf-row-parent > .sf-thread:empty { display: none; }
+.sf-row-parent > .sf-thread:has(> .sf-report-note:only-child) { grid-column: 1; }
+.sf-row-parent > .sf-thread:has(> .sf-report-note:only-child) ~ p.sf-thread-folded { grid-column: 2; justify-self: end; margin-left: 0; padding-left: 0; border-left: 0; }
+/* On a phone, an ask's words keep the full width; its time and controls take the line under them. */
+@media (max-width: 480px) {
+  .sf-row-parent > .sf-row-words:first-child { grid-column: 1 / -1; }
+  .sf-row-parent > .sf-row-meta { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
+}
 .sf-earlier > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-earlier[open] > summary { margin-bottom: var(--sf-space-2); }
 .sf-row-details > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-row-details[open] > summary { margin-bottom: var(--sf-space-1); }
+/* A row's time opens its fields: no arrow beside it, a dotted underline says it opens. */
+.sf-row-details[data-by-time] > summary { list-style: none; }
+.sf-row-details[data-by-time] > summary::-webkit-details-marker { display: none; }
+.sf-row-details[data-by-time] > summary > .sf-row-time { text-decoration: underline dotted; text-underline-offset: 3px; }
+.sf-row-details[data-by-time] > summary:hover > .sf-row-time { color: var(--sf-ink-2); }
+/* Opened by its time, the fields fall under the time, and the verdict keeps its place beside it. */
+.sf-row-meta:has(> .sf-row-details[data-by-time][open]) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.sf-row-meta:has(> .sf-row-details[data-by-time][open]) > * { grid-column: 1 / -1; }
+.sf-row-meta > .sf-row-details[data-by-time][open] { grid-column: 1; grid-row: 1; }
+.sf-row-meta:has(> .sf-row-details[data-by-time][open]) > :is(.sf-row-judge, .sf-row-about) { grid-column: 2; grid-row: 1; }
 /* The system's own grade, closed under its row, apart from the person's Right and Wrong. */
 .sf-row-system-grade > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-row-system-grades { margin: var(--sf-space-1) 0 0; padding-left: var(--sf-space-4); font-size: var(--sf-text-sm); }

@@ -462,9 +462,9 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
             <div className="sf-row-meta">
-              {time ? <RowTime t={o["t"] as string} full={time} /> : null}
-              <details className="sf-row-details">
-                <summary>details</summary>
+              {/* The row's time is what opens its fields: one control, not a time and an arrow beside it. */}
+              <details className="sf-row-details" data-by-time={time ? "" : undefined}>
+                <summary aria-label={time ? `${time}: details` : undefined}>{time ? <RowTime t={o["t"] as string} full={time} /> : "details"}</summary>
                 <dl className="sf-row-fields">
                   {Object.entries(o).map(([k, v]) => (
                     <div key={k} className="sf-row-field">

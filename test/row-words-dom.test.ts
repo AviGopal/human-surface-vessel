@@ -103,7 +103,9 @@ describe("a row reads as words, its record folded", () => {
     const el = await mount(landing);
     const answer = row(el, "answer");
     const details = answer.querySelector("details.sf-row-details")!;
-    expect(details.querySelector("summary")!.textContent).toBe("details");
+    // The row's time opens its fields: the summary is the time, with no word beside it.
+    expect(details.querySelector("summary > time.sf-row-time")).not.toBeNull();
+    expect(details.querySelector("summary")!.textContent).not.toContain("details");
     expect([...details.querySelectorAll("dt")].map((d) => d.textContent)).toEqual(["input refs", "text", "shape", "selection ref", "call id", "producer", "seq", "t", "writer", "role", "id"]);
     expect(details.textContent).toContain(HEX);
     const judge = answer.querySelector(".sf-row-judge")!;
