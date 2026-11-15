@@ -52,7 +52,7 @@ describe("uiView_write", () => {
       ["record_read", "outcome"],
     ]);
     expect(r.json.entries.map((e: any) => e.folded === true)).toEqual([false, false, false, true, true, true]);
-    expect(r.json.entries[2]).toMatchObject({ newest: true, thread: { newest: true } });
+    expect(r.json.entries[2]).toMatchObject({ newest: true, thread: [{ newest: true, judge: "outcome" }, { pointer: { root: "$row", calls: "all" }, title: "What the walk did", folded: true }] });
   });
 
   test("must-fail: a valid view is stored, advances the revision, names its writer, and the page reads it", async () => {

@@ -33,6 +33,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const pointer = JSON.parse(String(init?.body)).pointer as Record<string, unknown>;
     sent.push(pointer);
     if (pointer["type"] !== "record_read") return Response.json({});
+    // records' calls under a root are call rows, never the rows themselves; these asks have none.
+    if (pointer["root"] !== undefined) return Response.json([]);
     // records' read: shape and refs_to (input_refs) compose; rows oldest first.
     return Response.json(ALL.filter((r) => (pointer["shape"] === undefined || r.shape === pointer["shape"]) && (pointer["refs_to"] === undefined || r.input_refs.includes(String(pointer["refs_to"])))));
   }

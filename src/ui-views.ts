@@ -146,9 +146,13 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
         newest: true,
         title: "What people asked",
         words: ["what"],
-        // Under each ask, its answers: a read records filters by shape, not a choice the page makes.
-        // Dropping `shape` draws the whole thread of rows citing the ask.
-        thread: { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
+        // Under each ask, its answer first: a read records filters by shape, not a choice the page makes.
+        // Then what the walk did with it, records' calls under that root, folded and counted: there
+        // to look into, not to read before the answer. Its order and its cut are records'.
+        thread: [
+          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer" }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
+          { pointer: { type: "record_read", root: ROW_BINDING, calls: "all", output: false }, form: "rows", show: 12, words: ["type", "state"], title: "What the walk did", folded: true },
+        ],
       },
       // The raw reads, folded and counted under the asks. A line of how the system is doing comes
       // back only with a live writer of what it shows: a read nothing writes is a fossil.

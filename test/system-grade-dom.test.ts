@@ -111,7 +111,7 @@ describe("the system's own grade is drawn only after this person's verdict", () 
   test("must-fail: the default landing declares the system's grade on every answer it offers a verdict on", () => {
     const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What people asked")!;
     const graded = { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } };
-    expect(asks.thread!.graded).toEqual(graded);
+    expect([asks.thread!].flat()[0]!.graded).toEqual(graded);
     expect(answered.graded).toEqual(graded);
   });
 });
