@@ -1535,7 +1535,8 @@ body { overflow: hidden; }
   background: var(--sf-not-reached-bg);
 }
 .sf-outcome-line[data-tone="warn"] { background: var(--sf-waiting-bg); }
-.sf-outcome-line[data-tone="ok"] { background: var(--sf-reached-bg); }
+/* A send that went through is a quiet note, not a fill: green is for what reached, and nothing has yet. */
+.sf-outcome-line[data-tone="ok"] { background: none; color: var(--sf-ink-3); padding-block: var(--sf-space-1); }
 .sf-outcome-line .sf-chip, .sf-outcome-unparsed { margin-left: var(--sf-space-2); }
 /* "why" sits after the words on their line (a failed send, a refused verdict); opened, what the system said takes a line of its own. */
 .sf-outcome-said { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sf-space-2); min-width: 0; }

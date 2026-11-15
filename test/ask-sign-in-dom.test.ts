@@ -32,7 +32,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return Response.json({ signedIn: false });
   }
   // The ask region before any view is written: nothing follows the ask. A stored ask now mounts it.
-  if (url.includes("/api/ui-view")) return Response.json({ region: "ask", revision: 0, id: "ask@0", notDrawn: null, entries: [] });
+  if (url.includes("/api/ui-view")) return Response.json({ region: "landing", revision: 0, id: "landing@0", notDrawn: null, entries: [] });
   if (url.endsWith("/api/discovery/resolve")) return signedIn ? Response.json({ ok: true, seq: 301, id: "row-301" }) : Response.json({ error: "sign_in_required", reason: "a write is sent only under the signed-in person's own key" }, { status: 401 });
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [] } });
   return Response.json({ resolved: true, success: true, body: {} });

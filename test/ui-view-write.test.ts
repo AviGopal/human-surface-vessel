@@ -215,11 +215,12 @@ describe("uiView_write", () => {
     expect(w.json.body.view.entries).toEqual([entry]);
   });
 
-  test("must-fail: the ask region is written and read back like any region; its default reads what cites the ask", async () => {
-    expect((await read("ask")).json).toMatchObject({ revision: 0, entries: [{ pointer: { type: "record_read", refs_to: "$ask", shape: "answer" }, empty: "Not answered yet." }, { pointer: { type: "record_read", refs_to: "$ask" }, folded: true }] });
+  test("must-fail: there is no ask region: an ask is followed as its thread on the landing, so a view for it is refused", async () => {
     const entry = { pointer: { type: "record_read", shape: "answer", refs_to: "$ask" }, form: "rows", title: "Answers to it", empty: "Not answered yet." };
-    expect((await write({ region: "ask", entries: [entry] })).status).toBe(200);
-    expect((await read("ask")).json).toMatchObject({ revision: 1, entries: [entry] });
+    const w = await write({ region: "ask", entries: [entry] });
+    expect(w.status).toBe(422);
+    expect(w.json.refusal).toBe("unknown_region");
+    expect((await read("ask")).status).toBe(404);
     expect((await read("landing")).json.revision).toBe(0);
   });
 

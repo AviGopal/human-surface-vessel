@@ -57,7 +57,7 @@ const SCENARIO = `
   const asked = await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: asPerson, body: JSON.stringify({ pointer: { type: "uiQuestion_write", id: "qnk-1", title: "Which way?", body: "Pick one." } }) });
   const revision = (await asked.json()).body.revision;
   // and changes what the ask page draws.
-  const viewed = await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: asPerson, body: JSON.stringify({ pointer: { type: "uiView_write", region: "ask", entries: DEFAULT_VIEWS.ask.entries.slice(0, 1) } }) });
+  const viewed = await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: asPerson, body: JSON.stringify({ pointer: { type: "uiView_write", region: "landing", entries: DEFAULT_VIEWS.landing.entries.slice(0, 1) } }) });
   const answered = await participationRouter.request("/api/participation", { method: "POST", headers: asPerson, body: JSON.stringify({ panel_id: "qnk-1", panel_revision: revision, response_id: "qnk-r1", kind: "answer", value: "left" }) });
   const timeout = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r("timed out"), 3000))]);
   const reads = {};
@@ -67,7 +67,7 @@ const SCENARIO = `
       // The read itself, which answers without a caller.
       impulse: await (await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: { "content-type": "application/json", ...headers(c) }, body: JSON.stringify({ pointer: { type: "uiQuestion" } }) })).text(),
       state: await (await app.request("/api/state", { headers: headers(c) })).text(),
-      view: await (await app.request("/api/ui-view?region=ask", { headers: headers(c) })).text(),
+      view: await (await app.request("/api/ui-view?region=landing", { headers: headers(c) })).text(),
       uiView: await (await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: { "content-type": "application/json", ...headers(c) }, body: JSON.stringify({ pointer: { type: "human_surface:ui_view" } }) })).text(),
       stream: await timeout(reading[k]),
     };
@@ -150,10 +150,10 @@ describe("every read of the questions and answers names a person only to themsel
       expect(r[v].view).not.toContain(KEY_ID);
       expect(JSON.parse(r[v].view).writtenBy).toBe("a person");
       expect(r[v].uiView).not.toContain(KEY_ID);
-      expect(JSON.parse(r[v].uiView).body.views.ask.written_by).toBe("a person");
+      expect(JSON.parse(r[v].uiView).body.views.landing.written_by).toBe("a person");
     }
     expect(JSON.parse(r["self"].view).writtenBy).toBe(`key:${KEY_ID}`);
-    expect(JSON.parse(r["self"].uiView).body.views.ask.written_by).toBe(`key:${KEY_ID}`);
+    expect(JSON.parse(r["self"].uiView).body.views.landing.written_by).toBe(`key:${KEY_ID}`);
   });
 
   test("must-fail: /api/stream sends each viewer the events with a person named only to themselves", () => {

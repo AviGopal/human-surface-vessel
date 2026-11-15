@@ -36,7 +36,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return Response.json({ signedIn: false });
   }
   // The ask region before any view is written: nothing follows the ask. A stored ask now mounts it.
-  if (url.includes("/api/ui-view")) return Response.json({ region: "ask", revision: 0, id: "ask@0", notDrawn: null, entries: [] });
+  if (url.includes("/api/ui-view")) return Response.json({ region: "landing", revision: 0, id: "landing@0", notDrawn: null, entries: [] });
   if (url.endsWith("/api/discovery/resolve")) return ANSWER();
   if (url.includes("/api/questions")) return Response.json({ resolved: true, success: true, body: { questions: [] } });
   return Response.json({ resolved: true, success: true, body: {} });
@@ -155,15 +155,17 @@ describe("a send nothing answered", () => {
     ANSWER = () => Response.json(viaHub({ input_refs: [], shape: "world_changed", what: "What time is it in Lisbon?", seq: 401, t: "2026-11-14T00:33:19.000Z", writer: "a person", role: "person", id: "row-401" }));
     const el = await mount();
     await typeInBox(el, "What time is it in Lisbon?");
-    expect(el.querySelector(".sf-outcome-line span")!.textContent).toContain("Asked (record #401).");
-    expect(el.querySelector(".sf-outcome-line")!.getAttribute("data-tone")).toBe("ok");
+    // A send that went takes no line: it is said to a screen reader, and listed with the person's asks.
+    expect(el.querySelector(".sf-outcome-line")).toBeNull();
+    expect(el.querySelector(".sf-visually-hidden[role='status']")!.textContent).toBe("Asked (record #401).");
   });
 
   test("control: a send that went is drawn as one", async () => {
     ANSWER = () => Response.json({ ok: true, seq: 301, id: "row-301" });
     const el = await mount();
     await typeInBox(el, "What time is it in Lisbon?");
-    expect(el.querySelector(".sf-outcome-line span")!.textContent).toContain("Asked (record #301).");
-    expect(el.querySelector(".sf-outcome-line")!.getAttribute("data-tone")).toBe("ok");
+    // A send that went takes no line: it is said to a screen reader, and listed with the person's asks.
+    expect(el.querySelector(".sf-outcome-line")).toBeNull();
+    expect(el.querySelector(".sf-visually-hidden[role='status']")!.textContent).toBe("Asked (record #301).");
   });
 });

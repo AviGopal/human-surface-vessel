@@ -10,8 +10,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { bindAsk, writeAsk, writeComplaint, type RowWrite } from "../api/client";
-import { useUiView } from "../api/queries";
+import { writeAsk, writeComplaint, type RowWrite } from "../api/client";
 import { sendContribution } from "../api/participation";
 import { contributionContent } from "../lib/interaction";
 import { reportExposureAct } from "../lib/exposure-reporter";
@@ -21,7 +20,7 @@ import { useQuestions } from "../state/questions";
 import { SignIn } from "./SignIn";
 import { SESSION_KEY } from "../api/session";
 import { useLimits } from "../state/limits";
-import { Entries, Said } from "./Reports";
+import { Said } from "./Reports";
 
 
 /** The echo for a reply delivered to a waiting run. */
@@ -48,14 +47,15 @@ export function TopBar({
   const [goal, setGoal] = useState("");
   const limits = useLimits();
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
-  const { paused, setPaused, intervalMs } = useLiveControls();
+  const { paused, setPaused } = useLiveControls();
   const { recordReceipt } = useQuestions();
   const [echo, setEcho] = useState<string | null>(null);
   // A send that failed, held against the echo that says so: that echo is drawn as a failure, with what
   // the system itself said, when it said something, under "why".
   const [failed, setFailed] = useState<{ echo: string; said?: string } | null>(null);
-  // The ask just written, followed under its echo by the rows that cite it, while that echo stands.
-  const [asked, setAsked] = useState<{ id: string; echo: string } | null>(null);
+  // An ask written is said only to a screen reader: on the page it is listed first among the
+  // person's asks, where what the system does with it arrives as its thread.
+  const [sent, setSent] = useState<string | null>(null);
   const answer = useMutation({
     retry: false,
     mutationFn: async (args: { ctx: Extract<BoxContext, { kind: "reply" }>; text: string }) => {
@@ -178,9 +178,10 @@ export function TopBar({
     asking.mutate(text, {
       onSuccess: (got) => {
         if (got.ok) {
-          const said = `Asked (record #${got.seq}). What the system does with it appears below.`;
-          setEcho(said);
-          setAsked({ id: got.id, echo: said });
+          setEcho(null);
+          setSent(`Asked (record #${got.seq}).`);
+          // Read again now, so the ask is listed at once rather than at the next poll.
+          void queryClient.invalidateQueries({ queryKey: ["report"] });
           cleared();
           return;
         }
@@ -317,18 +318,7 @@ export function TopBar({
           </button>
         </div>
       ) : null}
-      {asked && echo === asked.echo ? <AskFollow asked={asked} enabled={!paused} intervalMs={intervalMs} /> : null}
+      <span className="sf-visually-hidden" role="status">{sent}</span>
     </header>
   );
-}
-
-/**
- * What follows an ask: the `ask` region's view, drawn as any region is, with the ask's own
- * row id bound where the view names it. What is read and how it is drawn is the view's.
- */
-function AskFollow({ asked, enabled, intervalMs }: { asked: { id: string }; enabled: boolean; intervalMs: number }): ReactNode {
-  const view = useUiView("ask", { enabled, intervalMs });
-  if (!view.data) return null;
-  const entries = view.data.entries.map((e) => ({ ...e, pointer: bindAsk(e.pointer, asked.id) }));
-  return <Entries entries={entries} enabled={enabled} intervalMs={intervalMs} onOpenQuestion={() => undefined} />;
 }

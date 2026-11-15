@@ -23,12 +23,10 @@ import { dirname, join } from "node:path";
 import { FIELD_NAME, MAX_WORDS, wordFields } from "./row-words.ts";
 
 /**
- * The regions a view can be written for. `ask` is what follows a person's ask under the box:
- * there a pointer argument written as ASK_BINDING stands for the id of the ask just written,
- * the one value the surface knows and a view's writer cannot.
+ * The regions a view can be written for. A person's ask is followed where it is listed, as a
+ * thread on the landing: nothing is drawn under the box after it, so there is no `ask` region.
  */
-export const VIEW_REGIONS = ["landing", "ask"] as const;
-export const ASK_BINDING = "$ask";
+export const VIEW_REGIONS = ["landing"] as const;
 /**
  * In an entry's `thread`, a pointer argument written as ROW_BINDING stands for the id of the row
  * the thread is drawn under: the one value the page knows per row and a view's writer cannot.
@@ -159,13 +157,6 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
       { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "Verdicts and outcomes", words: ["r"], folded: true, strip: DAY },
     ],
   },
-  ask: {
-    entries: [
-      // The reply first, in words; every row citing the ask (most are the walk's choices) folded and counted under it.
-      { pointer: { type: "record_read", refs_to: ASK_BINDING, shape: "answer" }, form: "rows", show: 1, newest: true, title: "The answer so far", words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
-      { pointer: { type: "record_read", refs_to: ASK_BINDING }, form: "rows", show: 10, newest: true, title: "What the system did for it", folded: true },
-    ],
-  },
 };
 
 /** The contract a region's views are checked against, and what discovery is told about it. */
@@ -194,8 +185,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     `folded: true draws the entry closed under its title and the count of rows its read holds; ` +
     `strip (folded only) draws in that summary how many of the rows read fall in each of the last hours hours, by their t; ` +
     `graded (with judge "outcome" only) is the read of the system's own grades of a row, its pointer naming "${ROW_BINDING}" and narrowed by where: {field: value} (equality, 1 to ${MAX_WHERE} fields), drawn closed only after the person has given their verdict on that row; ` +
-    `thread (rows only) is read again under each row, its pointer argument "${ROW_BINDING}" replaced by that row's id, and drawn as its own entry, one level deep; a list is read entry by entry and drawn in list order. ` +
-    `region ask is drawn under the box after a person's ask; there a pointer argument "${ASK_BINDING}" is replaced by the id of that ask's row`;
+    `thread (rows only) is read again under each row, its pointer argument "${ROW_BINDING}" replaced by that row's id, and drawn as its own entry, one level deep; a list is read entry by entry and drawn in list order`;
   const defaults = contract.regions
     .map((r) => `default ${r}: ${(contract.defaults[r]?.entries ?? []).map((e) => e.title ?? e.pointer.type).join(", ")}`)
     .join(". ");
