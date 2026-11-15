@@ -171,7 +171,9 @@ const VERDICT_GIVEN = "Your verdict. Choosing the other replaces it.";
 /**
  * The one fact the verdict's reader leaves, under a verdict given (src/ui-views.ts VERDICT_READERS):
  * records' standing of the person's own grade, read back by its id; or the gap's newest detector
- * row, once one is newer than the row judged; or nothing past the record it was stored as, where
+ * row, once one is newer than the row judged, as a plain fact: a detector writes newer rows on its
+ * own runs, and the page cannot tell a held gap (which the release reads) from one nobody holds
+ * until the gap rows carry waits_for, so it never says the release read it; or nothing past the record it was stored as, where
  * the reader leaves nothing a read can reach. A field the row does not carry is not drawn, never as
  * a "no".
  */
@@ -195,8 +197,8 @@ function AfterVerdict({ after, row, mine, reading }: { after: VerdictReader["aft
     const newer = rows.find((r) => typeof r["seq"] === "number" && typeof row["seq"] === "number" && r["seq"] > row["seq"]);
     if (newer) {
       const runnable = newer["check_runnable"] === false ? " · its test is set aside until a reviewed fix" : newer["check_runnable"] === true ? " · its test runs" : "";
-      said = `The release read it: the gap is now ${typeof newer["status"] === "string" ? newer["status"] : "changed"}${runnable}.`;
-    } else if (a?.ok) said = "Waiting for the release to read it.";
+      said = `Newest on this gap: ${typeof newer["status"] === "string" ? newer["status"] : "a newer row"}${runnable}.`;
+    } else if (a?.ok) said = "No newer row on this gap yet.";
   }
   return said ? (
     <p className="sf-muted sf-row-note" data-after-verdict={after}>

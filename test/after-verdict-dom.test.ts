@@ -2,7 +2,8 @@
  * Under a verdict given, the page shows the one fact the verdict's reader leaves (src/ui-views.ts
  * VERDICT_READERS, served with the view): for an answer, records' standing of the person's own grade,
  * read back by its id, with records' reason when it did not count; for a gap, its newest detector row
- * once one is newer than the row judged, else that the release has not read it yet; for a change,
+ * once one is newer than the row judged, as a plain fact that claims no cause (a detector rewrites a
+ * gap on its own runs, and nothing held is told apart yet), else that there is none; for a change,
  * only the record it was stored as. A field a row does not carry is not drawn, never as a "no".
  *
  * Shape: qa 11-15 ruling (A): the USER's Rights on gaps no one held were stored and nothing said
@@ -102,24 +103,33 @@ describe("an answer's grade, read back", () => {
   });
 });
 
-describe("a gap's release, read from the gap", () => {
+describe("a gap's newest row, as a plain fact", () => {
   test("must-fail: a newer detector row is shown by its status, and its check set aside when it says so", async () => {
     gapRows = [{ ...GAP, seq: 25, id: "d".repeat(64), status: "open", check_runnable: false }];
     const el = await judged("gap", "outcome", "Wrong");
     expect(reads).toContainEqual({ type: "record_read", shape: "gap", latest_by: "gap_id", where: { gap_id: GAP.gap_id } });
-    expect(fact(el)).toBe("The release read it: the gap is now open · its test is set aside until a reviewed fix.");
+    expect(fact(el)).toBe("Newest on this gap: open · its test is set aside until a reviewed fix.");
   });
 
   test("must-fail: a newer row without check_runnable draws no word about it", async () => {
     gapRows = [{ ...GAP, seq: 25, id: "d".repeat(64), status: "closed" }];
     const el = await judged("gap", "outcome", "Right");
-    expect(fact(el)).toBe("The release read it: the gap is now closed.");
+    expect(fact(el)).toBe("Newest on this gap: closed.");
   });
 
-  test("must-fail: no newer row: waiting for the release, and nothing about a hold", async () => {
+  test("must-fail: no newer row says only that, promising no read and saying nothing about a hold", async () => {
     const el = await judged("gap", "outcome", "Right");
-    expect(fact(el)).toBe("Waiting for the release to read it.");
+    expect(fact(el)).toBe("No newer row on this gap yet.");
     expect(el.textContent!.toLowerCase()).not.toContain("hold");
+    expect(el.textContent!.toLowerCase()).not.toContain("release");
+  });
+
+  test("must-fail: an unheld gap a detector rewrote is not said to have been read by the release", async () => {
+    // A detector's own run writes the newer row; nothing held this gap, so nothing released it.
+    gapRows = [{ ...GAP, meta: {}, seq: 25, id: "d".repeat(64), status: "open" }];
+    const el = await judged("gap", "outcome", "Right");
+    expect(fact(el)).toBe("Newest on this gap: open.");
+    expect(el.querySelector("[data-after-verdict]")!.textContent!.toLowerCase()).not.toContain("release");
   });
 });
 
