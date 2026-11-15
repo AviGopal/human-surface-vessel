@@ -1,5 +1,5 @@
 /**
- * The landing lists the detectors' gap rows as "Failing checks", titled with what a verdict does on a held one. A held gap carries a `claim`
+ * The landing lists the detectors' gap rows as "Failing checks", its note saying what a verdict does on a held one. A held gap carries a `claim`
  * (what the person is asked to judge), and that claim is the row's words; Right or Wrong on it is
  * an outcome row citing exactly that gap row, which the hold lift reads (r 1: the test is right,
  * fix the source; r 0: the test is wrong). A gap row with no claim (an older row of the same gap,
@@ -61,7 +61,7 @@ beforeEach(() => {
 const settle = async () => {
   for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 };
-const held = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Failing checks · Right releases a held one, Wrong marks its test wrong");
+const held = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Failing checks");
 
 async function mount(): Promise<HTMLElement> {
   const el = document.createElement("div");

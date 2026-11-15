@@ -2092,14 +2092,17 @@ body { overflow: hidden; }
 
 /* The landing: the blocks its view names, in order (components/Landing.tsx). */
 /* One reading column, centred in the pane it is given; its mark sits at its own edge. */
-.sf-landing { display: flex; flex-direction: column; width: 100%; max-width: 50rem; margin-inline: auto; padding-inline: var(--sf-space-4); box-sizing: border-box; }
-.sf-mark { align-self: flex-end; margin: var(--sf-space-1) 0 0; font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
+.sf-landing { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 50rem; margin-inline: auto; padding-inline: var(--sf-space-4); padding-top: var(--sf-space-3); box-sizing: border-box; }
+/* The layout's mark sits at the end of the first entry's line, not on a line of its own; opened, its words drop over the page. */
+.sf-mark { position: absolute; top: calc(var(--sf-space-3) + var(--sf-space-2) - 0.25rem); right: var(--sf-space-4); z-index: 2; font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
+.sf-landing > .sf-mark + .sf-sign-in-to-judge, .sf-landing > .sf-reports > .sf-report:first-child { padding-right: 2rem; }
+/* The first entry sits under the page's top bar, which already draws its rule. */
+.sf-landing .sf-reports > .sf-report:first-child { border-top: 0; }
 .sf-mark > summary { list-style: none; cursor: help; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid var(--sf-rule-strong); border-radius: 50%; font-weight: 600; }
 .sf-mark > summary::-webkit-details-marker { display: none; }
 .sf-mark[data-fell-back] > summary { color: var(--sf-waiting); background: var(--sf-waiting-bg); border-color: var(--sf-waiting); }
-.sf-mark[open] { align-self: stretch; }
 .sf-mark[open] > summary { margin-left: auto; display: flex; }
-.sf-mark-body { margin-top: var(--sf-space-1); padding: var(--sf-space-2); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); background: var(--sf-panel); overflow-wrap: anywhere; }
+.sf-mark-body { position: absolute; right: 0; width: min(24rem, calc(100vw - 2 * var(--sf-space-4))); box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); margin-top: var(--sf-space-1); padding: var(--sf-space-2); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); background: var(--sf-panel); overflow-wrap: anywhere; }
 .sf-landing-block { display: flex; flex-direction: column; gap: var(--sf-space-2); padding: var(--sf-space-6) var(--sf-space-6) 0; max-width: 920px; box-sizing: border-box; }
 .sf-landing-head { margin: 0; font-size: var(--sf-text-xs); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; color: var(--sf-ink-3); font-weight: 600; }
 .sf-landing-list { list-style: none; margin: 0; padding: 0; background: var(--sf-panel); border: 1px solid var(--sf-rule); border-radius: var(--sf-radius-sm); }
@@ -2139,6 +2142,7 @@ body { overflow: hidden; }
 .sf-landing .sf-report-folded { padding-top: var(--sf-space-2); }
 /* A folded read's name is a section label too, so every section on the landing is named the same way. What follows a label (a count, "sign in to see") stays words, open or folded. */
 .sf-landing .sf-report-folded .sf-report-name { font-size: var(--sf-text-xs); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; color: var(--sf-ink-3); }
+.sf-landing .sf-report-lede { margin: calc(var(--sf-space-1) * -1) 0 0; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-landing .sf-report-title .sf-report-count { font-size: var(--sf-text-sm); letter-spacing: normal; text-transform: none; }
 .sf-landing .sf-report-folded .sf-report-count { margin-left: var(--sf-space-2); }
 .sf-landing .sf-report-folded + .sf-report-folded { margin-top: calc(var(--sf-space-2) - var(--sf-space-5)); }

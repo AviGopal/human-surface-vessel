@@ -681,6 +681,11 @@ function Earlier({ count, draw }: { count: number; draw: () => ReactNode }): Rea
   );
 }
 
+function hasRows(a: ReportAnswer | undefined, entry: ViewEntry): boolean {
+  const got = a?.ok && entry.form !== "fields" ? rowsOf(a.answer, entry) : null;
+  return got !== null && "total" in got && got.total > 0;
+}
+
 function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): ReactNode {
   const pointer = entry.pointer;
   const q = useReport(pointer, { enabled: reading.enabled, intervalMs: reading.intervalMs });
@@ -719,6 +724,8 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
         {title}
         {a && !a.ok && a.signIn ? <span className="sf-report-count" data-sign-in-to-see="">{SIGN_IN_TO_SEE}</span> : null}
       </h2>
+      {/* What the rows are for, under the title; with no rows there is nothing to act on, so it is not drawn. */}
+      {entry.note && hasRows(a, entry) ? <p className="sf-report-lede" data-note="">{entry.note}</p> : null}
       {inner}
     </section>
   );

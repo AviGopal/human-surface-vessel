@@ -62,7 +62,9 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * change, written as a land_verdict row citing it and carrying the row's own `repo` and `tree`,
  * the keys a landing reads verdicts by. Which changes may land on it is the landing's to decide:
  * the page offers the verdict on every row the view judges, and refuses nothing. `empty` is what the entry says when the read answers
- * with no rows, so an empty read carries its reason rather than a bare "no rows".
+ * with no rows, so an empty read carries its reason rather than a bare "no rows". `note` is one
+ * short line under the title of an entry drawn open (not folded, not in a thread), drawn only while
+ * the read has rows: what the rows are for, so the title can stay a name.
  * `words` names the fields that hold a row's words, in order, for a row whose shape has no
  * `shape_description` row declaring them (the owner's declaration comes first); a row with
  * neither is drawn as its shape and time, every field folded.
@@ -96,6 +98,7 @@ export type ViewEntry = {
   readonly show?: number;
   readonly judge?: JudgeKind;
   readonly empty?: string;
+  readonly note?: string;
   readonly words?: readonly string[];
   readonly thread?: ViewEntry | readonly ViewEntry[];
   readonly newest?: true;
@@ -174,8 +177,8 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
       // A detector's gap that states a `claim` (the test is right) can be judged: the person's Right or Wrong
       // on a held one is read where holds are lifted. Records answers each gap's latest row, open, holding a
       // claim; the newest three are drawn. Records cannot yet say which are held for a person (the hold is
-      // in each row's meta), so the title says what a verdict does on a held one rather than calling them all held.
-      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Failing checks · Right releases a held one, Wrong marks its test wrong", empty: "No check is failing." },
+      // in each row's meta), so its note says what a verdict does on a held one rather than calling them all held.
+      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Failing checks", note: "Right releases a held one; Wrong marks its test wrong.", empty: "No check is failing." },
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
@@ -223,10 +226,10 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, note?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
-    `judge (rows only) offers a person's verdict on each row: "outcome" writes an outcome citing it, "land" a land_verdict citing it with the row's repo and tree; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; ` +
+    `judge (rows only) offers a person's verdict on each row: "outcome" writes an outcome citing it, "land" a land_verdict citing it with the row's repo and tree; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; note (1 to 120 characters, an entry drawn open only) is one line under its title, drawn while the read has rows; ` +
     `words names the fields drawn as a row's words when its shape's shape_description row (records, written by the owner) names none in its own words field; ` +
     `a row with neither is drawn as its shape and time, every other field folded under details; ` +
     `newest: true (rows only) draws the rows show kept newest first, the reverse of the producer's order, which also decides which rows are kept; ` +
@@ -365,8 +368,8 @@ function load(): void {
 /** One entry as written, or why it is not one. */
 function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail: string } {
   if (typeof e !== "object" || e === null || Array.isArray(e)) return { detail: "each entry is {pointer, form}" };
-  const { pointer, form, title, field, show, judge, empty, words, thread, newest, folded, strip, graded, about, ...rest } = e as Record<string, unknown>;
-  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge, empty, words, thread, newest, folded, strip, graded and about only` };
+  const { pointer, form, title, field, show, judge, empty, note, words, thread, newest, folded, strip, graded, about, ...rest } = e as Record<string, unknown>;
+  if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge, empty, note, words, thread, newest, folded, strip, graded and about only` };
   const got = pointerOf(pointer);
   if ("detail" in got) return got;
   const bound = Object.values(got.pointer).includes(ROW_BINDING);
@@ -380,6 +383,8 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
   if (judge !== undefined && !(JUDGE_KINDS as readonly unknown[]).includes(judge)) return { detail: `judge: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" or ")}` };
   if (judge !== undefined && form !== "rows") return { detail: `judge needs form "rows": a verdict is on a row` };
   if (empty !== undefined && (typeof empty !== "string" || !empty.trim() || empty.length > 160)) return { detail: "empty: 1 to 160 characters" };
+  if (note !== undefined && (typeof note !== "string" || !note.trim() || note.length > 120)) return { detail: "note: 1 to 120 characters" };
+  if (note !== undefined && (inThread || folded !== undefined)) return { detail: "note: on an entry drawn open, not folded or in a thread: it is drawn under the open entry's title" };
   if (words !== undefined && !wordFields(words)) return { detail: `words: 1 to ${MAX_WORDS} field names` };
   if (words !== undefined && form !== "rows") return { detail: `words needs form "rows": words are a row's` };
   if (thread !== undefined && form !== "rows") return { detail: `thread needs form "rows": a thread is under a row` };
@@ -410,6 +415,7 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
       ...(typeof show === "number" ? { show } : {}),
       ...(judge !== undefined ? { judge: judge as JudgeKind } : {}),
       ...(typeof empty === "string" ? { empty: empty.trim() } : {}),
+      ...(typeof note === "string" ? { note: note.trim() } : {}),
       ...(words !== undefined ? { words: words as string[] } : {}),
       ...(under.length > 0 ? { thread: listed ? under : under[0]! } : {}),
       ...(newest === true ? { newest } : {}),

@@ -104,6 +104,7 @@ export type ViewEntry = {
   /** What a person's verdict on a row is written as: an outcome, or a land_verdict on a change. */
   readonly judge?: "outcome" | "land";
   readonly empty?: string;
+  readonly note?: string;
   /** The fields that hold a row's words when the owner declares none (src/row-words.ts). */
   readonly words?: readonly string[];
   /** One further read drawn under each row, bound to its id through ROW_BINDING, or a list of them drawn in order; none holds a thread itself. */
