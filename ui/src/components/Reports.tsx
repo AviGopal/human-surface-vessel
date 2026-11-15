@@ -22,7 +22,7 @@
  */
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { bind, ROW_BINDING, writeOutcome, type ReportAnswer, type ViewEntry } from "../api/client";
+import { bind, ROW_BINDING, threadsOf, writeOutcome, type ReportAnswer, type ViewEntry } from "../api/client";
 import { useReport } from "../api/queries";
 import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
@@ -107,7 +107,7 @@ function Unanswered({ a, className }: { a: Extract<ReportAnswer, { ok: false }>;
 
 /** Whether any entry, or its thread, offers a verdict: the page says how to sign in once, not under every row. */
 function offersVerdicts(entries: readonly ViewEntry[]): boolean {
-  return entries.some((e) => e.judge === "outcome" || e.thread?.judge === "outcome");
+  return entries.some((e) => e.judge === "outcome" || threadsOf(e).some((t) => t.judge === "outcome"));
 }
 
 /** An outcome's `r` as words: right for 1, wrong for 0, else the value as written. */
@@ -357,6 +357,7 @@ function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; re
 
 function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewEntry; reading: Reading }): ReactNode {
   const judge = entry.judge === "outcome";
+  const threads = threadsOf(entry);
   return (
     <ol className="sf-rows">
       {rows.map((row, i) => {
@@ -365,7 +366,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
         const words = rowWords(o, wordsFor(o["shape"], reading.declared, entry.words));
         const time = when(o["t"]);
         return (
-          <li key={id ?? i} className={entry.thread ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined}>
+          <li key={id ?? i} className={threads.length > 0 ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined}>
             {words.length > 0 ? (
               words.map((w, j) => <Word key={j} k={w.field} v={w.value} />)
             ) : (
@@ -388,7 +389,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
               </details>
               {judge && id && (entry.words === undefined || entry.words.some((f) => o[f] !== undefined && o[f] !== null && o[f] !== "")) ? <Judge rowId={id} graded={entry.graded} reading={reading} /> : null}
             </div>
-            {entry.thread && id ? <Thread entry={entry.thread} rowId={id} reading={reading} /> : null}
+            {id ? threads.map((t, j) => <Thread key={j} entry={t} rowId={id} reading={reading} />) : null}
           </li>
         );
       })}

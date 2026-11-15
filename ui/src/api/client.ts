@@ -101,8 +101,8 @@ export type ViewEntry = {
   readonly empty?: string;
   /** The fields that hold a row's words when the owner declares none (src/row-words.ts). */
   readonly words?: readonly string[];
-  /** One further read drawn under each row, bound to its id through ROW_BINDING; it holds no thread itself. */
-  readonly thread?: ViewEntry;
+  /** One further read drawn under each row, bound to its id through ROW_BINDING, or a list of them drawn in order; none holds a thread itself. */
+  readonly thread?: ViewEntry | readonly ViewEntry[];
   /** Draw the rows `show` kept in reverse of the producer's order. */
   readonly newest?: true;
   /** Draw the entry closed under its title and its row count. */
@@ -112,6 +112,11 @@ export type ViewEntry = {
   /** The read of the system's own grades of a row (judged entries only), drawn after the person's verdict. */
   readonly graded?: { readonly pointer: ReportPointer };
 };
+
+/** An entry's thread as the reads drawn under each row, in its order: none, one, or the list written. */
+export function threadsOf(e: ViewEntry): readonly ViewEntry[] {
+  return e.thread === undefined ? [] : Array.isArray(e.thread) ? e.thread : [e.thread as ViewEntry];
+}
 
 /** What a person's row write came to: its record number and id, or why it was not recorded. */
 export type RowWrite = { ok: true; seq: number; id: string } | { ok: false; reason: string; signedOut?: true; said?: string };
