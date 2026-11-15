@@ -1,6 +1,7 @@
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { streamAwareInterval, useStreamConnected } from "../state/stream";
 import { RENDER_POLICY_KEY, useRecheck } from "../state/recheck";
+import { waitAfterMisses } from "../../../src/recheck";
 import { fetchGap, fetchRenderPolicy, fetchReport, fetchUiView } from "./client";
 import type { GapRecord, RenderPolicy, ReportAnswer, ReportPointer, UiViewState } from "./client";
 
@@ -11,16 +12,40 @@ export const queryKeys = {
 /**
  * One report the landing names, on the page's live cadence but never more often than the
  * policy's report floor: a report is a summary, not a feed, and each read costs its producer.
+ *
+ * A read that fails after one that answered keeps the answer drawn, marked stale with when it was
+ * read and the failure's words, as a failed view read keeps the last view. A sign-in or a refusal
+ * is a state, not a failure, and replaces it. Reads that keep failing wait longer each time
+ * (waitAfterMisses), up to the policy's `readBackoffMaxMs`.
  */
 export function useReport(pointer: ReportPointer, opts: { enabled: boolean; intervalMs: number }): UseQueryResult<ReportAnswer> {
   const recheck = useRecheck();
+  const client = useQueryClient();
+  const queryKey = ["report", JSON.stringify(pointer)];
+  const every = Math.max(opts.intervalMs, recheck.reportMinMs);
   return useQuery({
-    queryKey: ["report", JSON.stringify(pointer)],
-    queryFn: () => fetchReport(pointer),
+    queryKey,
+    queryFn: async () => keepLastAnswer(client.getQueryData<ReportAnswer>(queryKey), client.getQueryState(queryKey)?.dataUpdatedAt ?? 0, await fetchReport(pointer)),
     enabled: opts.enabled,
-    refetchInterval: opts.enabled ? Math.max(opts.intervalMs, recheck.reportMinMs) : false,
+    refetchInterval: opts.enabled ? (query) => every + waitAfterMisses(missesOf(query.state.data), every, recheck.readBackoffMaxMs) : false,
     refetchOnWindowFocus: false,
   });
+}
+
+/** How many reads in a row have failed, as the answer drawn records it. */
+export function missesOf(a: ReportAnswer | undefined): number {
+  return !a ? 0 : a.ok ? (a.stale?.misses ?? 0) : (a.misses ?? 0);
+}
+
+/**
+ * The answer to draw after a read: what came, unless it is a failure and an answer came before;
+ * then that answer, stale since it was read (`readAt`, or the time it first went stale).
+ */
+export function keepLastAnswer(prev: ReportAnswer | undefined, readAt: number, got: ReportAnswer): ReportAnswer {
+  if (got.ok || got.signIn || got.refused) return got;
+  const misses = missesOf(prev) + 1;
+  if (prev?.ok) return { ...prev, stale: { reason: got.reason, since: prev.stale?.since ?? readAt, misses } };
+  return { ...got, misses };
 }
 
 /** A region's view, on the live cadence; a failed read keeps the last view drawn. */

@@ -2290,3 +2290,11 @@ h2.sf-report-title > .sf-report-count { margin-left: var(--sf-space-2); }
 /* One width for every caption, so the strips of every folded read line up whatever their numbers. */
 .sf-strip-caption { font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); white-space: nowrap; min-width: 13em; font-variant-numeric: tabular-nums; }
 @media (max-width: 480px) { .sf-strip-bar { width: 3px; } .sf-strip-wrap { margin-left: 0; } }
+
+/* Rows kept after a read failed: one quiet line above them, marked at its edge in the waiting tone, the failure's words folded. */
+.sf-landing .sf-stale { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sf-space-2); margin: 0; padding-left: var(--sf-space-2); border-left: 2px solid var(--sf-waiting); font-size: var(--sf-text-sm); }
+.sf-landing .sf-stale time { text-decoration: underline dotted; text-underline-offset: 2px; }
+.sf-landing .sf-stale-why > summary { cursor: pointer; color: var(--sf-ink-3); }
+.sf-landing .sf-stale-why[open] { flex-basis: 100%; }
+.sf-landing .sf-stale-why [data-stale-reason] { display: block; overflow-wrap: anywhere; color: var(--sf-ink-2); }
+.sf-landing .sf-report-folded [data-stale-mark] { color: var(--sf-waiting); }

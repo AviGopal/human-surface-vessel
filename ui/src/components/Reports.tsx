@@ -396,7 +396,8 @@ function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
   );
 }
 
-type Reading = { declared: ReadonlyMap<string, readonly string[]>; readers: readonly VerdictReader[]; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void };
+/** `sectionStale`: the entry these rows belong to is drawn from a read that failed since; its note covers their threads. */
+type Reading = { declared: ReadonlyMap<string, readonly string[]>; readers: readonly VerdictReader[]; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; sectionStale?: true };
 
 /**
  * An entry's thread under one row: its read, bound to the row's id, drawn as its own entry.
@@ -412,7 +413,10 @@ function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; re
   ) : !a.ok ? (
     <Unanswered a={a} className="sf-muted sf-report-note" />
   ) : (
-    <Drawn entry={entry} answer={a.answer} reading={reading} quiet />
+    <>
+      {a.stale && !reading.sectionStale ? <Stale stale={a.stale} /> : null}
+      <Drawn entry={entry} answer={a.answer} reading={reading} quiet />
+    </>
   );
   if (entry.folded) {
     const got = a?.ok ? rowsOf(a.answer, entry) : null;
@@ -432,6 +436,7 @@ function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; re
         <summary>
           {title}
           {count !== null ? <span className="sf-report-count" data-count={count}>{count}</span> : null}
+          {a?.ok && a.stale && !reading.sectionStale ? <span className="sf-report-count" data-stale-mark="">not current</span> : null}
         </summary>
         {inner}
       </details>
@@ -681,6 +686,26 @@ function Earlier({ count, draw }: { count: number; draw: () => ReactNode }): Rea
   );
 }
 
+/**
+ * Rows kept after a read failed: when the rows drawn were read, that the latest read failed (and
+ * how many in a row), and the failure's own words folded under "why". Words the page owns; the
+ * failure is the transport's or the producer's, passed on as it came.
+ */
+function Stale({ stale }: { stale: NonNullable<Extract<ReportAnswer, { ok: true }>["stale"]> }): ReactNode {
+  const iso = new Date(stale.since).toISOString();
+  return (
+    <div className="sf-muted sf-report-note sf-stale" data-stale="" role="status">
+      <span>
+        Showing the read from <time dateTime={iso} title={new Date(stale.since).toLocaleString(undefined, WHEN)}>{relative(stale.since)}</time>; the latest read failed{stale.misses > 1 ? ` (${stale.misses} in a row)` : ""}.
+      </span>{" "}
+      <details className="sf-stale-why">
+        <summary>why</summary>
+        <span data-stale-reason="">{stale.reason}</span>
+      </details>
+    </div>
+  );
+}
+
 function hasRows(a: ReportAnswer | undefined, entry: ViewEntry): boolean {
   const got = a?.ok && entry.form !== "fields" ? rowsOf(a.answer, entry) : null;
   return got !== null && "total" in got && got.total > 0;
@@ -696,7 +721,7 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
   else if (!a.ok && a.signIn) inner = null;
   else if (!a.ok && a.refused) inner = <p className="sf-report-note" data-refused="">Not read: {a.reason}</p>;
   else if (!a.ok) inner = <p className="sf-muted sf-report-note">no answer: {a.reason}</p>;
-  else inner = <Drawn entry={entry} answer={a.answer} reading={reading} />;
+  else inner = <Drawn entry={entry} answer={a.answer} reading={a.stale ? { ...reading, sectionStale: true } : reading} />;
   if (entry.folded) {
     // Folded, but counted: the summary says how many rows the read holds before anyone opens it.
     const got = a?.ok && entry.form !== "fields" ? rowsOf(a.answer, entry) : null;
@@ -713,7 +738,9 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
             <Strip rows={[...got.earlier, ...got.rows]} hours={entry.strip.hours} last={typeof pointer["last"] === "number" ? (pointer["last"] as number) : undefined} />
           ) : null}
           {a && !a.ok ? a.signIn ? <span className="sf-report-count" data-sign-in-to-see="">{SIGN_IN_TO_SEE}</span> : a.refused ? <span className="sf-report-count" data-refused="">not read</span> : <span className="sf-report-count" data-no-answer="">no answer</span> : null}
+          {a?.ok && a.stale ? <span className="sf-report-count" data-stale-mark="">not current</span> : null}
         </summary>
+        {a?.ok && a.stale ? <Stale stale={a.stale} /> : null}
         {inner}
       </details>
     );
@@ -726,6 +753,7 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
       </h2>
       {/* What the rows are for, under the title; with no rows there is nothing to act on, so it is not drawn. */}
       {entry.note && hasRows(a, entry) ? <p className="sf-report-lede" data-note="">{entry.note}</p> : null}
+      {a?.ok && a.stale ? <Stale stale={a.stale} /> : null}
       {inner}
     </section>
   );

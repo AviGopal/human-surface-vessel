@@ -8,8 +8,9 @@
  */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { restoreNativeGlobals } from "./setup.ts";
-import { gapStatusWaitMs, knownGapStatus, refreshGapStatuses, resetGapStatusesForTest } from "../src/routes/proxy.ts";
+import { knownGapStatus, refreshGapStatuses, resetGapStatusesForTest } from "../src/routes/proxy.ts";
 import { DISCOVERY_ENDPOINT } from "../src/config.ts";
+import { waitAfterMisses } from "../src/recheck.ts";
 
 await restoreNativeGlobals();
 const realFetch = globalThis.fetch;
@@ -53,11 +54,11 @@ describe("gap status with no one serving it", () => {
   });
 
   test("the wait doubles from the floor and stops at the cap; none before the first miss", () => {
-    expect(gapStatusWaitMs(0, 5_000, 600_000)).toBe(0);
-    expect(gapStatusWaitMs(1, 5_000, 600_000)).toBe(5_000);
-    expect(gapStatusWaitMs(2, 5_000, 600_000)).toBe(10_000);
-    expect(gapStatusWaitMs(4, 5_000, 600_000)).toBe(40_000);
-    expect(gapStatusWaitMs(99, 5_000, 600_000)).toBe(600_000);
+    expect(waitAfterMisses(0, 5_000, 600_000)).toBe(0);
+    expect(waitAfterMisses(1, 5_000, 600_000)).toBe(5_000);
+    expect(waitAfterMisses(2, 5_000, 600_000)).toBe(10_000);
+    expect(waitAfterMisses(4, 5_000, 600_000)).toBe(40_000);
+    expect(waitAfterMisses(99, 5_000, 600_000)).toBe(600_000);
   });
 
   test("control: a store that answers is read for every id, and its statuses are kept", async () => {

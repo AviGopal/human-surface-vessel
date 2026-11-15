@@ -24,6 +24,7 @@ import { admittedCaller, carry, remoteOf, requireCaller, type Caller } from "../
 import { isWritePointerType } from "../caller-credential.ts";
 import { impulsesRouter } from "./impulses.ts";
 import { getRenderPolicy, recordObservation } from "../store.ts";
+import { waitAfterMisses } from "../recheck.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
 import { unnamed, unnamePeople } from "../unname.ts";
 import { arrivedOverTls, closeSession, keySignInAvailable, loginAllowed, noteLoginFailure, openSession, sessionOf, signInWithKey, viewOf } from "../person-session.ts";
@@ -570,11 +571,6 @@ const gapStatusInFlight = new Set<string>();
  */
 let gapStatusUnanswered = { count: 0, at: 0 };
 
-/** How long after `count` unanswered reads in a row the next is sent: doubling from `floorMs`, never past `capMs`. */
-export function gapStatusWaitMs(count: number, floorMs: number, capMs: number): number {
-  return count <= 0 ? 0 : Math.min(capMs, floorMs * 2 ** Math.min(count - 1, 30));
-}
-
 export function resetGapStatusesForTest(): void {
   gapStatuses.clear();
   gapStatusInFlight.clear();
@@ -590,7 +586,7 @@ export function knownGapStatus(id: string): string | null {
 export async function refreshGapStatuses(ids: readonly string[]): Promise<void> {
   const now = Date.now();
   const { recheck } = getRenderPolicy();
-  if (now - gapStatusUnanswered.at < gapStatusWaitMs(gapStatusUnanswered.count, recheck.questionsMinMs, recheck.gapStatusTtlMs)) return;
+  if (now - gapStatusUnanswered.at < waitAfterMisses(gapStatusUnanswered.count, recheck.questionsMinMs, recheck.gapStatusTtlMs)) return;
   const due = [...new Set(ids)]
     .filter((id) => !gapStatusInFlight.has(id) && now - (gapStatuses.get(id)?.at ?? 0) > getRenderPolicy().recheck.gapStatusTtlMs)
     .slice(0, getRenderPolicy().limits.gapStatusPerRead);

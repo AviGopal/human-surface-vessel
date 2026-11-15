@@ -31,6 +31,8 @@ export const RECHECK_KEYS = [
   "gapStatusTtlMs",
   /** How long a page frame is kept for its reader. */
   "frameTtlMs",
+  /** The longest a read that keeps failing waits before it is sent again (see waitAfterMisses). */
+  "readBackoffMaxMs",
 ] as const;
 
 export type RecheckKey = (typeof RECHECK_KEYS)[number];
@@ -46,6 +48,7 @@ export const DEFAULT_RECHECK: Recheck = {
   sessionMs: 60_000,
   gapStatusTtlMs: 600_000,
   frameTtlMs: 1_800_000,
+  readBackoffMaxMs: 600_000,
 };
 
 /**
@@ -66,6 +69,7 @@ export const RECHECK_RANGES: Readonly<Record<RecheckKey, readonly [number, numbe
   sessionMs: [5_000, 3_600_000],
   gapStatusTtlMs: [10_000, 86_400_000],
   frameTtlMs: [60_000, 86_400_000],
+  readBackoffMaxMs: [5_000, 86_400_000],
 };
 
 export const RECHECK = boundedGroup("recheck", DEFAULT_RECHECK, RECHECK_RANGES);
@@ -75,3 +79,12 @@ export const recheckPatch = (raw: unknown, rejected: string[]): Partial<Recheck>
 
 /** A whole recheck from whatever was stored or served: each missing or junk key is its default. */
 export const recheckOf = (raw: unknown): Recheck => RECHECK.of(raw);
+
+/**
+ * How long to wait before a read that has failed `misses` times in a row is sent again: none
+ * before the first miss, then `floorMs` doubling, never past `capMs`. A read no one is answering
+ * is not sent at the cadence of one that is.
+ */
+export function waitAfterMisses(misses: number, floorMs: number, capMs: number): number {
+  return misses <= 0 ? 0 : Math.min(capMs, Math.max(floorMs, floorMs * 2 ** Math.min(misses - 1, 30)));
+}

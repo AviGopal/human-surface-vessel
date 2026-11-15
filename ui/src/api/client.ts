@@ -238,7 +238,14 @@ export function writeComplaint(text: string, about: string | null): Promise<RowW
  * signed-in person's own key (src/routes/proxy.ts), and with no one signed in it answers 401
  * `sign_in_required`. The page says "sign in" for it, in a person's words, not the refusal's.
  */
-export type ReportAnswer = { readonly ok: true; readonly shape: string; readonly answer: unknown } | { readonly ok: false; readonly reason: string; readonly signIn?: true; readonly refused?: true };
+/**
+ * A report's answer. `stale`: the latest read failed and this is the last answer that came, read at
+ * `since`, with the failure's own words and how many reads in a row have failed. `misses` on a
+ * failure: how many in a row, when no answer has come yet.
+ */
+export type ReportAnswer =
+  | { readonly ok: true; readonly shape: string; readonly answer: unknown; readonly stale?: { readonly reason: string; readonly since: number; readonly misses: number } }
+  | { readonly ok: false; readonly reason: string; readonly signIn?: true; readonly refused?: true; readonly misses?: number };
 
 /**
  * One report, resolved by shape through discovery (the surface's own passthrough), so
