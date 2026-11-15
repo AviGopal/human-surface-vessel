@@ -2127,9 +2127,10 @@ body { overflow: hidden; }
 .sf-landing .sf-report:not(.sf-report-folded):not(:has(> :not(.sf-report-title, .sf-report-note, .sf-row-details[data-empty-reason]))) { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--sf-space-1) var(--sf-space-3); padding-top: var(--sf-space-2); }
 .sf-landing .sf-report:not(.sf-report-folded):not(:has(> :not(.sf-report-title, .sf-report-note, .sf-row-details[data-empty-reason]))) > .sf-report-note:not([data-refused]) { color: var(--sf-ink-3); }
 .sf-landing .sf-report-folded { padding-top: var(--sf-space-2); }
-/* A folded read's name is a section label too, so every section on the landing is named the same way; its count stays words. */
+/* A folded read's name is a section label too, so every section on the landing is named the same way. What follows a label (a count, "sign in to see") stays words, open or folded. */
 .sf-landing .sf-report-folded .sf-report-name { font-size: var(--sf-text-xs); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; color: var(--sf-ink-3); }
-.sf-landing .sf-report-folded .sf-report-count { margin-left: var(--sf-space-2); font-size: var(--sf-text-sm); letter-spacing: normal; text-transform: none; }
+.sf-landing .sf-report-title .sf-report-count { font-size: var(--sf-text-sm); letter-spacing: normal; text-transform: none; }
+.sf-landing .sf-report-folded .sf-report-count { margin-left: var(--sf-space-2); }
 .sf-landing .sf-report-folded + .sf-report-folded { margin-top: calc(var(--sf-space-2) - var(--sf-space-5)); }
 .sf-landing .sf-report[data-form="questions"]:has(.sf-landing-list > li) { background: var(--sf-panel); border: 1px solid var(--sf-accent); border-radius: var(--sf-radius-sm); padding: var(--sf-space-3) var(--sf-space-4); }
 /* A closed details still puts its hidden content in the column, so the card's gap would sit under the title: the open summary's margin is the only space. */
