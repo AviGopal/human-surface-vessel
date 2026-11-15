@@ -561,6 +561,26 @@ export async function readGapById(id: string): Promise<{ found: boolean; gap: un
 const gapStatuses = new Map<string, { status: string | null; at: number }>();
 const gapStatusInFlight = new Set<string>();
 
+/**
+ * Reads of gap status that no vessel answered, in a row, and when the last one was. No answer is
+ * about the shape, not the gap: with no gap store serving, every id fails alike, so after one
+ * goes unanswered the rest of that read is not sent, and the next waits twice as long each time
+ * (from the questions floor up to the status TTL). Shape: node1 11-15, with no producer of
+ * substrateGap every questions read re-sent up to 60 ids, 4 at a time, ~122 forwards a minute.
+ */
+let gapStatusUnanswered = { count: 0, at: 0 };
+
+/** How long after `count` unanswered reads in a row the next is sent: doubling from `floorMs`, never past `capMs`. */
+export function gapStatusWaitMs(count: number, floorMs: number, capMs: number): number {
+  return count <= 0 ? 0 : Math.min(capMs, floorMs * 2 ** Math.min(count - 1, 30));
+}
+
+export function resetGapStatusesForTest(): void {
+  gapStatuses.clear();
+  gapStatusInFlight.clear();
+  gapStatusUnanswered = { count: 0, at: 0 };
+}
+
 /** The cached status of a gap, or null when it has not been read (or was not found). */
 export function knownGapStatus(id: string): string | null {
   return gapStatuses.get(id)?.status ?? null;
@@ -569,6 +589,8 @@ export function knownGapStatus(id: string): string | null {
 /** Read the statuses of these gaps that are not cached or are stale. Never throws; resolves when done. */
 export async function refreshGapStatuses(ids: readonly string[]): Promise<void> {
   const now = Date.now();
+  const { recheck } = getRenderPolicy();
+  if (now - gapStatusUnanswered.at < gapStatusWaitMs(gapStatusUnanswered.count, recheck.questionsMinMs, recheck.gapStatusTtlMs)) return;
   const due = [...new Set(ids)]
     .filter((id) => !gapStatusInFlight.has(id) && now - (gapStatuses.get(id)?.at ?? 0) > getRenderPolicy().recheck.gapStatusTtlMs)
     .slice(0, getRenderPolicy().limits.gapStatusPerRead);
@@ -578,11 +600,15 @@ export async function refreshGapStatuses(ids: readonly string[]): Promise<void> 
     for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
       try {
         const answer = await readGapById(id);
-        // No vessel answered: leave it unknown and try again on a later read.
-        if (answer) {
-          const status = answer.found ? (answer.gap as { status?: unknown } | null)?.status : null;
-          gapStatuses.set(id, { status: typeof status === "string" ? status : null, at: Date.now() });
+        // No vessel answered: leave it unknown, send no more of this read, and wait longer before the next.
+        if (!answer) {
+          gapStatusUnanswered = { count: gapStatusUnanswered.count + 1, at: Date.now() };
+          for (const rest of queue.splice(0)) gapStatusInFlight.delete(rest);
+          return;
         }
+        gapStatusUnanswered = { count: 0, at: 0 };
+        const status = answer.found ? (answer.gap as { status?: unknown } | null)?.status : null;
+        gapStatuses.set(id, { status: typeof status === "string" ? status : null, at: Date.now() });
       } finally {
         gapStatusInFlight.delete(id);
       }
