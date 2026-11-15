@@ -20,6 +20,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.endsWith("/api/session")) return Response.json({ keySignIn: true, signedIn: true, person: { userId: "key_person_1", name: null, email: null, expiresAt: Date.now() + 900_000 } });
   if (url.includes("/api/discovery/resolve")) {
     const pointer = JSON.parse(String(init?.body)).pointer as Record<string, unknown>;
+    if (pointer["type"] === "uiQuestion") return Response.json({ questions: [{ id: "q1", title: "Which branch?", kind: "decision", status: "open" }] });
     return Response.json(pointer["type"] === "record_read" && pointer["shape"] === "gap" ? gaps : []);
   }
   return Response.json({});
@@ -67,6 +68,11 @@ describe("an entry's note", () => {
     expect(note.previousElementSibling!.tagName).toBe("H2");
   });
 
+  test("a questions entry with a question draws its note", async () => {
+    const el = await mount([{ pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you", note: "Answer these first." }]);
+    expect(el.querySelector("[data-note]")?.textContent).toBe("Answer these first.");
+  });
+
   test("must-fail: with no rows there is nothing to act on, and no note", async () => {
     gaps = [];
     const el = await mount([failing]);
@@ -74,7 +80,7 @@ describe("an entry's note", () => {
     expect(el.textContent).toContain("No check is failing.");
   });
 
-  test("must-fail: the contract takes a note on an open entry, and refuses it folded, in a thread, or too long", () => {
+  test("must-fail: the contract takes a note on an open entry, and refuses it folded, in a thread, on fields, too long or blank", () => {
     const pointer = { type: "record_read", shape: "gap" };
     const open = writeView({ region: "landing", entries: [{ pointer, form: "rows", title: "A", note: "What these are for." }] }, null);
     resetViewsForTest();
@@ -84,6 +90,8 @@ describe("an entry's note", () => {
       { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", refs_to: "$row", shape: "answer" }, form: "rows", note: "x" } },
       { pointer, form: "rows", note: "x".repeat(121) },
       { pointer, form: "rows", note: " " },
+      // A fields entry has no rows, so a note there would never be drawn.
+      { pointer: { type: "fixture_fields" }, form: "fields", note: "x" },
     ]) {
       const w = writeView({ region: "landing", entries: [entry] }, null);
       expect(w.ok).toBe(false);

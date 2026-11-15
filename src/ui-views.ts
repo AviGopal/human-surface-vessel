@@ -63,7 +63,7 @@ export type EntryForm = (typeof ENTRY_FORMS)[number];
  * the keys a landing reads verdicts by. Which changes may land on it is the landing's to decide:
  * the page offers the verdict on every row the view judges, and refuses nothing. `empty` is what the entry says when the read answers
  * with no rows, so an empty read carries its reason rather than a bare "no rows". `note` is one
- * short line under the title of an entry drawn open (not folded, not in a thread), drawn only while
+ * short line under the title of an entry drawn open (form rows or questions; not folded, not in a thread), drawn only while
  * the read has rows: what the rows are for, so the title can stay a name.
  * `words` names the fields that hold a row's words, in order, for a row whose shape has no
  * `shape_description` row declaring them (the owner's declaration comes first); a row with
@@ -229,7 +229,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, note?, words?: [1 to ${MAX_WORDS} field names], thread?: an entry with no thread, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
     `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
-    `judge (rows only) offers a person's verdict on each row: "outcome" writes an outcome citing it, "land" a land_verdict citing it with the row's repo and tree; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; note (1 to 120 characters, an entry drawn open only) is one line under its title, drawn while the read has rows; ` +
+    `judge (rows only) offers a person's verdict on each row: "outcome" writes an outcome citing it, "land" a land_verdict citing it with the row's repo and tree; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; note (1 to 120 characters, an entry drawn open whose form is rows or questions) is one line under its title, drawn while the read has rows; ` +
     `words names the fields drawn as a row's words when its shape's shape_description row (records, written by the owner) names none in its own words field; ` +
     `a row with neither is drawn as its shape and time, every other field folded under details; ` +
     `newest: true (rows only) draws the rows show kept newest first, the reverse of the producer's order, which also decides which rows are kept; ` +
@@ -384,6 +384,7 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
   if (judge !== undefined && form !== "rows") return { detail: `judge needs form "rows": a verdict is on a row` };
   if (empty !== undefined && (typeof empty !== "string" || !empty.trim() || empty.length > 160)) return { detail: "empty: 1 to 160 characters" };
   if (note !== undefined && (typeof note !== "string" || !note.trim() || note.length > 120)) return { detail: "note: 1 to 120 characters" };
+  if (note !== undefined && form === "fields") return { detail: `note needs form "rows" or "questions": it is drawn while the read has rows, and fields have none` };
   if (note !== undefined && (inThread || folded !== undefined)) return { detail: "note: on an entry drawn open, not folded or in a thread: it is drawn under the open entry's title" };
   if (words !== undefined && !wordFields(words)) return { detail: `words: 1 to ${MAX_WORDS} field names` };
   if (words !== undefined && form !== "rows") return { detail: `words needs form "rows": words are a row's` };
