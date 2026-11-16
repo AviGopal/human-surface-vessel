@@ -63,7 +63,7 @@ describe("signing in with a key", () => {
     expect(el.querySelector('[data-signed-in="true"]')?.textContent).toContain("Signed in");
   });
 
-  test("must-fail: signed in with a key, the bar says signed in, not the key id; which key is one hover away", async () => {
+  test("must-fail: signed in with a key, the bar is one mark that says signed in, not the key id; which key is one hover away", async () => {
     signedIn = true;
     const el = document.createElement("div");
     document.body.appendChild(el);
@@ -75,6 +75,10 @@ describe("signing in with a key", () => {
     const who = el.querySelector('[data-signed-in="true"] .sf-signin-who') as HTMLElement;
     expect(who.textContent).toMatch(/^Signed in · until /);
     expect(el.textContent).not.toContain("key_person_1");
-    expect(who.title).toBe("key_person_1");
+    const mark = el.querySelector('[data-signed-in="true"] > summary') as HTMLElement;
+    expect(mark.getAttribute("aria-label")).toMatch(/^Signed in · until /);
+    expect(mark.title).toBe("key_person_1");
+    // Who and Sign out are folded under the mark, not on the bar.
+    expect((el.querySelector('[data-signed-in="true"]') as HTMLDetailsElement).open).toBe(false);
   });
 });

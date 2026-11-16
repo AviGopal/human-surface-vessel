@@ -72,7 +72,7 @@ async function judged(shape: string, judge: "outcome" | "land", word: "Right" | 
     createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(Entries, { entries: [entry(shape, judge)], readers, enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} })));
   });
   await settle();
-  const b = [...el.querySelectorAll(".sf-judge-word")].find((x) => x.textContent === word) as HTMLButtonElement;
+  const b = [...el.querySelectorAll(".sf-judge-word")].find((x) => (x.getAttribute("aria-label") ?? x.textContent) === word) as HTMLButtonElement;
   await act(async () => { b.click(); });
   await settle();
   return el;

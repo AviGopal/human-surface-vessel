@@ -8,6 +8,7 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useSession, useSignIn, useSignOut } from "../api/session";
+import { Glyph } from "./Glyph";
 
 function until(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -28,18 +29,23 @@ export function SignIn({ onSignedIn, openSignal = 0 }: { onSignedIn?: () => void
   if (!state?.keySignIn) return null;
 
   if (state.signedIn && state.person) {
-    // A key sign-in carries no name: the words say signed in, and which key is one hover away
-    // (a person may hold more than one), not a key id on the bar.
+    // A key sign-in carries no name: the mark says signed in; who, until when, and signing out
+    // are one tap away (a person may hold more than one key), not a key id on the bar.
     const who = state.person.name ?? state.person.email ?? "Signed in";
     return (
-      <span className="sf-signin" data-signed-in="true">
-        <span className="sf-signin-who" title={state.person.email ?? state.person.userId}>
-          {who} · until {until(state.person.expiresAt)}
-        </span>
-        <button type="button" className="sf-button sf-button-quiet" onClick={() => signOut.mutate()}>
-          Sign out
-        </button>
-      </span>
+      <details className="sf-signin sf-account" data-signed-in="true">
+        <summary className="sf-account-mark" aria-label={`${who} · until ${until(state.person.expiresAt)}`} title={state.person.email ?? state.person.userId}>
+          <Glyph name="person" />
+        </summary>
+        <div className="sf-account-menu">
+          <span className="sf-signin-who">
+            {who} · until {until(state.person.expiresAt)}
+          </span>
+          <button type="button" className="sf-button sf-button-quiet" onClick={() => signOut.mutate()}>
+            Sign out
+          </button>
+        </div>
+      </details>
     );
   }
 

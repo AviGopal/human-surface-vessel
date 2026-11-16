@@ -87,7 +87,7 @@ async function typeInBox(el: HTMLElement, text: string): Promise<void> {
   await settle();
 }
 
-const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement | undefined;
+const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === text) as HTMLButtonElement | undefined;
 
 describe("asking needs a signed-in person", () => {
   // Sends only: once an ask is stored, what follows it reads through the same route.

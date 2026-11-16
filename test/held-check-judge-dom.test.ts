@@ -74,7 +74,7 @@ async function mount(): Promise<HTMLElement> {
   return el;
 }
 const row = (el: HTMLElement, id: string): Element => el.querySelector(`.sf-row[data-row="${id}"]`)!;
-const button = (el: Element, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement;
+const button = (el: Element, text: string) => [...el.querySelectorAll("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === text) as HTMLButtonElement;
 
 describe("checks held for a person", () => {
   test("must-fail: the landing reads the held checks records answers, and a held row's claim is the words judged", async () => {

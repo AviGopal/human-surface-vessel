@@ -92,7 +92,7 @@ function Questions(): unknown {
 }
 const questions = (el: HTMLElement) => [...el.querySelectorAll("[data-questions] li")].map((li) => li.textContent);
 const rows = (el: HTMLElement) => el.querySelectorAll(`.sf-row[data-row="${ASK.id}"]`).length;
-const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement;
+const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === text) as HTMLButtonElement;
 
 describe("signing in or out reads the reports again at once", () => {
   test("must-fail: refused signed out, the reports fill as soon as the person signs in, with no reload", async () => {

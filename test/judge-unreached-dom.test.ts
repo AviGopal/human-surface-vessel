@@ -53,7 +53,7 @@ describe("a verdict nothing took", () => {
       createRoot(el).render(React.createElement(QueryClientProvider, { client: qc }, React.createElement(Entries, { entries: [held] as never, enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} })));
     });
     await settle();
-    const wrong = [...el.querySelectorAll(`.sf-row[data-row="${GAP.id}"] button`)].find((b) => b.textContent === "Wrong") as HTMLButtonElement;
+    const wrong = [...el.querySelectorAll(`.sf-row[data-row="${GAP.id}"] button`)].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === "Wrong") as HTMLButtonElement;
     await act(async () => wrong.click());
     await settle();
     expect(writes).toEqual([{ shape: "outcome", r: 0, input_refs: [GAP.id] }]);

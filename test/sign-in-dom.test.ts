@@ -85,7 +85,7 @@ async function typeInBox(el: HTMLElement, text: string): Promise<void> {
   await settle();
 }
 
-const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement | undefined;
+const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === text) as HTMLButtonElement | undefined;
 
 describe("signing in on the surface", () => {
   test("nothing is shown where sign-in isn't offered", async () => {

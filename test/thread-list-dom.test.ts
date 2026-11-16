@@ -83,7 +83,7 @@ describe("a thread that lists reads", () => {
 
   test("must-fail: the verdict is offered only where the view asks for it", async () => {
     const el = await mount([asks([account, answers])]);
-    const buttons = (id: string) => [...el.querySelectorAll(`.sf-row[data-row="${id}"] button`)].map((b) => b.textContent);
+    const buttons = (id: string) => [...el.querySelectorAll(`.sf-row[data-row="${id}"] button`)].map((b) => b.getAttribute("aria-label") ?? b.textContent);
     expect(buttons(ANSWER.id)).toEqual(["Right", "Wrong"]);
     expect(buttons(STEP.id)).toEqual([]);
   });

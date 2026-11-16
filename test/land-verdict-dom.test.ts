@@ -88,7 +88,7 @@ async function mount(entries: unknown[] = [asks]): Promise<HTMLElement> {
 }
 const change = (el: HTMLElement) => el.querySelector(`.sf-row[data-row="${DIFF.id}"]`) as HTMLElement | null;
 async function judge(el: HTMLElement, word: "Right" | "Wrong") {
-  const b = [...change(el)!.querySelectorAll(".sf-judge-word")].find((x) => x.textContent === word) as HTMLButtonElement;
+  const b = [...change(el)!.querySelectorAll(".sf-judge-word")].find((x) => (x.getAttribute("aria-label") ?? x.textContent) === word) as HTMLButtonElement;
   await act(async () => { b.click(); });
   await settle();
 }
@@ -113,7 +113,7 @@ describe("a change judged under its ask", () => {
     diffs = [{ ...DIFF, truncated: true }];
     const el = await mount();
     const [right, wrong] = [...change(el)!.querySelectorAll(".sf-judge-word")] as HTMLButtonElement[];
-    expect(right!.textContent).toBe("Right");
+    expect(right!.getAttribute("aria-label")).toBe("Right");
     expect(right!.disabled).toBe(true);
     expect(change(el)!.querySelector("[data-right-needs-whole]")!.textContent).toBe("Right needs the whole change");
     expect(right!.getAttribute("aria-describedby")).toBe(change(el)!.querySelector("[data-right-needs-whole]")!.id);
@@ -187,7 +187,7 @@ describe("the change's typecheck, shown as written above Right and Wrong (agf_yb
     const out = tc(el)!.querySelector("details[data-field=out]") as HTMLDetailsElement;
     expect(out.open).toBe(false);
     expect(out.querySelector("pre")!.textContent).toBe(OUT);
-    const right = [...change(el)!.querySelectorAll(".sf-judge-word")].find((b) => b.textContent === "Right") as HTMLButtonElement;
+    const right = [...change(el)!.querySelectorAll(".sf-judge-word")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === "Right") as HTMLButtonElement;
     expect(tc(el)!.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Shown, not a gate: the person's mark decides.
     expect(right.disabled).toBe(false);

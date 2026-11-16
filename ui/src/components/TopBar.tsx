@@ -21,6 +21,7 @@ import { SignIn } from "./SignIn";
 import { SESSION_KEY } from "../api/session";
 import { useLimits } from "../state/limits";
 import { Said } from "./Reports";
+import { Glyph } from "./Glyph";
 
 
 /** The echo for a reply delivered to a waiting run. */
@@ -248,6 +249,9 @@ export function TopBar({
               }
             }}
           />
+          <button type="submit" className="sf-ask-send" aria-label={pending ? "Sending" : words.send} aria-busy={pending} title={words.send} disabled={goal.trim().length === 0 || pending}>
+            <Glyph name="send" />
+          </button>
           {goal.trim().length === 0 && context.kind === "reply" ? (
             // The replies a waiting run can take besides an answer. They fill the box; they never send.
             <div className="sf-ask-suggest" onMouseDown={(e) => e.preventDefault()}>
@@ -259,21 +263,18 @@ export function TopBar({
             </div>
           ) : null}
         </div>
-        <button type="submit" className="sf-button sf-button-primary" disabled={goal.trim().length === 0 || pending}>
-          {pending ? "Sending…" : words.send}
-        </button>
       </form>
 
       <div className="sf-top-controls">
         <button
           type="button"
-          className="sf-button sf-button-quiet"
-          aria-pressed={paused}
+          className="sf-live"
+          aria-pressed={!paused}
+          aria-label="Live"
           title={paused ? "Updates paused" : "Updating live"}
           onClick={() => setPaused(!paused)}
         >
           <span className="sf-live-dot" data-paused={paused} aria-hidden="true" />
-          {paused ? "Paused" : "Live"}
         </button>
         <SignIn
           openSignal={signInSignal}

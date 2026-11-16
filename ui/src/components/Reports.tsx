@@ -31,6 +31,7 @@ import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
 import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
 import { askAbout, citesOf } from "../lib/box";
+import { Glyph } from "./Glyph";
 import { Prose } from "./Prose";
 import { QUESTION_CONTENT_SHAPE, QuestionView } from "./QuestionView";
 import { planFor } from "./Rendered";
@@ -244,11 +245,11 @@ function Judge({ row, rowId, kind, graded, after, reading }: { row: Readonly<Rec
       {/* The verdict given is the marked word (aria-pressed); beside it, the record it was stored as. */}
       {verdict.state === "done" ? <span className="sf-judge-given">record #{verdict.seq}</span> : null}
       {!rightCounts ? <span className="sf-judge-given" data-right-needs-whole="" id={`whole-${rowId}`}>{RIGHT_NEEDS_WHOLE}</span> : null}
-      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending" || !rightCounts} aria-describedby={!rightCounts ? `whole-${rowId}` : undefined} title={!signedIn ? SIGN_IN_TO_JUDGE : !rightCounts ? RIGHT_NEEDS_WHOLE : verdict.state === "done" && verdict.r === 1 ? VERDICT_GIVEN : undefined} onClick={() => void give(1)}>
-        Right
+      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 1} disabled={!signedIn || verdict.state === "sending" || !rightCounts} aria-describedby={!rightCounts ? `whole-${rowId}` : undefined} title={!signedIn ? SIGN_IN_TO_JUDGE : !rightCounts ? RIGHT_NEEDS_WHOLE : verdict.state === "done" && verdict.r === 1 ? VERDICT_GIVEN : undefined} aria-label="Right" onClick={() => void give(1)}>
+        <Glyph name="right" />
       </button>
-      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={!signedIn ? SIGN_IN_TO_JUDGE : verdict.state === "done" && verdict.r === 0 ? VERDICT_GIVEN : undefined} onClick={() => void give(0)}>
-        Wrong
+      <button type="button" className="sf-judge-word" aria-pressed={verdict.state === "done" && verdict.r === 0} disabled={!signedIn || verdict.state === "sending"} title={!signedIn ? SIGN_IN_TO_JUDGE : verdict.state === "done" && verdict.r === 0 ? VERDICT_GIVEN : undefined} aria-label="Wrong" onClick={() => void give(0)}>
+        <Glyph name="wrong" />
       </button>
     </div>
     {/* Under the row's line, so Right and Wrong keep their place beside the time. */}
@@ -549,8 +550,8 @@ function AboutThis({ rowId, words, threads, reading }: { rowId: string; words: s
   const got = judged && q.data?.ok ? rowsOf(q.data.answer, judged) : null;
   const drawn = got && "rows" in got ? got.rows : [];
   return (
-    <button type="button" className="sf-row-about" onClick={() => askAbout({ cites: citesOf(rowId, drawn), words })}>
-      about this
+    <button type="button" className="sf-row-about" aria-label="Ask about this" title="Ask about this" onClick={() => askAbout({ cites: citesOf(rowId, drawn), words })}>
+      <Glyph name="about" />
     </button>
   );
 }

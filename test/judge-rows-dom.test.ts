@@ -79,7 +79,7 @@ async function mount(items: unknown[]): Promise<HTMLElement> {
   await settle();
   return el;
 }
-const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement;
+const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === text) as HTMLButtonElement;
 
 describe("rows drawn in full, with a person's verdict", () => {
   test("must-fail: every field is in the row's details in full, text as written; only the pointer is sent", async () => {
