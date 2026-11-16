@@ -90,7 +90,7 @@ describe("uiView_write declares its inputs, from the contract a write is checked
   });
 
   test("must-fail: the declaration uses only the schema words the walk's check judges, so a walk can call it", () => {
-    // walk-vessel src/inputs.ts KNOWN: a declaration using any other word fails that check, and the walk offers no call.
+    // Copied from walk-vessel src/inputs.ts KNOWN at e4773c6: a declaration using any other word fails that check, and the walk offers no call.
     const judged = new Set(["type", "required", "properties", "additionalProperties", "items", "enum", "const", "minLength", "maxLength", "pattern", "minimum", "maximum", "minItems", "maxItems", "description", "title", "examples", "default"]);
     const unjudged: string[] = [];
     const visit = (s: unknown, at: string): void => {

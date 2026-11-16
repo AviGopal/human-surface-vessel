@@ -259,3 +259,35 @@ describe("human_surface:ui_view names the view each region draws", () => {
     expect((await report()).views.landing).toMatchObject({ id: "landing@2", revision: 2, undo_of: 0 });
   });
 });
+
+describe("human_surface:ui_view {region}: the view a writer of views reads before it changes one", () => {
+  async function readView(pointer: Record<string, unknown>) {
+    const res = await impulsesRouter.request("/v2/impulses/resolve", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...testAuth() },
+      body: JSON.stringify({ pointer: { type: "human_surface:ui_view", ...pointer } }),
+    });
+    return { status: res.status, json: (await res.json()) as any };
+  }
+
+  test("must-fail: with a region, the answer is only that region's view in force, in the form uiView_write answers", async () => {
+    const w = await write({ region: "landing", entries: [load, asked] });
+    const r = await readView({ region: "landing" });
+    expect(r.status).toBe(200);
+    expect(Object.keys(r.json.body).sort()).toEqual(["region", "revision", "view"]);
+    expect(r.json.body).toMatchObject({ region: "landing", revision: w.json.body.revision, view: { id: w.json.body.view.id, entries: w.json.body.view.entries, faces: w.json.body.view.faces } });
+  });
+
+  test("must-fail: the read is declared to discovery, so a walk can make it", () => {
+    const inputs = (REGISTRATION_PAYLOAD as unknown as { shape_inputs: Record<string, any> }).shape_inputs;
+    expect(inputs["human_surface:ui_view"].properties.region.enum).toEqual(["landing"]);
+  });
+
+  test("an unknown region is refused by name; without a region the report is as before", async () => {
+    expect((await readView({ region: "margin" })).status).toBe(422);
+    const whole = await readView({});
+    expect(whole.status).toBe(200);
+    expect(whole.json.body.views.landing.id).toBe("landing@0");
+    expect(whole.json.body.view).toBeUndefined();
+  });
+});

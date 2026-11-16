@@ -273,10 +273,11 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
       `writes the view of a human surface region (${names}): {region, entries, faces?, note?}. ${entry}. ` +
       `faces is {role: ${FACES.join(" | ")}} (1 to ${MAX_FACES} roles), the face a row's words are drawn in by the row's role as records stamps it; a role not named draws in the page's face; a value drawn with its field's name is always mono; a write without faces keeps the faces in force (by default ${faceLine(DEFAULT_FACES)}). ${defaults}. ` +
       `a write naming the view already in force succeeds as unchanged and writes no revision; ` +
-      `undo restores the view in force before the current one; read back in human_surface:ui_view`,
+      `undo restores the view in force before the current one; read the view in force before changing it with human_surface:ui_view {region}`,
     "human_surface:ui_view":
       `reads what the human surface draws now: for each region (${names}) the view in force, its entries in draw order, ` +
-      `revision and writer, and a stored view that is not drawn with the reason it was refused. Views are written by uiView_write`,
+      `revision and writer, and a stored view that is not drawn with the reason it was refused. With region, only that region's view in force, ` +
+      `as {region, revision, view}, the form uiView_write answers. Views are written by uiView_write`,
   };
 }
 
@@ -295,7 +296,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
  * apply to the type they judge (properties to an entry, items to a list).
  */
 
-export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown>> {
+export function viewShapeInputs(): Record<"uiView_write" | "human_surface:ui_view", Record<string, unknown>> {
   const plain = { type: ["string", "number", "boolean"] };
   const where = { type: "object", additionalProperties: plain, description: `records' where: equality on a row's fields, 1 to ${MAX_WHERE}` };
   const pointer = {
@@ -344,6 +345,10 @@ export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown
   });
   const under = entry(null);
   return {
+    "human_surface:ui_view": {
+      type: "object",
+      properties: { region: { enum: [...VIEW_REGIONS], description: "only this region's view in force, as uiView_write answers it" } },
+    },
     uiView_write: {
       type: "object",
       required: ["region"],

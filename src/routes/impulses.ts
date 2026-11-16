@@ -46,7 +46,7 @@ import { buildUiView } from "../ui-view.ts";
 import { recheckPatch } from "../recheck.ts";
 import { LIMITS } from "../limits.ts";
 import { TIMEOUTS } from "../timeouts.ts";
-import { runOf, undoView, writeView } from "../ui-views.ts";
+import { VIEW_REGIONS, currentView, runOf, undoView, writeView, type ViewRegion } from "../ui-views.ts";
 import { countEmptyRefusal, countTemplateRefusal } from "../write-refusals.ts";
 import { admitCaller, type Caller } from "../inbound-auth.ts";
 import { sessionOf } from "../person-session.ts";
@@ -1018,6 +1018,16 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       // typography, the forms content was drawn in, and the questions rail
       // (how each kind is presented, who reads its answers, what people did).
       // A question writer reads this by shape before it asks.
+      // With a region, only that region's view in force, in the form uiView_write answers: what a
+      // writer of views reads before it changes one, without the rest of the report.
+      const named = pointer["region"];
+      if (named !== undefined) {
+        if (!(VIEW_REGIONS as readonly unknown[]).includes(named)) {
+          return c.json({ resolved: false, success: false, shape: type, refusal: "unknown_region", error: `unknown_region: regions: ${VIEW_REGIONS.join(", ")}` }, 422);
+        }
+        const view = currentView(named as ViewRegion);
+        return c.json({ resolved: true, success: true, shape: type, body: unnamePeople({ region: view.region, revision: view.revision, view }, sessionOf(c.req.header("Cookie"))?.userId ?? null) });
+      }
       return c.json({ resolved: true, success: true, shape: type, body: unnamePeople(buildUiView(getRenderPolicy().tokenOverrides, await listedShapes()), sessionOf(c.req.header("Cookie"))?.userId ?? null) });
     }
 
