@@ -82,7 +82,7 @@ export function Landing({
           <QuestionView questionId={openQuestion} />
         </div>
       ) : null}
-      <Entries entries={view.entries} readers={view.readers} enabled={live} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} openQuestion={openQuestion} />
+      <Entries entries={view.entries} readers={view.readers} faces={view.faces} enabled={live} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} openQuestion={openQuestion} />
     </div>
   );
 }

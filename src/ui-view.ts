@@ -155,6 +155,8 @@ export interface RegionView {
   revision: number;
   /** What the region draws, in order: each a pointer and its form. */
   entries: readonly Readonly<Record<string, unknown>>[];
+  /** The face a row's words are drawn in, by the row's role. */
+  faces: Readonly<Record<string, string>>;
   /** A newer stored view that is not drawn, and why; null when the newest is in force. */
   not_drawn: { id: string; refusal: string; detail: string } | null;
   written_by: string | null;
@@ -168,7 +170,7 @@ function buildViews(): Record<string, RegionView> {
   const out: Record<string, RegionView> = {};
   for (const region of VIEW_REGIONS) {
     const v = currentView(region);
-    out[region] = { id: v.id, revision: v.revision, entries: v.entries, not_drawn: v.notDrawn, written_by: v.writtenBy, run: v.run ? { dispatch_id: v.run.dispatchId, execution_id: v.run.executionId, template_id: v.run.templateId } : null, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf };
+    out[region] = { id: v.id, revision: v.revision, entries: v.entries, faces: v.faces, not_drawn: v.notDrawn, written_by: v.writtenBy, run: v.run ? { dispatch_id: v.run.dispatchId, execution_id: v.run.executionId, template_id: v.run.templateId } : null, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf };
   }
   return out;
 }

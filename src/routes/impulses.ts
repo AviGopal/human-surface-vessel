@@ -1005,7 +1005,7 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const run = runOf(pointer);
       const write = pointer["undo"] === true
         ? undoView(region, caller?.label ?? null, Date.now(), run)
-        : writeView({ region, entries: pointer["entries"], blocks: pointer["blocks"], limits: pointer["limits"], reports: pointer["reports"], note: pointer["note"] }, caller?.label ?? null, Date.now(), run);
+        : writeView({ region, entries: pointer["entries"], faces: pointer["faces"], blocks: pointer["blocks"], limits: pointer["limits"], reports: pointer["reports"], note: pointer["note"] }, caller?.label ?? null, Date.now(), run);
       if (!write.ok) {
         return c.json({ resolved: false, success: false, shape: type, refusal: write.refusal, error: `${write.refusal}: ${write.detail}` }, 422);
       }

@@ -388,6 +388,11 @@ function RowTime({ t, full }: { t: string; full: string }): ReactNode {
  * which builds elements and draws markup and links as text; a list of text as its items, one to a
  * line; any other value as one line with its field's name.
  */
+/** The face the view names for a row's role, by the role as written; none for a role it does not name. */
+function faceOf(role: unknown, faces: Readonly<Record<string, string>>): string | undefined {
+  return typeof role === "string" && Object.hasOwn(faces, role) ? faces[role] : undefined;
+}
+
 function Word({ k, v, cut }: { k: string; v: unknown; cut: boolean }): ReactNode {
   if (isTextList(v)) return <div className="sf-row-words"><Items items={v} /></div>;
   if (typeof v === "string" && heuristicForm(k, v, false) === "diff") return <DiffWord text={v} cut={cut} />;
@@ -396,7 +401,7 @@ function Word({ k, v, cut }: { k: string; v: unknown; cut: boolean }): ReactNode
       <Prose source={v} breaks />
     </div>
   ) : (
-    <p className="sf-row-words">{`${k.replace(/_/g, " ")} ${fieldText(v)}`}</p>
+    <p className="sf-row-words" data-field-line="">{`${k.replace(/_/g, " ")} ${fieldText(v)}`}</p>
   );
 }
 
@@ -418,7 +423,7 @@ function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
 }
 
 /** `sectionStale`: the entry these rows belong to is drawn from a read that failed since; its note covers their threads. */
-type Reading = { declared: ReadonlyMap<string, readonly string[]>; marks: ReadonlyMap<string, readonly MarkBinding[]>; readers: readonly VerdictReader[]; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
+type Reading = { declared: ReadonlyMap<string, readonly string[]>; marks: ReadonlyMap<string, readonly MarkBinding[]>; readers: readonly VerdictReader[]; faces: Readonly<Record<string, string>>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
 
 /**
  * An entry's thread under one row: its read, bound to the row's id, drawn as its own entry.
@@ -533,7 +538,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
         const words = rowWords(o, wordsFor(o["shape"], reading.declared, entry.words));
         const time = when(o["t"]);
         return (
-          <li key={id ?? i} className={threads.length > 0 ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined}>
+          <li key={id ?? i} className={threads.length > 0 ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined} data-face={faceOf(o["role"], reading.faces)}>
             {words.length > 0 ? (
               words.map((w, j) => <Word key={j} k={w.field} v={w.value} cut={o["truncated"] === true} />)
             ) : (
@@ -884,6 +889,7 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
 export function Entries({
   entries,
   readers = [],
+  faces = {},
   enabled,
   intervalMs,
   onOpenQuestion,
@@ -891,6 +897,8 @@ export function Entries({
 }: {
   entries: readonly ViewEntry[];
   readers?: readonly VerdictReader[];
+  /** The view's faces by role; a row whose role is not named draws in the page's face. */
+  faces?: Readonly<Record<string, string>>;
   enabled: boolean;
   intervalMs: number;
   /** Opens a question in place, or closes it when it is the open one. */
@@ -902,7 +910,7 @@ export function Entries({
   const declarations = useReport(DECLARATIONS, { enabled, intervalMs }).data;
   const declared = declarations?.ok ? declaredWords(declarations.answer) : new Map<string, readonly string[]>();
   const marks = declarations?.ok ? declaredMarks(declarations.answer) : new Map<string, readonly MarkBinding[]>();
-  const reading: Reading = { declared, marks, readers, enabled, intervalMs, onOpenQuestion, openQuestion };
+  const reading: Reading = { declared, marks, readers, faces, enabled, intervalMs, onOpenQuestion, openQuestion };
   const session = useSession();
   const signedOut = session.data !== undefined && session.data.signedIn !== true;
   return (

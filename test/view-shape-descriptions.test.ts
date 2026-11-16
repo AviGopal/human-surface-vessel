@@ -19,7 +19,8 @@ describe("view shape descriptions come from the view contract", () => {
     const d = advertised()["uiView_write"] ?? "";
     for (const region of views.VIEW_REGIONS) expect(d).toContain(region);
     for (const form of views.ENTRY_FORMS) expect(d).toContain(form);
-    expect(d).toContain("{region, entries, note?}");
+    expect(d).toContain("{region, entries, faces?, note?}");
+    for (const face of views.FACES) expect(d).toContain(face);
     expect(d).toContain("in list order");
     expect(d).toContain("succeeds as unchanged");
     expect(d).not.toContain("block");

@@ -181,8 +181,22 @@ const WALK_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_B
 /** The walk's own grades of a change: land_verdicts citing it that the described-shape vessel wrote. */
 const LAND_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "land_verdict", where: { role: "described" } } };
 
-export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }> = {
+/**
+ * The faces a row's words are drawn in, by the row's role as records stamps it: what a person wrote in
+ * the serif, the system's prose in the page's sans, a detector's or records' own rows in the mono of a
+ * machine record (design tokens: three type roles). Keyed by role only, never by shape. A role not
+ * named draws in the page's face: the serif says a person wrote it, so it is never a fallback.
+ */
+export const FACES = ["serif", "sans", "mono"] as const;
+export type Face = (typeof FACES)[number];
+export type Faces = Readonly<Record<string, Face>>;
+const MAX_FACES = 16;
+const ROLE_NAME = /^[a-z][a-z0-9_]{0,31}$/;
+export const DEFAULT_FACES: Faces = { person: "serif", walk: "sans", described: "sans", owner: "sans", operator: "sans", detector: "mono", records: "mono" };
+
+export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[]; faces: Faces }> = {
   landing: {
+    faces: DEFAULT_FACES,
     entries: [
       { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you" },
       // A detector's gap that states a `claim` (the test is right) can be judged: the person's Right or Wrong
@@ -225,7 +239,7 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
 /** The contract a region's views are checked against, and what discovery is told about it. */
 export interface ViewContract {
   readonly regions: readonly string[];
-  readonly defaults: Readonly<Record<string, { entries: readonly ViewEntry[] }>>;
+  readonly defaults: Readonly<Record<string, { entries: readonly ViewEntry[]; faces: Faces }>>;
 }
 
 const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS };
@@ -256,7 +270,8 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     .join(". ");
   return {
     uiView_write:
-      `writes the view of a human surface region (${names}): {region, entries, note?}. ${entry}. ${defaults}. ` +
+      `writes the view of a human surface region (${names}): {region, entries, faces?, note?}. ${entry}. ` +
+      `faces is {role: ${FACES.join(" | ")}} (1 to ${MAX_FACES} roles), the face a row's words are drawn in by the row's role as records stamps it; a role not named draws in the page's face; a value drawn with its field's name is always mono; a write without faces keeps ${faceLine(DEFAULT_FACES)}. ${defaults}. ` +
       `a write naming the view already in force succeeds as unchanged and writes no revision; ` +
       `undo restores the view in force before the current one; read back in human_surface:ui_view`,
     "human_surface:ui_view":
@@ -327,6 +342,7 @@ export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown
       required: ["region"],
       properties: {
         region: { enum: [...VIEW_REGIONS] },
+        faces: { type: "object", minProperties: 1, maxProperties: MAX_FACES, propertyNames: { pattern: ROLE_NAME.source }, additionalProperties: { enum: [...FACES] }, description: "the face a row's words are drawn in, by the row's role" },
         entries: { type: "array", minItems: 1, maxItems: MAX_ENTRIES, items: entry({ anyOf: [under, { type: "array", minItems: 1, maxItems: MAX_THREADS, items: under }] }), description: "required unless undo" },
         note: { type: "string", maxLength: 500 },
         undo: { const: true, description: "restore the view in force before the current one" },
@@ -346,6 +362,8 @@ export interface UiView {
   readonly id: string;
   /** What the region draws, in order. */
   readonly entries: readonly ViewEntry[];
+  /** The face a row's words are drawn in, by its role. */
+  readonly faces: Faces;
   readonly note: string | null;
   /** The caller label the write door admitted; never a key. */
   readonly writtenBy: string | null;
@@ -436,14 +454,14 @@ function load(): void {
     if (!isRegion(region) || typeof revision !== "number" || !Number.isInteger(revision) || revision < 1) continue;
     // A line that would be refused today is not drawn: the file never widens the vocabulary.
     // It is remembered, so the page can say which view it passed over and why.
-    const checked = validate({ region, entries: v["entries"], blocks: v["blocks"], limits: v["limits"], reports: v["reports"] });
+    const checked = validate({ region, entries: v["entries"], faces: v["faces"], blocks: v["blocks"], limits: v["limits"], reports: v["reports"] });
     if (!checked.ok) {
       passedOver.set(region, { id: `${region}@${revision}`, refusal: checked.refusal, detail: checked.detail });
       continue;
     }
     passedOver.delete(region);
     const list = history.get(region) ?? [];
-    list.push({ ...(v as unknown as UiView), entries: checked.entries });
+    list.push({ ...(v as unknown as UiView), entries: checked.entries, faces: checked.faces });
     history.set(region, list);
   }
 }
@@ -553,9 +571,22 @@ function pointerOf(r: unknown): { pointer: ReportPointer } | { detail: string } 
   return { pointer: out as ReportPointer };
 }
 
-type Checked = { ok: true; entries: readonly ViewEntry[] } | { ok: false; refusal: ViewRefusal; detail: string };
+type Checked = { ok: true; entries: readonly ViewEntry[]; faces: Faces } | { ok: false; refusal: ViewRefusal; detail: string };
 
-function validate(input: { region: unknown; entries: unknown; blocks?: unknown; limits?: unknown; reports?: unknown }): Checked {
+/** The faces as written, or why they are not; none written keeps the region's default. */
+function facesOf(f: unknown, region: ViewRegion): { faces: Faces } | { detail: string } {
+  if (f === undefined) return { faces: DEFAULT_VIEWS[region].faces };
+  const named = typeof f === "object" && f !== null && !Array.isArray(f) ? Object.entries(f as Record<string, unknown>) : [];
+  const ok = named.length >= 1 && named.length <= MAX_FACES && named.every(([k, v]) => ROLE_NAME.test(k) && (FACES as readonly unknown[]).includes(v));
+  if (!ok) return { detail: `faces: 1 to ${MAX_FACES} {role: ${FACES.join(" | ")}}` };
+  return { faces: Object.fromEntries(named) as Record<string, Face> };
+}
+
+function faceLine(f: Faces): string {
+  return Object.entries(f).map(([r, v]) => `${r} ${v}`).join(", ");
+}
+
+function validate(input: { region: unknown; entries: unknown; faces?: unknown; blocks?: unknown; limits?: unknown; reports?: unknown }): Checked {
   if (!isRegion(input.region)) return { ok: false, refusal: "unknown_region", detail: `regions: ${VIEW_REGIONS.join(", ")}` };
   // A view in the earlier form is refused by name, so its writer learns the form in force.
   for (const old of ["blocks", "limits", "reports"] as const) {
@@ -573,7 +604,9 @@ function validate(input: { region: unknown; entries: unknown; blocks?: unknown; 
     keys.add(key);
     entries.push(got.entry);
   }
-  return { ok: true, entries };
+  const faces = facesOf(input.faces, input.region);
+  if ("detail" in faces) return { ok: false, refusal: "bad_entry", detail: faces.detail };
+  return { ok: true, entries, faces: faces.faces };
 }
 
 function append(v: UiView): void {
@@ -587,7 +620,7 @@ function append(v: UiView): void {
 }
 
 function defaultView(region: ViewRegion): UiView {
-  return { region, revision: 0, id: `${region}@0`, entries: DEFAULT_VIEWS[region].entries, note: null, writtenBy: null, run: null, writtenAt: 0, undoOf: null };
+  return { region, revision: 0, id: `${region}@0`, entries: DEFAULT_VIEWS[region].entries, faces: DEFAULT_VIEWS[region].faces, note: null, writtenBy: null, run: null, writtenAt: 0, undoOf: null };
 }
 
 /**
@@ -617,14 +650,14 @@ function canonical(v: unknown): string {
   return JSON.stringify(v);
 }
 
-/** Same entries in the same order. The note is not drawn, so it does not make a view different. */
-function sameView(v: UiView, entries: readonly ViewEntry[]): boolean {
-  return canonical(v.entries) === canonical(entries);
+/** Same entries in the same order, in the same faces. The note is not drawn, so it does not make a view different. */
+function sameView(v: UiView, entries: readonly ViewEntry[], faces: Faces): boolean {
+  return canonical(v.entries) === canonical(entries) && canonical(v.faces) === canonical(faces);
 }
 
 /** Write a view for a region; refused writes store nothing. */
 export function writeView(
-  input: { region: unknown; entries: unknown; blocks?: unknown; limits?: unknown; reports?: unknown; note?: unknown },
+  input: { region: unknown; entries: unknown; faces?: unknown; blocks?: unknown; limits?: unknown; reports?: unknown; note?: unknown },
   writtenBy: string | null,
   now: number = Date.now(),
   run: ViewRun | null = null,
@@ -638,7 +671,7 @@ export function writeView(
   // node), and each read as a change to anything reading the log. The write still succeeds,
   // since what it asked for is in force, so a walk reads it as done, not as a failure.
   const current = currentView(region);
-  if (current.notDrawn === null && sameView(current, checked.entries)) {
+  if (current.notDrawn === null && sameView(current, checked.entries, checked.faces)) {
     return { ok: true, view: current, unchanged: true };
   }
   const revision = nextRevision(region);
@@ -647,6 +680,7 @@ export function writeView(
     revision,
     id: `${region}@${revision}`,
     entries: checked.entries,
+    faces: checked.faces,
     note: typeof input.note === "string" && input.note.trim() ? input.note.trim().slice(0, 500) : null,
     writtenBy,
     run,
@@ -678,6 +712,7 @@ export function undoView(region: unknown, writtenBy: string | null, now: number 
     revision,
     id: `${region}@${revision}`,
     entries: [...base.entries],
+    faces: base.faces,
     note: base.note,
     writtenBy,
     run,

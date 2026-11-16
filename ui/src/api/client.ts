@@ -68,6 +68,8 @@ export interface UiViewState {
   readonly revision: number;
   readonly id: string;
   readonly entries: readonly ViewEntry[];
+  /** The face a row's words are drawn in, by the row's role: "serif" | "sans" | "mono". */
+  readonly faces?: Readonly<Record<string, string>>;
   readonly writtenBy?: string | null;
   /** A newer stored view that is not drawn, and why; null when the newest is in force. */
   readonly notDrawn?: { readonly id: string; readonly refusal: string; readonly detail: string } | null;
