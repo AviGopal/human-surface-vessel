@@ -2033,6 +2033,18 @@ body { overflow: hidden; }
 .sf-row-meta > [data-after-verdict] { order: 3; flex-basis: 100%; margin: 0; }
 .sf-row-meta > .sf-row-system-grade { order: 4; flex-basis: 100%; }
 .sf-row-time { margin: 0; font-size: var(--sf-text-sm); }
+/* A declared field's state: a dot in the state's colour, the field's word, the state's word, all
+   in ink so colour is never the only carrier. */
+.sf-state-marks { display: flex; flex-wrap: wrap; gap: var(--sf-space-1) var(--sf-space-3); margin: 0; padding: 0; list-style: none; font-size: var(--sf-text-sm); }
+.sf-state-mark { display: inline-flex; align-items: center; gap: 0.375rem; color: var(--sf-ink-2); }
+.sf-state-mark-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; flex: none; background: var(--sf-accepted); }
+.sf-state-mark[data-state="reached"] .sf-state-mark-dot { background: var(--sf-reached); }
+.sf-state-mark[data-state="not-reached"] .sf-state-mark-dot { background: var(--sf-not-reached); }
+.sf-state-mark[data-state="running"] .sf-state-mark-dot { background: var(--sf-running); }
+.sf-state-mark[data-state="waiting"] .sf-state-mark-dot { background: var(--sf-waiting); }
+.sf-state-mark[data-state="stalled"] .sf-state-mark-dot { background: var(--sf-stalled); }
+.sf-state-mark-state { color: var(--sf-ink); font-weight: 600; }
+.sf-row-parent > .sf-state-marks { grid-column: 1 / -1; }
 /* A row of an entry that declares a thread (an ask) reads above the rows under it (its replies). */
 .sf-row-parent > .sf-row-words { font-weight: 600; }
 /* A row with a thread under it carries its time and details at the end of its words' line; what opens, and the thread, take the full width. */

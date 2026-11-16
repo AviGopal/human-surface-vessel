@@ -10,6 +10,7 @@
  *    bundled.
  */
 
+import type { MarkBinding } from "../lib/rowMarks";
 
 export class SurfaceError extends Error {
   readonly httpStatus: number;
@@ -107,6 +108,7 @@ export type ViewEntry = {
   readonly note?: string;
   /** The fields that hold a row's words when the owner declares none (src/row-words.ts). */
   readonly words?: readonly string[];
+  readonly marks?: readonly MarkBinding[];
   /** One further read drawn under each row, bound to its id through ROW_BINDING, or a list of them drawn in order; none holds a thread itself. */
   readonly thread?: ViewEntry | readonly ViewEntry[];
   /** Draw the rows `show` kept in reverse of the producer's order. */

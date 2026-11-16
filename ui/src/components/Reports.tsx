@@ -30,6 +30,8 @@ import type { Question } from "../api/participation";
 import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
 import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
+import { declaredMarks, marksFor, rowMarks, type MarkBinding } from "../lib/rowMarks";
+import { STATE_TOKENS } from "../design-tokens";
 import { askAbout, citesOf } from "../lib/box";
 import { Glyph } from "./Glyph";
 import { Prose } from "./Prose";
@@ -413,7 +415,7 @@ function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
 }
 
 /** `sectionStale`: the entry these rows belong to is drawn from a read that failed since; its note covers their threads. */
-type Reading = { declared: ReadonlyMap<string, readonly string[]>; readers: readonly VerdictReader[]; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
+type Reading = { declared: ReadonlyMap<string, readonly string[]>; marks: ReadonlyMap<string, readonly MarkBinding[]>; readers: readonly VerdictReader[]; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
 
 /**
  * An entry's thread under one row: its read, bound to the row's id, drawn as its own entry.
@@ -494,6 +496,26 @@ function Typecheck({ tc }: { tc: unknown }): ReactNode {
   );
 }
 
+/**
+ * The states a row's declared fields read as: a dot in the state's colour, the declarer's word
+ * for the field, and the state's own word, so a state is never colour alone. The field and its
+ * value as written are the mark's title; the row's details hold the rest.
+ */
+function Marks({ marks }: { marks: ReturnType<typeof rowMarks> }): ReactNode {
+  if (marks.length === 0) return null;
+  return (
+    <ul className="sf-state-marks">
+      {marks.map((m) => (
+        <li key={m.field} className="sf-state-mark" data-state={m.state} data-field={m.field} title={`${m.field} ${fieldText(m.value)}`}>
+          <span className="sf-state-mark-dot" aria-hidden="true" />
+          <span className="sf-state-mark-label">{m.label}</span>
+          <span className="sf-state-mark-state">{STATE_TOKENS[m.state].label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewEntry; reading: Reading }): ReactNode {
   const judge = entry.judge;
   const threads = threadsOf(entry);
@@ -512,6 +534,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
             {judge === "land" ? <Typecheck tc={o["typecheck"]} /> : null}
+            <Marks marks={rowMarks(o, marksFor(o["shape"], reading.marks, entry.marks))} />
             <div className="sf-row-meta">
               {/* The row's time is what opens its fields: one control, not a time and an arrow beside it. */}
               <details className="sf-row-details" data-by-time={time ? "" : undefined}>
@@ -868,7 +891,8 @@ export function Entries({
   // Read on the entries' cadence, so a declaration an owner writes later moves what is shown with no reload.
   const declarations = useReport(DECLARATIONS, { enabled, intervalMs }).data;
   const declared = declarations?.ok ? declaredWords(declarations.answer) : new Map<string, readonly string[]>();
-  const reading: Reading = { declared, readers, enabled, intervalMs, onOpenQuestion, openQuestion };
+  const marks = declarations?.ok ? declaredMarks(declarations.answer) : new Map<string, readonly MarkBinding[]>();
+  const reading: Reading = { declared, marks, readers, enabled, intervalMs, onOpenQuestion, openQuestion };
   const session = useSession();
   const signedOut = session.data !== undefined && session.data.signedIn !== true;
   return (
