@@ -2153,8 +2153,8 @@ h2.sf-report-title > .sf-report-count { margin-left: var(--sf-space-2); }
 .sf-strip { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; border-bottom: 1px solid var(--sf-rule-strong); }
 .sf-strip-bar { display: block; width: 4px; background: var(--sf-ink-3); border-radius: 1px 1px 0 0; }
 /* One width for every caption, so the strips of every folded read line up whatever their numbers. */
-.sf-strip-caption { font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); white-space: nowrap; min-width: 13em; font-variant-numeric: tabular-nums; }
-@media (max-width: 480px) { .sf-strip-bar { width: 3px; } .sf-strip-wrap { margin-left: 0; } }
+.sf-strip-caption { font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) { .sf-strip-bar { width: 3px; } }
 
 /* Rows kept after a read failed: one quiet line above them, marked at its edge in the waiting tone, the failure's words folded. */
 .sf-landing .sf-stale { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sf-space-2); margin: 0; padding-left: var(--sf-space-2); border-left: 2px solid var(--sf-waiting); font-size: var(--sf-text-sm); }

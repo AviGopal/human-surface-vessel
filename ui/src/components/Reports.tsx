@@ -788,7 +788,8 @@ function Strip({ rows, hours, last }: { rows: readonly unknown[]; hours: number;
         <span>now</span>
       </span>
       </span>
-      <span className="sf-strip-caption">{cut || total === 0 ? said : `${total} in the ${span}`}</span>
+      {/* Only a strip that is not whole says so in words: its bars and the title's count are the rest. */}
+      {cut ? <span className="sf-strip-caption">{said}</span> : null}
     </span>
   );
 }

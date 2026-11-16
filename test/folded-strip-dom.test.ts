@@ -117,11 +117,12 @@ describe("a folded read draws when its rows came", () => {
     expect(bars(el).reduce((a, x) => a + Number(x.getAttribute("data-n")), 0)).toBe(7);
   });
 
-  test("must-fail (d): the window is named in words beside the strip; its label is plain, with no id, raw time or shape name", async () => {
+  test("must-fail (d): the window's ends are named beside the strip and its sentence is for a screen reader only; its label is plain, with no id, raw time or shape name", async () => {
     const el = await mount([failed]);
     const strip = summary(el).querySelector(".sf-strip")!;
     expect(strip.getAttribute("aria-label")).toBe("7 in the last 24 hours, most around 1 PM");
-    expect(summary(el).querySelector(".sf-strip-caption")!.textContent).toBe("7 in the last 24 hours");
+    // The USER: no words on the interface to explain it. The bars and the title's count say it.
+    expect(summary(el).querySelector(".sf-strip-caption")).toBeNull();
     // The read's total says it is the total, so it is not read as the window's.
     expect(summary(el).querySelector("[data-count]")!.textContent).toBe("9 in all");
     // The strip's ends are named for a sighted reader.
@@ -167,11 +168,12 @@ describe("controls", () => {
     expect(summary(el).querySelector("[data-count]")!.textContent).toBe("9");
   });
 
-  test("an empty window draws the baseline and says none", async () => {
+  test("an empty window draws the baseline, and says none only to a screen reader", async () => {
     ROWS = [failure(0, 30 * H)];
     const el = await mount([failed]);
     expect(bars(el).every((x) => pct(x) === 0 && !floor(x))).toBe(true);
-    expect(summary(el).querySelector(".sf-strip-caption")!.textContent).toBe("none in the last 24 hours");
+    expect(summary(el).querySelector(".sf-strip")!.getAttribute("aria-label")).toBe("none in the last 24 hours");
+    expect(summary(el).querySelector(".sf-strip-caption")).toBeNull();
   });
 
   test("the fold still opens to its rows", async () => {
