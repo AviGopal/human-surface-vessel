@@ -10,7 +10,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { teardownDom, trackRoot } from "./setup.ts";
+import { forgetViews, teardownDom, trackRoot } from "./setup.ts";
 import { DEFAULT_VIEWS, resetViewsForTest, writeView } from "../src/ui-views.ts";
 
 const GAP = { input_refs: [], shape: "gap", role: "detector", gap_id: "gap-test-a", status: "open", claim: "The test is right.", seq: 20, t: "2026-11-15T11:00:00.000Z", id: "b".repeat(64) };
@@ -102,3 +102,6 @@ describe("an entry's note", () => {
     }
   });
 });
+
+// This file stores views; the next file in the same run counts revisions from none.
+afterAll(forgetViews);

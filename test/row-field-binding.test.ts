@@ -12,7 +12,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { teardownDom, trackRoot } from "./setup.ts";
+import { forgetViews, teardownDom, trackRoot } from "./setup.ts";
 import { bindRow, boundToRow } from "../src/row-binding.ts";
 import { resetViewsForTest, writeView } from "../src/ui-views.ts";
 
@@ -141,3 +141,6 @@ describe("the page", () => {
     expect(reads.filter((p) => p["shape"] !== "shape_description")).toStrictEqual([{ type: "record_read", shape: "gitDiff" }]);
   });
 });
+
+// This file stores views; the next file in the same run counts revisions from none.
+afterAll(forgetViews);

@@ -14,7 +14,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { teardownDom, trackRoot } from "./setup.ts";
+import { forgetViews, teardownDom, trackRoot } from "./setup.ts";
 import { DEFAULT_VIEWS, resetViewsForTest, writeView } from "../src/ui-views.ts";
 
 const ASK = { input_refs: [], shape: "world_changed", what: "Why did the last two landings on local-tools fail?", seq: 10, t: "2026-11-15T03:00:00.000Z", role: "person", id: "a".repeat(64) };
@@ -207,3 +207,6 @@ describe("the view contract", () => {
     expect(listed?.about).toBe(true);
   });
 });
+
+// This file stores views; the next file in the same run counts revisions from none.
+afterAll(forgetViews);

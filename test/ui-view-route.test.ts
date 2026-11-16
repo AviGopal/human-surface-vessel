@@ -3,8 +3,8 @@
  * nothing here imports the views module, so at a build without views it fails on
  * what the routes answer.
  */
-import { describe, expect, test } from "bun:test";
-import { testAuth } from "./setup.ts";
+import { afterAll, describe, expect, test } from "bun:test";
+import { forgetViews, testAuth } from "./setup.ts";
 import { impulsesRouter } from "../src/routes/impulses.ts";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { REGISTRATION_PAYLOAD } from "../src/discovery-registration.ts";
@@ -81,3 +81,6 @@ describe("a region's view through the routes", () => {
     expect((await read()).json.revision).toBe(before.json.revision + 1);
   });
 });
+
+// This file stores views; the next file in the same run counts revisions from none.
+afterAll(forgetViews);

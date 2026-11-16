@@ -11,7 +11,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { teardownDom, trackRoot } from "./setup.ts";
+import { forgetViews, teardownDom, trackRoot } from "./setup.ts";
 import { resetViewsForTest, writeView } from "../src/ui-views.ts";
 import { declaredMarks, marksFor, marksProblem, rowMarks } from "../src/row-marks.ts";
 import { declaredWords } from "../src/row-words.ts";
@@ -135,3 +135,6 @@ describe("one rule for a view's marks and an owner's", () => {
     expect(bad.ok).toBe(false);
   });
 });
+
+// This file stores views; the next file in the same run counts revisions from none.
+afterAll(forgetViews);
