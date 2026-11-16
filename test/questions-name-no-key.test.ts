@@ -72,6 +72,8 @@ const SCENARIO = `
       state: await (await app.request("/api/state", { headers: headers(c) })).text(),
       view: await (await app.request("/api/ui-view?region=landing", { headers: headers(c) })).text(),
       uiView: await (await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: { "content-type": "application/json", ...headers(c) }, body: JSON.stringify({ pointer: { type: "human_surface:ui_view" } }) })).text(),
+      // The region's view in force, flat as uiViewState: the walk keeps this answer whole as a records row.
+      viewState: await (await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: { "content-type": "application/json", ...headers(c) }, body: JSON.stringify({ pointer: { type: "human_surface:ui_view", region: "landing" } }) })).text(),
       stream: await timeout(reading[k]),
     };
     streams[k].ac.abort();
@@ -146,6 +148,14 @@ describe("every read of the questions and answers names a person only to themsel
     }
     const { panel, answer, signIn } = stateOf(r["self"].state);
     expect([panel.producer, answer.caller.label, signIn.body.user_id]).toEqual([`key:${KEY_ID}`, `key:${KEY_ID}`, KEY_ID]);
+  });
+
+  test("must-fail: the uiViewState read, kept by the walk as a row, names the person who wrote the view as a person", () => {
+    for (const v of ["signedOut", "other"]) {
+      expect(r[v].viewState).not.toContain(KEY_ID);
+      expect(JSON.parse(r[v].viewState)).toMatchObject({ shape: "uiViewState", view: { writtenBy: "a person" } });
+    }
+    expect(JSON.parse(r["self"].viewState).view.writtenBy).toBe(`key:${KEY_ID}`);
   });
 
   test("must-fail: a refused write's view in force names the person who wrote it as a person", () => {
