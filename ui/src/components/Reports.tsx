@@ -498,17 +498,18 @@ function Typecheck({ tc }: { tc: unknown }): ReactNode {
 
 /**
  * The states a row's declared fields read as: a dot in the state's colour, the declarer's word
- * for the field, and the state's own word, so a state is never colour alone. The field and its
- * value as written are the mark's title; the row's details hold the rest.
+ * for the field, the value as written, and the state's own word, so a state is never colour
+ * alone and never stands in for the value. The field's name is the mark's title.
  */
 function Marks({ marks }: { marks: ReturnType<typeof rowMarks> }): ReactNode {
   if (marks.length === 0) return null;
   return (
     <ul className="sf-state-marks">
       {marks.map((m) => (
-        <li key={m.field} className="sf-state-mark" data-state={m.state} data-field={m.field} title={`${m.field} ${fieldText(m.value)}`}>
+        <li key={m.field} className="sf-state-mark" data-state={m.state} data-field={m.field} title={m.field}>
           <span className="sf-state-mark-dot" aria-hidden="true" />
           <span className="sf-state-mark-label">{m.label}</span>
+          <span className="sf-state-mark-value">{fieldText(m.value)}</span>
           <span className="sf-state-mark-state">{STATE_TOKENS[m.state].label}</span>
         </li>
       ))}

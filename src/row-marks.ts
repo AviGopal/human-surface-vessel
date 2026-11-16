@@ -22,7 +22,8 @@ export const MAX_MARK_LABEL = 40;
 
 /**
  * One binding: the field read, the state each of its values reads as (the value as written:
- * true, false, a number or a string, keyed by its text), and the declarer's word for the field.
+ * true, false, a number or a string, keyed by its text, so true and "true" read alike), and the
+ * declarer's word for the field.
  */
 export type MarkBinding = { readonly field: string; readonly states: Readonly<Record<string, MarkState>>; readonly label?: string };
 

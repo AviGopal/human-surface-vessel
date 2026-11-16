@@ -14,6 +14,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
 import { resetViewsForTest, writeView } from "../src/ui-views.ts";
 import { declaredMarks, marksFor, marksProblem, rowMarks } from "../src/row-marks.ts";
+import { declaredWords } from "../src/row-words.ts";
 
 const DIFF = { input_refs: [], shape: "gitDiff", role: "walk", repo: "box-vessel", diff: "", typecheck: { ran: true, passed: false }, seq: 12, t: "2026-11-15T11:05:00.000Z", id: "b".repeat(64) };
 const PASSES = { typecheck: [{ field: "typecheck.passed", states: { true: "reached", false: "not-reached" }, label: "typecheck" }] };
@@ -55,16 +56,19 @@ async function mount(entry: Record<string, unknown>): Promise<Element> {
   return el.querySelector(`.sf-row[data-row="${DIFF.id}"]`)!;
 }
 const ENTRY = { pointer: { type: "record_read", shape: "gitDiff" }, form: "rows", words: ["repo"], judge: "land" };
-const marks = (row: Element) => [...row.querySelectorAll(".sf-state-mark")].map((m) => `${m.getAttribute("data-state")} ${m.textContent}`);
+const marks = (row: Element) => [...row.querySelectorAll(".sf-state-mark")].map((m) => `${m.getAttribute("data-state")} ${[...m.querySelectorAll("span:not([aria-hidden])")].map((x) => x.textContent).join("|")}`);
 
 describe("a row's declared fields read as states", () => {
   test("must-fail: a typecheck that did not pass reads not reached, above Right and Wrong", async () => {
     diffs = [DIFF];
     declarations = [{ shape: "shape_description", of: "gitDiff", marks: PASSES.typecheck, role: "owner", seq: 1 }];
     const row = await mount(ENTRY);
-    expect(marks(row)).toEqual(["not-reached typechecknot reached"]);
+    expect(marks(row)).toEqual(["not-reached typecheck|no|not reached"]);
     const mark = row.querySelector(".sf-state-mark")!;
-    expect(mark.getAttribute("title")).toBe("typecheck.passed no");
+    // Shown as written: the value stays in view beside the state it reads as, never replaced by it.
+    expect(mark.textContent).toContain("no");
+    expect(mark.querySelector(".sf-state-mark-value")!.textContent).toBe("no");
+    expect(mark.getAttribute("title")).toBe("typecheck.passed");
     const judge = row.querySelector(".sf-row-judge")!;
     expect(judge).not.toBeNull();
     expect(mark.compareDocumentPosition(judge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -73,7 +77,7 @@ describe("a row's declared fields read as states", () => {
   test("must-fail: one that passed reads reached, the same weight", async () => {
     diffs = [{ ...DIFF, typecheck: { ran: true, passed: true } }];
     declarations = [{ shape: "shape_description", of: "gitDiff", marks: PASSES.typecheck, role: "owner", seq: 1 }];
-    expect(marks(await mount(ENTRY))).toEqual(["reached typecheckreached"]);
+    expect(marks(await mount(ENTRY))).toEqual(["reached typecheck|yes|reached"]);
   });
 
   test("control: no declaration, no mark; a value the binding does not name, no mark", async () => {
@@ -89,9 +93,9 @@ describe("a row's declared fields read as states", () => {
     diffs = [DIFF];
     declarations = [];
     const entry = { ...ENTRY, marks: [{ field: "typecheck.ran", states: { true: "accepted" } }] };
-    expect(marks(await mount(entry))).toEqual(["accepted typecheck.ranaccepted"]);
+    expect(marks(await mount(entry))).toEqual(["accepted typecheck.ran|yes|accepted"]);
     declarations = [{ shape: "shape_description", of: "gitDiff", marks: PASSES.typecheck, role: "owner", seq: 1 }];
-    expect(marks(await mount(entry))).toEqual(["not-reached typechecknot reached"]);
+    expect(marks(await mount(entry))).toEqual(["not-reached typecheck|no|not reached"]);
   });
 });
 
@@ -101,6 +105,14 @@ describe("one rule for a view's marks and an owner's", () => {
     expect(declaredMarks([one]).get("gitDiff")).toEqual(PASSES.typecheck);
     expect(declaredMarks([one, { shape: "shape_description", of: "gitDiff", words: ["repo"] }]).has("gitDiff")).toBe(false);
     expect(marksFor("gitDiff", declaredMarks([]), undefined)).toEqual([]);
+  });
+
+  test("must-fail: the latest row is the whole declaration, both ways: words alone withdraw marks, marks alone withdraw words", () => {
+    const both = { shape: "shape_description", of: "gitDiff", words: ["repo"], marks: PASSES.typecheck };
+    expect(declaredMarks([both]).has("gitDiff")).toBe(true);
+    expect(declaredWords([both]).has("gitDiff")).toBe(true);
+    expect(declaredMarks([both, { shape: "shape_description", of: "gitDiff", words: ["repo"] }]).has("gitDiff")).toBe(false);
+    expect(declaredWords([both, { shape: "shape_description", of: "gitDiff", marks: PASSES.typecheck }]).has("gitDiff")).toBe(false);
   });
 
   test("must-fail: a path reads into nested values, three steps at most; a state outside the set is refused", () => {
