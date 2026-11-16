@@ -42,7 +42,7 @@ afterAll(async () => {
 const settle = async () => {
   for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 };
-const held = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Problems I found")!;
+const held = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Open problems")!;
 
 describe("a verdict nothing took", () => {
   test("must-fail: says it could not reach the system, with the system's words one tap away", async () => {

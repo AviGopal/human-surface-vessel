@@ -87,7 +87,7 @@ async function writeView(entries: unknown[]) {
 describe("a folded read draws when its rows came", () => {
   test("must-fail (a): the three default folded reads declare a 24-hour strip", () => {
     const folded = DEFAULT_VIEWS.landing.entries.filter((e) => e.folded);
-    expect(folded.map((e) => e.title)).toEqual(["My answers", "What went wrong", "How it was judged"]);
+    expect(folded.map((e) => e.title)).toEqual(["My answers", "What went wrong", "Outcomes"]);
     expect(folded.map((e) => e.strip)).toEqual([{ hours: 24 }, { hours: 24 }, { hours: 24 }]);
   });
 

@@ -204,7 +204,7 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[]; 
       // claim; the newest three are drawn. Records cannot yet say which are held for a person (the hold is
       // in each row's meta), so none is called held. Nothing on the page explains Right or Wrong: an
       // empty entry is its title and a count (the USER: no words on the interface to explain it).
-      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Problems I found" },
+      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Open problems" },
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
@@ -231,7 +231,7 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[]; 
       // back only with a live writer of what it shows: a read nothing writes is a fossil.
       { pointer: { type: "record_read", shape: "answer", where: { role: "described" } }, form: "rows", show: 10, newest: true, judge: "outcome", graded: WALK_GRADES, title: "My answers", words: ["text"], folded: true, strip: DAY },
       { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, newest: true, title: "What went wrong", folded: true, strip: DAY },
-      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "How it was judged", words: ["r"], folded: true, strip: DAY },
+      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "Outcomes", words: ["r"], folded: true, strip: DAY },
     ],
   },
 };
