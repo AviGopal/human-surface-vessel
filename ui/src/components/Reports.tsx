@@ -401,15 +401,15 @@ function Word({ k, v, cut }: { k: string; v: unknown; cut: boolean }): ReactNode
 }
 
 /**
- * A change, folded under its size: what it does is the row's headline, the change itself one tap
- * away. A change the producer cut short says so on the fold, so it is never read as the whole.
+ * A change, folded under its size, its lines added and removed and no words: what it does is the
+ * row's headline, the change itself one tap away. A change the producer cut short says so on the fold, so it is never read as the whole.
  */
 function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
   const { added, removed } = diffSize(parseDiff(text));
   return (
     <details className="sf-row-words sf-row-diff" data-diff="">
       <summary>
-        {`the change · +${added} −${removed} lines`}
+        {`+${added} −${removed}`}
         {cut ? <span className="sf-row-diff-cut" data-cut="">{" · cut short: not the whole change"}</span> : null}
       </summary>
       <Diff text={text} />

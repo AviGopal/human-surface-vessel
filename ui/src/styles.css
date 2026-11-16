@@ -2082,7 +2082,7 @@ body { overflow: hidden; }
 .sf-row-system-grade > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-row-system-grades { margin: var(--sf-space-1) 0 0; padding-left: var(--sf-space-4); font-size: var(--sf-text-sm); }
 /* A change, folded under its size; opened, it scrolls inside itself so a long one never pushes the page aside. */
-.sf-row-diff > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-2); }
+.sf-row-diff > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-2); font-family: var(--sf-font-mono); }
 .sf-row-diff[open] > summary { margin-bottom: var(--sf-space-1); }
 .sf-row-diff > .sf-diff { max-height: 24rem; overflow: auto; padding: var(--sf-space-2); background: var(--sf-panel-alt); border-radius: var(--sf-radius-sm); }
 .sf-row-diff-cut { color: var(--sf-ink-3); }

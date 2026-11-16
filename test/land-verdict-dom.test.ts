@@ -138,7 +138,7 @@ describe("a change judged under its ask", () => {
     const fold = change(el)!.querySelector("details[data-diff]") as HTMLDetailsElement;
     expect(fold).not.toBeNull();
     expect(fold.open).toBe(false);
-    expect(fold.querySelector("summary")!.textContent).toBe("the change · +1 −1 lines");
+    expect(fold.querySelector("summary")!.textContent).toBe("+1 −1");
     expect(fold.querySelector('.sf-diff-line[data-kind="added"]')!.textContent).toBe("+const LINES = 10;");
     expect(fold.querySelector('.sf-diff-line[data-kind="removed"]')!.textContent).toBe("-const LINES = 8;");
     // The repo is the change's headline, drawn as words.
