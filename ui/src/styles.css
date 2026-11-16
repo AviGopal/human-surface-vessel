@@ -1978,6 +1978,11 @@ body { overflow: hidden; }
    it. Only "Waiting on you" is raised, and only while something waits; the folded reads sit as
    one close list under the open sections. */
 .sf-landing .sf-reports { gap: var(--sf-space-5); }
+/* An entry its view's form could not draw stands alone: as plain rows, or as its title alone. Its
+   rule is dashed, so the page shows it is not drawn as the view asked. */
+.sf-entry-fallback { display: contents; }
+.sf-entry-fallback > .sf-report, .sf-report[data-entry-failed] { border-style: dashed; }
+.sf-landing .sf-entry-fallback > .sf-report, .sf-landing .sf-report[data-entry-failed] { border-top-style: dashed; }
 .sf-landing .sf-report { background: none; border: 0; border-top: 1px solid var(--sf-rule-strong); border-radius: 0; padding: var(--sf-space-3) 0 0; }
 .sf-landing .sf-report:not(.sf-report-folded) > .sf-report-title { font-size: var(--sf-text-xs); letter-spacing: var(--sf-tracking-label); text-transform: uppercase; color: var(--sf-ink-3); }
 /* A section label is small and quiet, like the question page's eyebrow: the asks and answers are the

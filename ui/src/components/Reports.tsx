@@ -21,7 +21,7 @@
  * An entry's `thread` is read again under each row it draws, bound to that row's id, and drawn
  * as its own entry: a person's ask shows the rows citing it. One level; the rows are its read's.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { threadsOf, writeLandVerdict, writeOutcome, type ReportAnswer, type ReportPointer, type VerdictReader, type ViewEntry } from "../api/client";
 import { useRenderPolicy, useReport } from "../api/queries";
@@ -886,6 +886,47 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
   );
 }
 
+/**
+ * A view chooses each entry's form freely, a walk's as much as a person's, so a form can be given
+ * rows it cannot draw. One entry that throws falls back alone: drawn again as plain rows, or, if
+ * those throw too, as its title alone. The other entries, the box and the sign-in stand.
+ */
+class Fallback extends Component<{ what: string; fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error(`[entries] ${this.props.what} threw; falling back`, error, info.componentStack);
+  }
+  override render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function EntryBoundary({ entry, reading }: { entry: ViewEntry; reading: Reading }): ReactNode {
+  const title = typeof entry.title === "string" ? entry.title : reportTitle(String(entry.pointer.type));
+  const what = `entry ${JSON.stringify(entry.pointer)}`;
+  const titleAlone = (
+    <section className="sf-report" data-report={entry.pointer.type} data-form={entry.form} data-entry-failed="" aria-label={title}>
+      <h2 className="sf-report-title">{title}</h2>
+      <p className="sf-muted sf-report-note">not drawn</p>
+    </section>
+  );
+  const asRows = (
+    <Fallback what={`${what} as rows`} fallback={titleAlone}>
+      <div className="sf-entry-fallback" data-entry-fallback="rows">
+        <Entry entry={{ ...entry, form: "rows" }} reading={reading} />
+      </div>
+    </Fallback>
+  );
+  return (
+    <Fallback what={`${what} (form ${entry.form})`} fallback={asRows}>
+      <Entry entry={entry} reading={reading} />
+    </Fallback>
+  );
+}
+
 export function Entries({
   entries,
   readers = [],
@@ -918,7 +959,7 @@ export function Entries({
       {signedOut && offersVerdicts(entries) ? <p className="sf-muted sf-report-note sf-sign-in-to-judge" data-sign-in-to-judge="">{SIGN_IN_TO_JUDGE}</p> : null}
       <div className="sf-reports">
         {entries.map((e) => (
-          <Entry key={JSON.stringify(e.pointer)} entry={e} reading={reading} />
+          <EntryBoundary key={JSON.stringify(e.pointer)} entry={e} reading={reading} />
         ))}
       </div>
     </>
