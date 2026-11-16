@@ -287,10 +287,17 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
  * constants the write is checked against; the rules that join fields (judge needs rows, strip
  * needs folded, a thread's pointer names "$row") are in the description and in the refusal a write
  * gets back.
+ *
+ * Written only in the JSON Schema words the walk's check judges (walk-vessel inputs.ts): it refuses a call whose
+ * declaration uses any other word, so a richer schema left uiView_write uncallable by any walk. Counts
+ * of an object's fields, their names and unique items are not said here: the write checks them and
+ * its refusal names which. A thread, one entry or a list of them, is one schema whose words each
+ * apply to the type they judge (properties to an entry, items to a list).
  */
+
 export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown>> {
   const plain = { type: ["string", "number", "boolean"] };
-  const where = { type: "object", minProperties: 1, maxProperties: MAX_WHERE, propertyNames: { pattern: FIELD_NAME.source }, additionalProperties: plain, description: "records' where: equality on a row's fields" };
+  const where = { type: "object", additionalProperties: plain, description: `records' where: equality on a row's fields, 1 to ${MAX_WHERE}` };
   const pointer = {
     type: "object",
     required: ["type"],
@@ -311,7 +318,7 @@ export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown
       judge: { enum: [...JUDGE_KINDS] },
       empty: { type: "string", minLength: 1, maxLength: 160 },
       note: { type: "string", minLength: 1, maxLength: 120 },
-      words: { type: "array", minItems: 1, maxItems: MAX_WORDS, uniqueItems: true, items: field },
+      words: { type: "array", minItems: 1, maxItems: MAX_WORDS, items: field },
       marks: {
         type: "array",
         minItems: 1,
@@ -322,7 +329,7 @@ export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown
           additionalProperties: false,
           properties: {
             field: { type: "string", pattern: MARK_FIELD.source, description: "a field name, or a dotted path of up to 3 into nested values" },
-            states: { type: "object", minProperties: 1, maxProperties: MAX_MARK_VALUES, additionalProperties: { enum: [...MARK_STATES] }, description: "the state each value reads as, keyed by the value as written: true, false, a number, a string" },
+            states: { type: "object", additionalProperties: { enum: [...MARK_STATES] }, description: `the state each value reads as, keyed by the value as written: true, false, a number, a string; 1 to ${MAX_MARK_VALUES}` },
             label: { type: "string", minLength: 1, maxLength: MAX_MARK_LABEL },
           },
         },
@@ -342,8 +349,8 @@ export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown
       required: ["region"],
       properties: {
         region: { enum: [...VIEW_REGIONS] },
-        faces: { type: "object", minProperties: 1, maxProperties: MAX_FACES, propertyNames: { pattern: ROLE_NAME.source }, additionalProperties: { enum: [...FACES] }, description: "the face a row's words are drawn in, by the row's role" },
-        entries: { type: "array", minItems: 1, maxItems: MAX_ENTRIES, items: entry({ anyOf: [under, { type: "array", minItems: 1, maxItems: MAX_THREADS, items: under }] }), description: "required unless undo" },
+        faces: { type: "object", additionalProperties: { enum: [...FACES] }, description: `the face a row's words are drawn in, by the row's role (1 to ${MAX_FACES} roles)` },
+        entries: { type: "array", minItems: 1, maxItems: MAX_ENTRIES, items: entry({ ...under, type: ["object", "array"], minItems: 1, maxItems: MAX_THREADS, items: under, description: "one entry, or a list of them" }), description: "required unless undo" },
         note: { type: "string", maxLength: 500 },
         undo: { const: true, description: "restore the view in force before the current one" },
       },

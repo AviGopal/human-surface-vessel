@@ -89,6 +89,31 @@ describe("uiView_write declares its inputs, from the contract a write is checked
     }
   });
 
+  test("must-fail: the declaration uses only the schema words the walk's check judges, so a walk can call it", () => {
+    // walk-vessel src/inputs.ts KNOWN: a declaration using any other word fails that check, and the walk offers no call.
+    const judged = new Set(["type", "required", "properties", "additionalProperties", "items", "enum", "const", "minLength", "maxLength", "pattern", "minimum", "maximum", "minItems", "maxItems", "description", "title", "examples", "default"]);
+    const unjudged: string[] = [];
+    const visit = (s: unknown, at: string): void => {
+      if (typeof s !== "object" || s === null || Array.isArray(s)) return;
+      const o = s as Schema;
+      for (const k of Object.keys(o)) if (!judged.has(k)) unjudged.push(`${at}: ${k}`);
+      for (const [k, sub] of Object.entries((o["properties"] ?? {}) as Record<string, unknown>)) visit(sub, `${at}.${k}`);
+      visit(o["items"], `${at}[]`);
+      visit(o["additionalProperties"], `${at}.*`);
+    };
+    visit(declared(), "uiView_write");
+    expect(unjudged).toEqual([]);
+  });
+
+  test("a thread is one entry or a list of them, under one schema", () => {
+    const thread = (entrySchema()["properties"] as Record<string, Schema>)["thread"]!;
+    const one = { pointer: { type: "record_read", refs_to: "$row", shape: "answer" }, form: "rows" };
+    expect(fits(thread, one)).toBe(true);
+    expect(fits(thread, [one, one])).toBe(true);
+    expect(fits(thread, [])).toBe(false);
+    expect(fits(thread, { ...one, zz: 1 })).toBe(false);
+  });
+
   test("control: a write the contract refuses does not fit either", () => {
     expect(fits(declared()!, { region: "margin" })).toBe(false);
     expect(fits(declared()!, { region: "landing", entries: [{ pointer: { type: "record_read", shape: "answer" }, form: "table" }] })).toBe(false);
