@@ -44,6 +44,13 @@ export const REGISTRATION_PAYLOAD = {
   // The pointer fields a caller fills, so a producer that builds a pointer (the walk's request)
   // sees uiView_write and its vocabulary when it writes; a shape with none is left out of that read.
   shape_inputs: viewShapeInputs(),
+  // A surface's views are data it holds (law 11): each surface keeps its own, so a view read or
+  // written on another surface is a different view. Pinned, discovery sends a node's view calls to
+  // its own surface first; with none, to the one peer that holds views, and with several it refuses
+  // by name rather than pick a page (discovery-vessel held-shape-routing.ts).
+  shape_policies: Object.fromEntries(
+    (["human_surface:ui_view", "uiView_write", "uiViewState"] as const).map((s) => [s, { distribution_policy: "stateful_data_owner_pin", holder: `views@${VESSEL_ID}` }]),
+  ),
   resolve_endpoint: `${SELF_ENDPOINT}${RESOLVE_PATH}`,
   resolve_request_format: "pointer",
   auth_scheme: "ApiKey",

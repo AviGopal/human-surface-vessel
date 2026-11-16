@@ -307,6 +307,19 @@ describe("human_surface:ui_view {region}: the view a writer of views reads befor
   });
 });
 
+describe("the views are this surface's own data, so discovery sends a node's view calls to its own surface", () => {
+  test("must-fail: the view read, write and state are advertised held by this vessel, and nothing else is", () => {
+    const p = REGISTRATION_PAYLOAD as unknown as { vesselId: string; shapes: string[]; shape_policies: Record<string, { distribution_policy: string; holder: string }> };
+    expect(Object.keys(p.shape_policies).sort()).toEqual(["human_surface:ui_view", "uiViewState", "uiView_write"]);
+    for (const [shape, policy] of Object.entries(p.shape_policies)) {
+      expect(p.shapes).toContain(shape);
+      expect(policy.distribution_policy).toBe("stateful_data_owner_pin");
+      // discovery's isHolderRow: the holder names the row's own vessel after "@".
+      expect(policy.holder.slice(policy.holder.indexOf("@") + 1)).toBe(p.vesselId.split("@")[0]);
+    }
+  });
+});
+
 describe("a refused view names the entry it is about, and carries the view in force", () => {
   test("must-fail: two entries reading the same pointer are named by place (node1 11-16: a walk's first view)", async () => {
     const same = { pointer: { type: "record_read", shape: "world_changed", where: { id: "c".repeat(64) } }, form: "fields" };
