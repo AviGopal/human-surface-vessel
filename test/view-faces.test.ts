@@ -10,14 +10,16 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { teardownDom, trackRoot } from "./setup.ts";
+import { forgetViews, teardownDom, trackRoot } from "./setup.ts";
 import { REGISTRATION_PAYLOAD } from "../src/discovery-registration.ts";
-import { DEFAULT_FACES, FACES, currentView, resetViewsForTest, undoView, writeView } from "../src/ui-views.ts";
+import { DEFAULT_FACES, FACES, currentView, undoView, writeView } from "../src/ui-views.ts";
 
 const ENTRIES = [{ pointer: { type: "record_read", shape: "answer" }, form: "rows" }];
 
 describe("the write", () => {
-  beforeEach(() => resetViewsForTest());
+  // The views file, not only the cache: a file run earlier in the same process (the pull-sync gate
+  // runs the whole suite in one) can leave a view stored, and the revisions below count from none.
+  beforeEach(forgetViews);
 
   test("must-fail: a view written without faces draws the default, and the default names a person's words serif", () => {
     const got = writeView({ region: "landing", entries: ENTRIES }, null);
@@ -87,6 +89,7 @@ const { Entries } = await import("../ui/src/components/Reports");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 afterAll(async () => {
+  await forgetViews();
   await teardownDom();
 });
 async function mount(faces: Record<string, string>): Promise<HTMLElement> {
