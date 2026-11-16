@@ -245,7 +245,7 @@ export function questionSubject(question: Question): string {
   if (fromId) return fromId;
   const summary = questionSummary(question);
   if (summary.length > 0) return summary;
-  return isHollowQuestion(question) ? "" : question.title;
+  return isHollowQuestion(question) || typeof question.title !== "string" ? "" : question.title;
 }
 
 /** Titles a write is given when it carries no text (the solicitation door's, the panel door's). */
@@ -254,7 +254,7 @@ const PLACEHOLDER_TITLES = new Set(["Question", "Untitled"]);
 /** Written with no text: no body, nothing asked, and only a placeholder for a title. */
 export function isHollowQuestion(question: Question): boolean {
   const body = typeof question.body === "string" ? question.body.trim() : question.body == null ? "" : "x";
-  return body.length === 0 && (question.asks?.length ?? 0) === 0 && PLACEHOLDER_TITLES.has(question.title.trim());
+  return body.length === 0 && (question.asks?.length ?? 0) === 0 && typeof question.title === "string" && PLACEHOLDER_TITLES.has(question.title.trim());
 }
 
 /**
