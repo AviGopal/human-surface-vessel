@@ -21,7 +21,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { FIELD_NAME, MAX_WORDS, wordFields } from "./row-words.ts";
-import { ROW_BINDING, boundToRow } from "./row-binding.ts";
+import { ROW_BINDING, boundToField, boundToRow } from "./row-binding.ts";
 import { MARK_FIELD, MARK_STATES, MAX_MARK_LABEL, MAX_MARK_VALUES, marksProblem, type MarkBinding } from "./row-marks.ts";
 
 /**
@@ -247,7 +247,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     `newest: true (rows only) draws the rows show kept newest first, the reverse of the producer's order, which also decides which rows are kept; ` +
     `folded: true draws the entry closed under its title and the count of rows its read holds; ` +
     `strip (folded only) draws in that summary how many of the rows read fall in each of the last hours hours, by their t; ` +
-    `graded (with a judge only) is the read of the system's own grades of a row, its pointer naming "${ROW_BINDING}" and narrowed by where: {field: value} (equality, 1 to ${MAX_WHERE} fields), drawn closed only after the person has given their verdict on that row; ` +
+    `graded (with a judge only) is the read of the system's own grades of a row, its pointer naming "${ROW_BINDING}", the row's id (never a field of it), and narrowed by where: {field: value} (equality, 1 to ${MAX_WHERE} fields), drawn closed only after the person has given their verdict on that row; ` +
     `thread (rows only) is read again under each row, its pointer argument "${ROW_BINDING}" replaced by that row's id and "${ROW_BINDING}.<field>" (an argument or a where value) by that field of the row as written, so a thread reads what cites its row or shares a value with it; a row without the field draws no thread; each thread is drawn as its own entry, one level deep; a list is read entry by entry and drawn in list order; ` +
     `about: true (rows only, not in a thread) offers on each row a control that sets the person's box to a new ask about that row, citing it and the rows its judged thread drew under it`;
   const defaults = contract.regions
@@ -523,6 +523,9 @@ function gradedOf(g: unknown): { graded: GradedRead } | { detail: string } {
   const got = pointerOf(pointer);
   if ("detail" in got) return got;
   if (!Object.values(got.pointer).includes(ROW_BINDING)) return { detail: `graded: its pointer names "${ROW_BINDING}", the row it grades` };
+  // A grade is read by the row's id only: the page binds it so, and a field left unbound would read
+  // nothing and say the system has not graded the row.
+  if (boundToField(got.pointer)) return { detail: `graded: its pointer names the row by "${ROW_BINDING}" only, not a field of it` };
   return { graded: { pointer: got.pointer } };
 }
 

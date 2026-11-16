@@ -58,6 +58,15 @@ describe("the write check", () => {
     expect(got.ok ? "" : got.detail).toContain("only a thread's pointer is bound to a row");
   });
 
+  test("must-fail: a grade names its row by id only: a field binding there is refused", () => {
+    const graded = { pointer: { type: "record_read", refs_to: "$row", shape: "land_verdict", where: { tree: "$row.tree" } } };
+    const got = writeView({ region: "landing", entries: [changes({ ...byTree, judge: "land", graded })] }, null);
+    expect(got.ok).toBe(false);
+    expect(got.ok ? "" : got.detail).toContain('graded: its pointer names the row by "$row" only');
+    const byId = { pointer: { ...graded.pointer, where: { role: "described" } } };
+    expect(writeView({ region: "landing", entries: [changes({ ...byTree, judge: "land", graded: byId })] }, null)).toMatchObject({ ok: true });
+  });
+
   test("must-fail: a bound thread still reads through records or the questions only", () => {
     const got = writeView({ region: "landing", entries: [changes({ ...byTree, pointer: { type: "gitDiff", where: { tree: "$row.tree" } } })] }, null);
     expect(got.ok).toBe(false);
@@ -128,6 +137,7 @@ describe("the page", () => {
     const el = await mount([changes(byTree)]);
     expect(el.querySelector(`.sf-row[data-row="${DIFF.id}"]`)).not.toBeNull();
     expect(el.querySelector(".sf-thread")).toBeNull();
-    expect(reads.map((p) => p["shape"])).toEqual(["gitDiff"]);
+    // the change's read, and nothing else but the owners' declarations the page reads for any rows
+    expect(reads.filter((p) => p["shape"] !== "shape_description")).toStrictEqual([{ type: "record_read", shape: "gitDiff" }]);
   });
 });

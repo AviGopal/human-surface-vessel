@@ -25,6 +25,11 @@ export function boundToRow(pointer: Pointer): boolean {
   return valuesOf(pointer).some((v) => v === ROW_BINDING || (typeof v === "string" && ROW_FIELD_BINDING.test(v)));
 }
 
+/** Whether a pointer names a field of its row ("$row.<field>"), not only its id. */
+export function boundToField(pointer: Pointer): boolean {
+  return valuesOf(pointer).some((v) => typeof v === "string" && ROW_FIELD_BINDING.test(v));
+}
+
 /** The pointer with each binding replaced by the row's value, or null when the row cannot bind it. */
 export function bindRow<P extends Pointer>(pointer: P, row: Readonly<Record<string, unknown>>): P | null {
   let unbound = false;
