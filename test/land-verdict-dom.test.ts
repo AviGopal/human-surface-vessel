@@ -175,6 +175,65 @@ describe("a change judged under its ask", () => {
   });
 });
 
+describe("whether the change compiles, shown above Right and Wrong (agf_yb0fg6wwyq6y)", () => {
+  const tc = (el: HTMLElement) => change(el)!.querySelector("[data-typecheck]") as HTMLElement | null;
+  const ADDED = "[ui]\nui/src/components/Reports.tsx(812,9): error TS2304: Cannot find name 'parseHeadline'.";
+
+  test("must-fail: a change that does not compile says so above the verdict, its added errors one tap away; Right stays offered", async () => {
+    diffs = [{ ...DIFF, typecheck: { ran: true, passed: false, exit_code: 2, out: ADDED, truncated: false, projects: [{ dir: "ui", passed: false, exit_code: 2 }] } }];
+    const el = await mount();
+    const line = tc(el)!;
+    expect(line.getAttribute("data-typecheck")).toBe("failed");
+    expect(line.querySelector("summary")!.textContent).toBe("Does not compile: the change adds errors.");
+    expect((line.querySelector("details") as HTMLDetailsElement).open).toBe(false);
+    expect(line.querySelector("pre")!.textContent).toBe(ADDED);
+    // Above the verdict: the line comes before the row's Right and Wrong.
+    const right = [...change(el)!.querySelectorAll(".sf-judge-word")].find((b) => b.textContent === "Right") as HTMLButtonElement;
+    expect(line.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Shown, not a gate: the person's mark decides.
+    expect(right.disabled).toBe(false);
+    await judge(el, "Right");
+    expect(rowOf(written[0]!)).toEqual({ shape: "land_verdict", r: 1, input_refs: [DIFF.id], repo: DIFF.repo, tree: DIFF.tree });
+  });
+
+  test("must-fail: not compiled says so, with the step's reason", async () => {
+    diffs = [{ ...DIFF, typecheck: { ran: false, passed: false, why: "ui's modules are not installed on this node: its project cannot be compiled here" } }];
+    const el = await mount();
+    expect(tc(el)!.getAttribute("data-typecheck")).toBe("not-run");
+    expect(tc(el)!.textContent).toBe("Not compiled: ui's modules are not installed on this node: its project cannot be compiled here.");
+  });
+
+  test("must-fail: a project that could not be checked, errors the base already had, and files no project compiled are each said", async () => {
+    diffs = [{ ...DIFF, typecheck: { ran: true, passed: true, exit_code: 0, out: "", truncated: false, uncovered: ["scripts/one.ts"], projects: [
+      { dir: ".", passed: true, exit_code: 0, base_errors: 3 },
+      { dir: "ui", passed: true, exit_code: 0, checked: false, why: "its modules are not installed" },
+    ] } }];
+    const el = await mount();
+    const text = tc(el)!.textContent!;
+    expect(tc(el)!.getAttribute("data-typecheck")).toBe("passed");
+    expect(text).toContain("Compiles.");
+    expect(text).toContain("Could not check ui: its modules are not installed.");
+    expect(text).toContain("The root project already had errors before this change (3); they are not counted against it.");
+    expect(text).toContain("Not compiled by any project: scripts/one.ts.");
+  });
+
+  test("a row from before projects were kept draws as it is", async () => {
+    diffs = [{ ...DIFF, typecheck: { ran: true, passed: false, exit_code: 1, out: "src/a.ts: error TS1005" } }];
+    const el = await mount();
+    expect(tc(el)!.querySelector("summary")!.textContent).toBe("Does not compile: the change adds errors.");
+    expect(tc(el)!.querySelector(".sf-typecheck-note")).toBeNull();
+  });
+
+  test("control: a row with no typecheck, or one not in a known form, draws no line", async () => {
+    diffs = [{ ...DIFF, typecheck: undefined }];
+    expect(tc(await mount())).toBeNull();
+    diffs = [{ ...DIFF, typecheck: "ok" }];
+    expect(tc(await mount())).toBeNull();
+    diffs = [{ ...DIFF, typecheck: { exit_code: 0 } }];
+    expect(tc(await mount())).toBeNull();
+  });
+});
+
 describe("the view contract", () => {
   test("must-fail: judge is outcome or land; graded needs a judge; land is taken on rows and in a thread", () => {
     const pointer = { type: "record_read", shape: "gitDiff" };

@@ -464,6 +464,69 @@ function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; re
   );
 }
 
+/**
+ * Whether a change compiles, from its gitDiff row's `typecheck` as the landing step wrote it, drawn
+ * above Right and Wrong so the person sees it before marking (finding agf_yb0fg6wwyq6y: a Right
+ * was offered on a tree that did not compile, and nothing said so). It is shown, never a gate:
+ * the person's mark decides. A row with no typecheck, or one in a form this does not know, draws
+ * nothing rather than a guess.
+ *
+ * `ran: false` is "not compiled", with the step's reason. A failure folds the errors the change
+ * added under one line. Per project: one that could not be checked says so with why, and errors
+ * the base already had are named as the base's. Changed files no project compiled are listed.
+ * Rows written before the step kept projects carry only ran, passed, exit_code and out, and draw
+ * as that.
+ */
+function Typecheck({ tc }: { tc: unknown }): ReactNode {
+  if (typeof tc !== "object" || tc === null || Array.isArray(tc)) return null;
+  const t = tc as Record<string, unknown>;
+  const why = typeof t["why"] === "string" && t["why"].trim() ? t["why"].trim() : null;
+  if (t["ran"] === false) {
+    return (
+      <p className="sf-row-note sf-typecheck" data-typecheck="not-run">
+        {why ? `Not compiled: ${why}.`.replace(/\.\.$/, ".") : "Not compiled."}
+      </p>
+    );
+  }
+  if (typeof t["passed"] !== "boolean") return null;
+  const out = typeof t["out"] === "string" ? t["out"].trim() : "";
+  // What each project says of itself, in the producer's order: one it could not check, and errors
+  // its base already had. A project that says neither adds no line.
+  const projectNotes = (Array.isArray(t["projects"]) ? t["projects"] : []).flatMap((raw): string[] => {
+    if (typeof raw !== "object" || raw === null) return [];
+    const p = raw as Record<string, unknown>;
+    // The project at the repository's root is named so; "." reads as a stray mark.
+    const dir = typeof p["dir"] === "string" && p["dir"] && p["dir"] !== "." ? p["dir"] : p["dir"] === "." ? "The root project" : "A project";
+    const base = p["base_errors"];
+    return [
+      ...(p["checked"] === false ? [`Could not check ${dir === "The root project" || dir === "A project" ? dir.toLowerCase() : dir}${typeof p["why"] === "string" && p["why"] ? `: ${p["why"]}` : ""}.`] : []),
+      ...(base !== undefined && base !== null && base !== 0 && base !== "" && base !== false ? [`${dir} already had errors before this change${typeof base === "number" ? ` (${base})` : ""}; they are not counted against it.`] : []),
+    ];
+  });
+  const uncovered = Array.isArray(t["uncovered"]) && t["uncovered"].length > 0 ? t["uncovered"].map((f) => String(f)).join(", ") : null;
+  const notes = [...projectNotes, ...(uncovered ? [`Not compiled by any project: ${uncovered}.`] : [])];
+  return (
+    <div className="sf-row-note sf-typecheck" data-typecheck={t["passed"] ? "passed" : "failed"}>
+      {t["passed"] ? (
+        <p className="sf-typecheck-line">Compiles.</p>
+      ) : out ? (
+        <details className="sf-typecheck-errors">
+          <summary className="sf-typecheck-line">Does not compile: the change adds errors.</summary>
+          <pre className="sf-typecheck-out">{out}</pre>
+          {t["truncated"] === true ? <p className="sf-muted">The errors were cut short; these are the first.</p> : null}
+        </details>
+      ) : (
+        <p className="sf-typecheck-line">Does not compile.</p>
+      )}
+      {notes.map((n, i) => (
+        <p key={i} className="sf-muted sf-typecheck-note">
+          {n}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewEntry; reading: Reading }): ReactNode {
   const judge = entry.judge;
   const threads = threadsOf(entry);
@@ -481,6 +544,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
             ) : (
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
+            {judge === "land" ? <Typecheck tc={o["typecheck"]} /> : null}
             <div className="sf-row-meta">
               {/* The row's time is what opens its fields: one control, not a time and an arrow beside it. */}
               <details className="sf-row-details" data-by-time={time ? "" : undefined}>
