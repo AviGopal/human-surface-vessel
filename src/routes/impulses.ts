@@ -399,7 +399,7 @@ function visibleSliceSizePatch(
 export const impulsesRouter = new Hono();
 
 /** The shapes this route answers without a caller: they read, and write nothing. */
-const IMPULSE_READ_TYPES: ReadonlySet<string> = new Set(["uiQuestion", "renderPolicy", "human_surface:ui_view"]);
+const IMPULSE_READ_TYPES: ReadonlySet<string> = new Set(["uiQuestion", "renderPolicy", "human_surface:ui_view", "uiViewState"]);
 
 impulsesRouter.post("/v2/impulses/resolve", async (c) => {
   const body = (await c.req.json().catch(() => null)) as null | {
@@ -1016,20 +1016,22 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       return c.json({ resolved: true, success: true, shape: type, body: { region: write.view.region, revision: write.view.revision, view: write.view, ...(write.unchanged ? { unchanged: true } : {}) } });
     }
 
+    case "uiViewState":
     case "human_surface:ui_view": {
       // What this surface looks like to a person, measured where it can be:
       // typography, the forms content was drawn in, and the questions rail
       // (how each kind is presented, who reads its answers, what people did).
       // A question writer reads this by shape before it asks.
-      // With a region, only that region's view in force, in the form uiView_write answers: what a
-      // writer of views reads before it changes one, without the rest of the report.
+      // With a region, only that region's view in force: what a writer of views reads before it
+      // changes one. It answers as its own shape, flat (as fs_read answers fileContent), so the walk
+      // keeps it as a row; nothing at its top level is a stored row's own (seq, writer).
       const named = pointer["region"];
-      if (named !== undefined) {
+      if (named !== undefined || type === "uiViewState") {
         if (!(VIEW_REGIONS as readonly unknown[]).includes(named)) {
           return c.json({ resolved: false, success: false, shape: type, refusal: "unknown_region", error: `unknown_region: regions: ${VIEW_REGIONS.join(", ")}` }, 422);
         }
         const view = currentView(named as ViewRegion);
-        return c.json({ resolved: true, success: true, shape: type, body: unnamePeople({ region: view.region, revision: view.revision, view }, sessionOf(c.req.header("Cookie"))?.userId ?? null) });
+        return c.json({ shape: "uiViewState", ...(unnamePeople({ region: view.region, revision: view.revision, view }, sessionOf(c.req.header("Cookie"))?.userId ?? null) as Record<string, unknown>) });
       }
       return c.json({ resolved: true, success: true, shape: type, body: unnamePeople(buildUiView(getRenderPolicy().tokenOverrides, await listedShapes()), sessionOf(c.req.header("Cookie"))?.userId ?? null) });
     }

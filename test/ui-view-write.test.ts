@@ -270,12 +270,27 @@ describe("human_surface:ui_view {region}: the view a writer of views reads befor
     return { status: res.status, json: (await res.json()) as any };
   }
 
-  test("must-fail: with a region, the answer is only that region's view in force, in the form uiView_write answers", async () => {
+  test("must-fail: with a region, the answer is only that region's view in force, flat, as its own advertised shape", async () => {
     const w = await write({ region: "landing", entries: [load, asked] });
     const r = await readView({ region: "landing" });
     expect(r.status).toBe(200);
-    expect(Object.keys(r.json.body).sort()).toEqual(["region", "revision", "view"]);
-    expect(r.json.body).toMatchObject({ region: "landing", revision: w.json.body.revision, view: { id: w.json.body.view.id, entries: w.json.body.view.entries, faces: w.json.body.view.faces } });
+    // The walk keeps a call's answer as a row only when the answer names a shape other than the call's,
+    // one its server advertises, with no seq or writer at its top level (walk-vessel calls.ts answerServed).
+    expect(Object.keys(r.json).sort()).toEqual(["region", "revision", "shape", "view"]);
+    expect(r.json).toMatchObject({ shape: "uiViewState", region: "landing", revision: w.json.body.revision, view: { id: w.json.body.view.id, entries: w.json.body.view.entries, faces: w.json.body.view.faces } });
+    expect(DISCOVERY_SHAPES as readonly string[]).toContain("uiViewState");
+  });
+
+  test("must-fail: uiViewState, called by its own name, answers the same; with no region it is refused by name", async () => {
+    await write({ region: "landing", entries: [load, asked] });
+    const read = async (pointer: Record<string, unknown>) => {
+      const res = await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: { "content-type": "application/json", ...testAuth() }, body: JSON.stringify({ pointer: { type: "uiViewState", ...pointer } }) });
+      return { status: res.status, json: (await res.json()) as any };
+    };
+    expect((await read({ region: "landing" })).json).toEqual((await readView({ region: "landing" })).json);
+    const bare = await read({});
+    expect(bare.status).toBe(422);
+    expect(bare.json.refusal).toBe("unknown_region");
   });
 
   test("must-fail: the read is declared to discovery, so a walk can make it", () => {

@@ -252,7 +252,7 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, note?, words?: [1 to ${MAX_WORDS} field names], marks?: [1 to ${MAX_WORDS} {field, states: {value: state}, label?}], thread?: an entry with no thread, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, note?, words?: [1 to ${MAX_WORDS} top-level field names of the rows read, letters, digits and _ only, e.g. ["what"] or ["text"]], marks?: [1 to ${MAX_WORDS} {field, states: {value: state}, label?}], thread?: an entry with no thread, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
     `drawn top to bottom in list order, under the box a person asks through and their sign-in, which are the page's own and drawn above every view; a pointer's type is one of ${VIEW_READS.join(", ")}, the page reading as the signed-in person: rows of any shape come from record_read {shape, where?, refs_to?, latest_by?, has?}, never by naming that shape as the type. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
     `judge (rows only) offers a person's verdict on each row: "outcome" writes an outcome citing it, "land" a land_verdict citing it with the row's repo and tree; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; note (1 to 120 characters, an entry drawn open whose form is rows or questions) is one line under its title, drawn while the read has rows; ` +
@@ -273,11 +273,11 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
       `writes the view of a human surface region (${names}): {region, entries, faces?, note?}. ${entry}. ` +
       `faces is {role: ${FACES.join(" | ")}} (1 to ${MAX_FACES} roles), the face a row's words are drawn in by the row's role as records stamps it; a role not named draws in the page's face; a value drawn with its field's name is always mono; a write without faces keeps the faces in force (by default ${faceLine(DEFAULT_FACES)}). ${defaults}. ` +
       `a write naming the view already in force succeeds as unchanged and writes no revision; ` +
-      `undo restores the view in force before the current one; read the view in force before changing it with human_surface:ui_view {region}`,
+      `undo restores the view in force before the current one; read the view in force before changing it with human_surface:ui_view {region}, which answers uiViewState`,
     "human_surface:ui_view":
       `reads what the human surface draws now: for each region (${names}) the view in force, its entries in draw order, ` +
       `revision and writer, and a stored view that is not drawn with the reason it was refused. With region, only that region's view in force, ` +
-      `as {region, revision, view}, the form uiView_write answers. Views are written by uiView_write`,
+      `answered as uiViewState {region, revision, view}, the fields uiView_write answers. Views are written by uiView_write`,
   };
 }
 
@@ -347,7 +347,7 @@ export function viewShapeInputs(): Record<"uiView_write" | "human_surface:ui_vie
   return {
     "human_surface:ui_view": {
       type: "object",
-      properties: { region: { enum: [...VIEW_REGIONS], description: "only this region's view in force, as uiView_write answers it" } },
+      properties: { region: { enum: [...VIEW_REGIONS], description: "only this region's view in force, answered as uiViewState" } },
     },
     uiView_write: {
       type: "object",

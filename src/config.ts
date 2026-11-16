@@ -126,6 +126,9 @@ export const DISCOVERY_SHAPES = [
   // questions rail per kind (presentation, answer reader, outcomes). Read it
   // before writing a question here.
   "human_surface:ui_view",
+  // A region's view in force as one row: what human_surface:ui_view {region} answers. Its own shape,
+  // as fs_read answers fileContent, so the walk keeps the read as a row a view write can wait for.
+  "uiViewState",
   // Views for the surface's regions (src/ui-views.ts). The surface KEEPS and DRAWS views;
   // it never advertises `uiView`, so whatever writes a view is that shape's only producer.
   "uiView_write",
