@@ -21,6 +21,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { FIELD_NAME, MAX_WORDS, wordFields } from "./row-words.ts";
+import { ROW_BINDING, boundToRow } from "./row-binding.ts";
 import { MARK_FIELD, MARK_STATES, MAX_MARK_LABEL, MAX_MARK_VALUES, marksProblem, type MarkBinding } from "./row-marks.ts";
 
 /**
@@ -28,11 +29,7 @@ import { MARK_FIELD, MARK_STATES, MAX_MARK_LABEL, MAX_MARK_VALUES, marksProblem,
  * thread on the landing: nothing is drawn under the box after it, so there is no `ask` region.
  */
 export const VIEW_REGIONS = ["landing"] as const;
-/**
- * In an entry's `thread`, a pointer argument written as ROW_BINDING stands for the id of the row
- * the thread is drawn under: the one value the page knows per row and a view's writer cannot.
- */
-export const ROW_BINDING = "$row";
+export { ROW_BINDING, ROW_FIELD_BINDING, boundToRow } from "./row-binding.ts";
 
 export type ViewRegion = (typeof VIEW_REGIONS)[number];
 
@@ -251,7 +248,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     `folded: true draws the entry closed under its title and the count of rows its read holds; ` +
     `strip (folded only) draws in that summary how many of the rows read fall in each of the last hours hours, by their t; ` +
     `graded (with a judge only) is the read of the system's own grades of a row, its pointer naming "${ROW_BINDING}" and narrowed by where: {field: value} (equality, 1 to ${MAX_WHERE} fields), drawn closed only after the person has given their verdict on that row; ` +
-    `thread (rows only) is read again under each row, its pointer argument "${ROW_BINDING}" replaced by that row's id, and drawn as its own entry, one level deep; a list is read entry by entry and drawn in list order; ` +
+    `thread (rows only) is read again under each row, its pointer argument "${ROW_BINDING}" replaced by that row's id and "${ROW_BINDING}.<field>" (an argument or a where value) by that field of the row as written, so a thread reads what cites its row or shares a value with it; a row without the field draws no thread; each thread is drawn as its own entry, one level deep; a list is read entry by entry and drawn in list order; ` +
     `about: true (rows only, not in a thread) offers on each row a control that sets the person's box to a new ask about that row, citing it and the rows its judged thread drew under it`;
   const defaults = contract.regions
     .map((r) => `default ${r}: ${(contract.defaults[r]?.entries ?? []).map((e) => e.title ?? e.pointer.type).join(", ")}`)
@@ -457,8 +454,8 @@ function entryOf(e: unknown, inThread = false): { entry: ViewEntry } | { detail:
   if (Object.keys(rest).length > 0) return { detail: `${Object.keys(rest).join(", ")}: an entry has pointer, form, title, field, show, judge, empty, note, words, marks, thread, newest, folded, strip, graded and about only` };
   const got = pointerOf(pointer);
   if ("detail" in got) return got;
-  const bound = Object.values(got.pointer).includes(ROW_BINDING);
-  if (inThread && !bound) return { detail: `thread: its pointer names "${ROW_BINDING}", the row it is drawn under` };
+  const bound = boundToRow(got.pointer);
+  if (inThread && !bound) return { detail: `thread: its pointer names "${ROW_BINDING}" or "${ROW_BINDING}.<field>", the row it is drawn under` };
   if (!inThread && bound) return { detail: `${ROW_BINDING}: only a thread's pointer is bound to a row` };
   if (inThread && thread !== undefined) return { detail: "thread: one level only" };
   if (typeof form !== "string" || !(ENTRY_FORMS as readonly string[]).includes(form)) return { detail: `form: ${ENTRY_FORMS.join(", ")}` };

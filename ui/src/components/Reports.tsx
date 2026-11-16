@@ -31,6 +31,7 @@ import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
 import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
 import { declaredMarks, marksFor, rowMarks, type MarkBinding } from "../lib/rowMarks";
+import { bindRow } from "../lib/rowBinding";
 import { STATE_TOKENS } from "../design-tokens";
 import { askAbout, citesOf } from "../lib/box";
 import { Glyph } from "./Glyph";
@@ -422,9 +423,11 @@ type Reading = { declared: ReadonlyMap<string, readonly string[]>; marks: Readon
  * Folded, it is one line of words under the row, its title and how many rows the read holds,
  * opened by the person: what the walk did with an ask is there to look into, not to read first.
  */
-function Thread({ entry, rowId, reading }: { entry: ViewEntry; rowId: string; reading: Reading }): ReactNode {
-  const pointer = bind(entry.pointer, ROW_BINDING, rowId);
-  const q = useReport(pointer, { enabled: reading.enabled, intervalMs: reading.intervalMs });
+function Thread({ entry, row, rowId, reading }: { entry: ViewEntry; row: Readonly<Record<string, unknown>>; rowId: string; reading: Reading }): ReactNode {
+  // Bound to the row by its id or a field of it; a row the binding names no value of draws no thread.
+  const pointer = bindRow(entry.pointer, row);
+  const q = useReport(pointer ?? { type: "record_read" }, { enabled: reading.enabled && pointer !== null, intervalMs: reading.intervalMs });
+  if (pointer === null) return null;
   const a: ReportAnswer | undefined = q.data;
   const inner = !a ? (
     <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>
@@ -552,9 +555,9 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
                 </dl>
               </details>
               {judge && id && (entry.words === undefined || entry.words.some((f) => o[f] !== undefined && o[f] !== null && o[f] !== "")) ? <Judge row={o} rowId={id} kind={judge} graded={entry.graded} after={reading.readers.find((r) => r.judge === judge && r.shape === o["shape"])?.after} reading={reading} /> : null}
-              {entry.about && id ? <AboutThis rowId={id} words={words.map((w) => fieldText(w.value)).join(" ").trim() || (typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "this")} threads={threads} reading={reading} /> : null}
+              {entry.about && id ? <AboutThis row={o} rowId={id} words={words.map((w) => fieldText(w.value)).join(" ").trim() || (typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "this")} threads={threads} reading={reading} /> : null}
             </div>
-            {id ? threads.map((t, j) => <Thread key={j} entry={t} rowId={id} reading={reading} />) : null}
+            {id ? threads.map((t, j) => <Thread key={j} entry={t} row={o} rowId={id} reading={reading} />) : null}
           </li>
         );
       })}
@@ -568,9 +571,10 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
  * that cite this row (citesOf), so nothing undrawn and nothing from another ask is cited. It reads that
  * thread through the same query the thread itself drew from: no second read.
  */
-function AboutThis({ rowId, words, threads, reading }: { rowId: string; words: string; threads: readonly ViewEntry[]; reading: Reading }): ReactNode {
+function AboutThis({ row, rowId, words, threads, reading }: { row: Readonly<Record<string, unknown>>; rowId: string; words: string; threads: readonly ViewEntry[]; reading: Reading }): ReactNode {
   const judged = threads.find((t) => t.judge === "outcome");
-  const q = useReport(judged ? bind(judged.pointer, ROW_BINDING, rowId) : { type: "record_read" }, { enabled: reading.enabled && judged !== undefined, intervalMs: reading.intervalMs });
+  const pointer = judged ? bindRow(judged.pointer, row) : null;
+  const q = useReport(pointer ?? { type: "record_read" }, { enabled: reading.enabled && pointer !== null, intervalMs: reading.intervalMs });
   const got = judged && q.data?.ok ? rowsOf(q.data.answer, judged) : null;
   const drawn = got && "rows" in got ? got.rows : [];
   return (
