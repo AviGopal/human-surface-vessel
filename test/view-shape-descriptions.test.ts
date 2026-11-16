@@ -54,4 +54,10 @@ describe("view shape descriptions come from the view contract", () => {
     for (const k of keys) expect(DISCOVERY_SHAPES as readonly string[]).toContain(k);
     expect(REGISTRATION_PAYLOAD.shapes).toEqual([...DISCOVERY_SHAPES]);
   });
+
+  test("must-fail: the write's description says a view reads each pointer once, the rule its refusal names (node1 11-16: two walk writes refused on it)", () => {
+    const d = views.viewShapeDescriptions().uiView_write;
+    expect(d).toContain("two entries whose pointers are the same (type and every argument, where included) are refused");
+    expect(d).toContain("to move an entry, list it once in its new place");
+  });
 });

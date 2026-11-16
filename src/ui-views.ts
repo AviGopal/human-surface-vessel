@@ -272,6 +272,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
     uiView_write:
       `writes the view of a human surface region (${names}): {region, entries, faces?, note?}. ${entry}. ` +
       `faces is {role: ${FACES.join(" | ")}} (1 to ${MAX_FACES} roles), the face a row's words are drawn in by the row's role as records stamps it; a role not named draws in the page's face; a value drawn with its field's name is always mono; a write without faces keeps the faces in force (by default ${faceLine(DEFAULT_FACES)}). ${defaults}. ` +
+      `each entry reads its own pointer: two entries whose pointers are the same (type and every argument, where included) are refused, so to move an entry, list it once in its new place; ` +
       `a write naming the view already in force succeeds as unchanged and writes no revision; ` +
       `undo restores the view in force before the current one; read the view in force before changing it with human_surface:ui_view {region}, which answers uiViewState`,
     "human_surface:ui_view":
