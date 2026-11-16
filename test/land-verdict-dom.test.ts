@@ -175,61 +175,50 @@ describe("a change judged under its ask", () => {
   });
 });
 
-describe("whether the change compiles, shown above Right and Wrong (agf_yb0fg6wwyq6y)", () => {
+describe("the change's typecheck, shown as written above Right and Wrong (agf_yb0fg6wwyq6y)", () => {
   const tc = (el: HTMLElement) => change(el)!.querySelector("[data-typecheck]") as HTMLElement | null;
-  const ADDED = "[ui]\nui/src/components/Reports.tsx(812,9): error TS2304: Cannot find name 'parseHeadline'.";
+  const lines = (el: HTMLElement) => [...tc(el)!.children].map((c) => (c.tagName === "DETAILS" ? c.querySelector("summary")!.textContent : c.textContent));
+  const OUT = "[ui]\nui/src/components/Reports.tsx(812,9): error TS2304: Cannot find name 'parseHeadline'.";
 
-  test("must-fail: a change that does not compile says so above the verdict, its added errors one tap away; Right stays offered", async () => {
-    diffs = [{ ...DIFF, typecheck: { ran: true, passed: false, exit_code: 2, out: ADDED, truncated: false, projects: [{ dir: "ui", passed: false, exit_code: 2 }] } }];
+  test("must-fail: each field in the row's order, the output folded under its name and verbatim, above the verdict; Right stays offered", async () => {
+    diffs = [{ ...DIFF, typecheck: { ran: true, passed: false, exit_code: 2, out: OUT, truncated: true } }];
     const el = await mount();
-    const line = tc(el)!;
-    expect(line.getAttribute("data-typecheck")).toBe("failed");
-    expect(line.querySelector("summary")!.textContent).toBe("Does not compile: the change adds errors.");
-    expect((line.querySelector("details") as HTMLDetailsElement).open).toBe(false);
-    expect(line.querySelector("pre")!.textContent).toBe(ADDED);
-    // Above the verdict: the line comes before the row's Right and Wrong.
+    expect(lines(el)).toEqual(["typecheck ran yes", "typecheck passed no", "typecheck exit code 2", "typecheck out", "typecheck truncated yes"]);
+    const out = tc(el)!.querySelector("details[data-field=out]") as HTMLDetailsElement;
+    expect(out.open).toBe(false);
+    expect(out.querySelector("pre")!.textContent).toBe(OUT);
     const right = [...change(el)!.querySelectorAll(".sf-judge-word")].find((b) => b.textContent === "Right") as HTMLButtonElement;
-    expect(line.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tc(el)!.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Shown, not a gate: the person's mark decides.
     expect(right.disabled).toBe(false);
     await judge(el, "Right");
     expect(rowOf(written[0]!)).toEqual({ shape: "land_verdict", r: 1, input_refs: [DIFF.id], repo: DIFF.repo, tree: DIFF.tree });
   });
 
-  test("must-fail: not compiled says so, with the step's reason", async () => {
-    diffs = [{ ...DIFF, typecheck: { ran: false, passed: false, why: "ui's modules are not installed on this node: its project cannot be compiled here" } }];
+  test("must-fail: nothing compiled is never drawn as errors added: the step's own words, and no sentence of the page's", async () => {
+    // A check that compiled nothing (a project whose modules are not installed) as the step writes it.
+    const NOT_CHECKED = "[ui] not checked: ui's modules are not installed on this node";
+    diffs = [{ ...DIFF, typecheck: { ran: true, passed: false, exit_code: 0, out: NOT_CHECKED } }];
     const el = await mount();
-    expect(tc(el)!.getAttribute("data-typecheck")).toBe("not-run");
-    expect(tc(el)!.textContent).toBe("Not compiled: ui's modules are not installed on this node: its project cannot be compiled here.");
+    expect(tc(el)!.textContent).not.toContain("adds errors");
+    expect(tc(el)!.textContent).not.toContain("compile");
+    expect(lines(el)).toEqual(["typecheck ran yes", "typecheck passed no", "typecheck exit code 0", `typecheck out ${NOT_CHECKED}`]);
   });
 
-  test("must-fail: a project that could not be checked, errors the base already had, and files no project compiled are each said", async () => {
-    diffs = [{ ...DIFF, typecheck: { ran: true, passed: true, exit_code: 0, out: "", truncated: false, uncovered: ["scripts/one.ts"], projects: [
-      { dir: ".", passed: true, exit_code: 0, base_errors: 3 },
-      { dir: "ui", passed: true, exit_code: 0, checked: false, why: "its modules are not installed" },
-    ] } }];
+  test("not run: its reason as the step wrote it", async () => {
+    const why = "ui's modules are not installed on this node: its project cannot be compiled here";
+    diffs = [{ ...DIFF, typecheck: { ran: false, passed: false, why } }];
     const el = await mount();
-    const text = tc(el)!.textContent!;
-    expect(tc(el)!.getAttribute("data-typecheck")).toBe("passed");
-    expect(text).toContain("Compiles.");
-    expect(text).toContain("Could not check ui: its modules are not installed.");
-    expect(text).toContain("The root project already had errors before this change (3); they are not counted against it.");
-    expect(text).toContain("Not compiled by any project: scripts/one.ts.");
+    expect(lines(el)).toEqual(["typecheck ran no", "typecheck passed no", `typecheck why ${why}`]);
+    expect(tc(el)!.querySelector("details")).toBeNull();
   });
 
-  test("a row from before projects were kept draws as it is", async () => {
-    diffs = [{ ...DIFF, typecheck: { ran: true, passed: false, exit_code: 1, out: "src/a.ts: error TS1005" } }];
-    const el = await mount();
-    expect(tc(el)!.querySelector("summary")!.textContent).toBe("Does not compile: the change adds errors.");
-    expect(tc(el)!.querySelector(".sf-typecheck-note")).toBeNull();
-  });
-
-  test("control: a row with no typecheck, or one not in a known form, draws no line", async () => {
+  test("control: a row with no typecheck, or one that is not an object, draws no line", async () => {
     diffs = [{ ...DIFF, typecheck: undefined }];
     expect(tc(await mount())).toBeNull();
     diffs = [{ ...DIFF, typecheck: "ok" }];
     expect(tc(await mount())).toBeNull();
-    diffs = [{ ...DIFF, typecheck: { exit_code: 0 } }];
+    diffs = [{ ...DIFF, typecheck: {} }];
     expect(tc(await mount())).toBeNull();
   });
 });
