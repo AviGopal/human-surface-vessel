@@ -2068,10 +2068,9 @@ body { overflow: hidden; }
 .sf-earlier[open] > summary { margin-bottom: var(--sf-space-2); }
 .sf-row-details > summary { cursor: pointer; font-size: var(--sf-text-sm); color: var(--sf-ink-3); }
 .sf-row-details[open] > summary { margin-bottom: var(--sf-space-1); }
-/* A row's time opens its fields: no arrow beside it, a dotted underline says it opens. */
+/* A row's time opens its fields: no arrow and no underline, its hover ink says it opens. */
 .sf-row-details[data-by-time] > summary { list-style: none; }
 .sf-row-details[data-by-time] > summary::-webkit-details-marker { display: none; }
-.sf-row-details[data-by-time] > summary > .sf-row-time { text-decoration: underline dotted; text-underline-offset: 3px; }
 .sf-row-details[data-by-time] > summary:hover > .sf-row-time { color: var(--sf-ink-2); }
 /* Opened by its time, the fields fall under the time, and the verdict keeps its place beside it. */
 .sf-row-meta:has(> .sf-row-details[data-by-time][open]) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
@@ -2158,7 +2157,6 @@ h2.sf-report-title > .sf-report-count { margin-left: var(--sf-space-2); }
 
 /* Rows kept after a read failed: one quiet line above them, marked at its edge in the waiting tone, the failure's words folded. */
 .sf-landing .sf-stale { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sf-space-2); margin: 0; padding-left: var(--sf-space-2); border-left: 2px solid var(--sf-waiting); font-size: var(--sf-text-sm); }
-.sf-landing .sf-stale time { text-decoration: underline dotted; text-underline-offset: 2px; }
 .sf-landing .sf-stale-why > summary { cursor: pointer; color: var(--sf-ink-3); }
 .sf-landing .sf-stale-why[open] { flex-basis: 100%; }
 .sf-landing .sf-stale-why [data-stale-reason] { display: block; overflow-wrap: anywhere; color: var(--sf-ink-2); }
