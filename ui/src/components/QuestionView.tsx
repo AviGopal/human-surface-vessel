@@ -7,7 +7,7 @@
  */
 
 import { useMutation } from "@tanstack/react-query";
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { sendContribution, type Contribution, type Question } from "../api/participation";
 import { questionGapId, questionSubject, useQuestions } from "../state/questions";
 import { contributionContent, questionForAsk } from "../lib/interaction";
@@ -279,8 +279,18 @@ function QuestionCard({ incoming, inPlace }: { incoming: Question; inPlace: bool
 export function QuestionView({ questionId, inPlace = false }: { questionId: string; inPlace?: boolean }): ReactNode {
   const { ordered, query } = useQuestions();
   const question = ordered.find((q) => q.id === questionId);
+  // The row that opened it is its own read and can be newer than the questions held here: one
+  // not held yet is read again once, and "no longer listed" waits for that read.
+  const [askedFor, setAskedFor] = useState<string | null>(null);
+  const refetch = query.refetch;
+  useEffect(() => {
+    if (question || askedFor === questionId) return;
+    setAskedFor(questionId);
+    void refetch();
+  }, [question, questionId, askedFor, refetch]);
   if (!question) {
-    return <p className="sf-main-empty">{query.isPending ? "Loading…" : "This question is no longer listed."}</p>;
+    const reading = query.isPending || askedFor !== questionId || query.isFetching;
+    return <p className="sf-main-empty">{reading ? "Loading…" : "This question is no longer listed."}</p>;
   }
   // Keyed so a different question gets a fresh draft and a fresh held revision.
   return <QuestionCard key={question.id} incoming={question} inPlace={inPlace} />;

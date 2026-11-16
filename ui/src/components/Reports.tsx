@@ -528,12 +528,13 @@ function AboutThis({ rowId, words, threads, reading }: { rowId: string; words: s
 /**
  * Questions waiting on the person. One opens in place, under its row, with what answers it; the
  * rest of the landing stays in view. A question opened by a link that is not drawn here (gone
- * from the list, or among the earlier rows) opens above the list.
+ * from the list, or among the earlier rows) opens above the list, and only there: the earlier
+ * rows draw no card of their own, so one question never has two drafts.
  *
  * Each row is the measured element for exposure (the retired questions rail's were): a tick is
  * reported each time a different set of rows is put on screen.
  */
-function Questions({ rows, open, onOpen, lead = false }: { rows: readonly unknown[]; open: string | null; onOpen: (id: string) => void; lead?: boolean }): ReactNode {
+function Questions({ rows, open, onOpen, lead = false, inline = true }: { rows: readonly unknown[]; open: string | null; onOpen: (id: string) => void; lead?: boolean; inline?: boolean }): ReactNode {
   const policy = useRenderPolicy({ enabled: false, intervalMs: 0 }).data;
   const listRef = useRef<HTMLUListElement | null>(null);
   const ids = rows.map((row) => (typeof row === "object" && row !== null && typeof (row as Record<string, unknown>)["id"] === "string" ? ((row as Record<string, unknown>)["id"] as string) : null));
@@ -573,7 +574,7 @@ function Questions({ rows, open, onOpen, lead = false }: { rows: readonly unknow
                   >
                     <span className="sf-landing-text">{name}</span>
                   </button>
-                  {isOpen ? (
+                  {isOpen && inline ? (
                     <div className="sf-question-inplace" data-question-open={id}>
                       <QuestionView questionId={id} inPlace />
                     </div>
@@ -661,7 +662,7 @@ function Drawn({ entry, answer, reading, quiet = false }: { entry: ViewEntry; an
   // A thread under a row with nothing citing it and no words for that says nothing: an ask the walk made no change for has no line about changes.
   if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} counted={entry.folded === true || quiet} />;
   const draw = (rows: readonly unknown[]): ReactNode =>
-    entry.form === "questions" ? <Questions rows={rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} /> : <Rows rows={rows} entry={entry} reading={reading} />;
+    entry.form === "questions" ? <Questions rows={rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} inline={false} /> : <Rows rows={rows} entry={entry} reading={reading} />;
   return (
     <>
       {entry.form === "questions" ? <Questions rows={got.rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} lead /> : draw(got.rows)}
