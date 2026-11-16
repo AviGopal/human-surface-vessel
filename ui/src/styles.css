@@ -1936,6 +1936,8 @@ body { overflow: hidden; }
 /* The layout's mark sits at the end of the first entry's line, not on a line of its own; opened, its words drop over the page. */
 .sf-mark { position: absolute; top: calc(var(--sf-space-3) + var(--sf-space-2) - 0.25rem); right: var(--sf-space-4); z-index: 2; font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
 .sf-landing > .sf-mark + .sf-sign-in-to-judge, .sf-landing > .sf-reports > .sf-report:first-child { padding-right: 2rem; }
+/* When the first entry is boxed (questions waiting), the mark sits inside the box, on its title's line, not on its edge. */
+.sf-landing:has(> .sf-reports > .sf-report:first-child[data-form="questions"] .sf-landing-list > li) > .sf-mark { top: calc(var(--sf-space-3) + var(--sf-space-3) + 1px - 0.25rem); right: calc(var(--sf-space-4) + var(--sf-space-4) + 1px); }
 /* The first entry sits under the page's top bar, which already draws its rule. */
 .sf-landing .sf-reports > .sf-report:first-child { border-top: 0; }
 .sf-mark > summary { list-style: none; cursor: help; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid var(--sf-rule-strong); border-radius: 50%; font-weight: 600; }
