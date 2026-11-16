@@ -111,7 +111,7 @@ describe("uiView_write", () => {
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", judge: "outcome", graded: { ...{ pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } }, title: "x" } }] }, "bad_entry", "graded is {pointer}"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", judge: "outcome", graded: { pointer: { type: "outcome_write", refs_to: "$row" } } }] }, "bad_entry", "a view reads through"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: { pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } } }] }, "bad_entry", 'graded needs a judge'],
-      [{ region: "landing", entries: [load, { ...load, form: "rows" }] }, "bad_entry", "named twice"],
+      [{ region: "landing", entries: [load, { ...load, form: "rows" }] }, "bad_entry", "entries 1 and 2 read the same pointer"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [] }] }, "bad_entry", "thread: one entry or a list of 1 to 3"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [1, 2, 3, 4].map((n) => ({ pointer: { type: `y${n}`, refs_to: "$row" }, form: "rows" })) }] }, "bad_entry", "thread: one entry or a list of 1 to 3"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [{ pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows" }, { pointer: { type: "record_read", shape: "z" }, form: "rows" }] }] }, "bad_entry", 'thread: its pointer names "$row"'],
@@ -289,5 +289,27 @@ describe("human_surface:ui_view {region}: the view a writer of views reads befor
     expect(whole.status).toBe(200);
     expect(whole.json.body.views.landing.id).toBe("landing@0");
     expect(whole.json.body.view).toBeUndefined();
+  });
+});
+
+describe("a refused view names the entry it is about, and carries the view in force", () => {
+  test("must-fail: two entries reading the same pointer are named by place (node1 11-16: a walk's first view)", async () => {
+    const same = { pointer: { type: "record_read", shape: "world_changed", where: { id: "c".repeat(64) } }, form: "fields" };
+    const w = await write({ region: "landing", entries: [load, { ...same, title: "What failed" }, { ...same, title: "What people asked" }] });
+    expect(w.status).toBe(422);
+    expect(w.json.error).toContain("entries 2 and 3 read the same pointer");
+  });
+
+  test("must-fail: an entry's own refusal says which entry", async () => {
+    const w = await write({ region: "landing", entries: [load, { pointer: { type: "record_read", shape: "answer" }, form: "table" }] });
+    expect(w.status).toBe(422);
+    expect(w.json.error).toMatch(/^bad_entry: entry 2: /);
+  });
+
+  test("must-fail: the refusal carries the view in force, in the form uiView_write answers", async () => {
+    const ok = await write({ region: "landing", entries: [load, asked] });
+    const w = await write({ region: "landing", entries: [load, load] });
+    expect(w.status).toBe(422);
+    expect(w.json.in_force).toMatchObject({ region: "landing", revision: ok.json.body.revision, view: { entries: ok.json.body.view.entries } });
   });
 });

@@ -606,14 +606,18 @@ function validate(input: { region: unknown; entries: unknown; faces?: unknown; b
   }
   const named = input.entries;
   if (!Array.isArray(named) || named.length === 0 || named.length > MAX_ENTRIES) return { ok: false, refusal: "bad_entry", detail: `entries: 1 to ${MAX_ENTRIES}` };
+  // A refusal names the entry it is about by its place in the list (1 first), so a writer can
+  // tell which of its entries to change without guessing: one walk wrote two entries reading the
+  // same row under different titles, and "record_read is named twice" named neither.
   const entries: ViewEntry[] = [];
-  const keys = new Set<string>();
-  for (const e of named) {
+  const keys = new Map<string, number>();
+  for (const [i, e] of named.entries()) {
     const got = entryOf(e);
-    if ("detail" in got) return { ok: false, refusal: "bad_entry", detail: got.detail };
+    if ("detail" in got) return { ok: false, refusal: "bad_entry", detail: `entry ${i + 1}: ${got.detail}` };
     const key = JSON.stringify(Object.entries(got.entry.pointer).sort(([a], [b]) => a.localeCompare(b)));
-    if (keys.has(key)) return { ok: false, refusal: "bad_entry", detail: `${got.entry.pointer.type} is named twice` };
-    keys.add(key);
+    const before = keys.get(key);
+    if (before !== undefined) return { ok: false, refusal: "bad_entry", detail: `entries ${before} and ${i + 1} read the same pointer; a view reads each once` };
+    keys.set(key, i + 1);
     entries.push(got.entry);
   }
   // A stored line from before faces draws the default; a write without them keeps those in force.

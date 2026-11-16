@@ -1007,7 +1007,10 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
         ? undoView(region, caller?.label ?? null, Date.now(), run)
         : writeView({ region, entries: pointer["entries"], faces: pointer["faces"], blocks: pointer["blocks"], limits: pointer["limits"], reports: pointer["reports"], note: pointer["note"] }, caller?.label ?? null, Date.now(), run);
       if (!write.ok) {
-        return c.json({ resolved: false, success: false, shape: type, refusal: write.refusal, error: `${write.refusal}: ${write.detail}` }, 422);
+        // With the view in force, so a writer that never read it sees what it would replace (a walk
+        // wrote a whole landing from the description's titles, and its retry knew no more).
+        const inForce = (VIEW_REGIONS as readonly unknown[]).includes(region) ? currentView(region as ViewRegion) : null;
+        return c.json({ resolved: false, success: false, shape: type, refusal: write.refusal, error: `${write.refusal}: ${write.detail}`, ...(inForce ? { in_force: unnamePeople({ region: inForce.region, revision: inForce.revision, view: inForce }, null) } : {}) }, 422);
       }
       // `unchanged`: the view asked for was already in force; nothing was written and the revision stands.
       return c.json({ resolved: true, success: true, shape: type, body: { region: write.view.region, revision: write.view.revision, view: write.view, ...(write.unchanged ? { unchanged: true } : {}) } });
