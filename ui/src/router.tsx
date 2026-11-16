@@ -2,8 +2,8 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { Surface } from "./Surface";
 
 /**
- * The surface is the ROOT component, so moving between questions
- * keeps the rail, its scroll position and the question snapshot mounted. The
+ * The surface is the ROOT component, so opening and closing a question
+ * keeps the landing, its scroll position and the question snapshot mounted. The
  * child routes exist only to carry the open item in the URL.
  */
 const rootRoute = createRootRoute({ component: Surface });

@@ -1,11 +1,10 @@
 /**
- * The system's questions, held above the rail and the main pane so both read
- * one accepted snapshot.
- *
- * P3 holds here as it does on the runs board: after first paint, a newer server
- * list is not spliced in — it is offered, and accepted by the reader. Exposure
- * ticks count accepted presentations, so they fire from the list component
- * (see QuestionsList), not from this provider.
+ * The system's questions, held above the box and the landing so both read
+ * one snapshot: the latest read, with the person's own answers recorded on it
+ * as they are sent. No list is drawn from it (the landing's waiting rows are
+ * their own read), so a newer read is taken as it comes: a question that
+ * arrived since first paint opens in place like any other. Exposure ticks fire
+ * from the landing's waiting rows, not from this provider.
  */
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
@@ -39,11 +38,6 @@ interface QuestionsValue {
   readonly groups: readonly QuestionGroup[];
   readonly ranking: Ranking | null;
   readonly waiting: number;
-  /** The server holds content this reader has not accepted. */
-  readonly changed: boolean;
-  /** Increments each time a server snapshot is accepted for display. */
-  readonly acceptedTicks: number;
-  readonly accept: () => Promise<void>;
   readonly recordReceipt: (receipt: ParticipationResponse) => void;
 }
 
@@ -64,26 +58,6 @@ export function kindLabel(kind: string | undefined): string {
   if (known) return known;
   const words = kind.replace(/^gap_/, "").replace(/_/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-/**
- * Rank and `because` are recomputed on every read and move as a consequence of
- * the reader's own answer, and order is not content — so neither may trigger
- * "updates available". A gap status first read as "open" says nothing new
- * either; a gap that closes does.
- */
-export function contentOf(questions: readonly Question[]): string {
-  return JSON.stringify(
-    [...questions]
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map((question) => {
-        const copy: Record<string, unknown> = { ...question };
-        delete copy["rank"];
-        delete copy["because"];
-        if (copy["gapStatus"] === "open") delete copy["gapStatus"];
-        return copy;
-      }),
-  );
 }
 
 function orderQuestions(visible: readonly Question[]): readonly Question[] {
@@ -150,7 +124,6 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
   const [snapshot, setSnapshot] = useState<Question[] | null>(null);
   const [ranking, setRanking] = useState<Ranking | null>(null);
   const [classes, setClasses] = useState<QuestionClasses | null>(null);
-  const [acceptedTicks, setAcceptedTicks] = useState(0);
   // The questions on screen were accepted for one person. When who is looking changes, they are
   // dropped before this render paints, and the next read for the new person is taken as it comes.
   const [shownFor, setShownFor] = useState(who);
@@ -162,23 +135,12 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
   }
 
   useEffect(() => {
-    if (snapshot === null && query.data) {
+    if (query.data) {
       setSnapshot(query.data.questions);
       setRanking(query.data.ranking);
       setClasses(query.data.classes);
-      setAcceptedTicks((n) => n + 1);
     }
-  }, [snapshot, query.data]);
-
-  const accept = useCallback(async () => {
-    const result = await query.refetch();
-    if (result.data && !result.isError) {
-      setSnapshot(result.data.questions);
-      setRanking(result.data.ranking);
-      setClasses(result.data.classes);
-      setAcceptedTicks((n) => n + 1);
-    }
-  }, [query]);
+  }, [query.data]);
 
   const recordReceipt = useCallback(
     (receipt: ParticipationResponse) => {
@@ -216,12 +178,9 @@ export function QuestionsProvider({ children }: { children: ReactNode }): ReactN
       groups: groupQuestions(ordered, classes),
       ranking,
       waiting: waitingCount(visible),
-      changed: snapshot !== null && query.data !== undefined && contentOf(query.data.questions) !== contentOf(visible),
-      acceptedTicks,
-      accept,
       recordReceipt,
     };
-  }, [snapshot, query, ranking, classes, acceptedTicks, accept, recordReceipt]);
+  }, [snapshot, query, ranking, classes, recordReceipt]);
 
   return <QuestionsContext.Provider value={value}>{children}</QuestionsContext.Provider>;
 }

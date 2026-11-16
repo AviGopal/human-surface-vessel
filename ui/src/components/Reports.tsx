@@ -21,10 +21,10 @@
  * An entry's `thread` is read again under each row it draws, bound to that row's id, and drawn
  * as its own entry: a person's ask shows the rows citing it. One level; the rows are its read's.
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { bind, ROW_BINDING, threadsOf, writeLandVerdict, writeOutcome, type ReportAnswer, type ReportPointer, type VerdictReader, type ViewEntry } from "../api/client";
-import { useReport } from "../api/queries";
+import { useRenderPolicy, useReport } from "../api/queries";
 import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
 import { questionRowSubject } from "../state/questions";
@@ -32,6 +32,10 @@ import { useLimits } from "../state/limits";
 import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
 import { askAbout, citesOf } from "../lib/box";
 import { Prose } from "./Prose";
+import { QUESTION_CONTENT_SHAPE, QuestionView } from "./QuestionView";
+import { planFor } from "./Rendered";
+import { fromPanel } from "../lib/content";
+import { reportExposureTick } from "../lib/exposure-reporter";
 import { Diff, relative } from "./ContentRender";
 import { diffSize, heuristicForm, parseDiff } from "../lib/ledger";
 
@@ -408,7 +412,7 @@ function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
 }
 
 /** `sectionStale`: the entry these rows belong to is drawn from a read that failed since; its note covers their threads. */
-type Reading = { declared: ReadonlyMap<string, readonly string[]>; readers: readonly VerdictReader[]; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; sectionStale?: true };
+type Reading = { declared: ReadonlyMap<string, readonly string[]>; readers: readonly VerdictReader[]; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
 
 /**
  * An entry's thread under one row: its read, bound to the row's id, drawn as its own entry.
@@ -521,26 +525,68 @@ function AboutThis({ rowId, words, threads, reading }: { rowId: string; words: s
   );
 }
 
-function Questions({ rows, onOpen }: { rows: readonly unknown[]; onOpen: (id: string) => void }): ReactNode {
+/**
+ * Questions waiting on the person. One opens in place, under its row, with what answers it; the
+ * rest of the landing stays in view. A question opened by a link that is not drawn here (gone
+ * from the list, or among the earlier rows) opens above the list.
+ *
+ * Each row is the measured element for exposure (the retired questions rail's were): a tick is
+ * reported each time a different set of rows is put on screen.
+ */
+function Questions({ rows, open, onOpen, lead = false }: { rows: readonly unknown[]; open: string | null; onOpen: (id: string) => void; lead?: boolean }): ReactNode {
+  const policy = useRenderPolicy({ enabled: false, intervalMs: 0 }).data;
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const ids = rows.map((row) => (typeof row === "object" && row !== null && typeof (row as Record<string, unknown>)["id"] === "string" ? ((row as Record<string, unknown>)["id"] as string) : null));
+  const drawn = ids.join("\n");
+  useEffect(() => {
+    if (listRef.current && rows.length > 0) reportExposureTick(listRef.current, rows.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawn]);
+  const elsewhere = lead && open !== null && !ids.includes(open);
   return (
-    <ul className="sf-landing-list">
-      {rows.map((row, i) => {
-        const id = typeof row === "object" && row !== null && typeof (row as Record<string, unknown>)["id"] === "string" ? ((row as Record<string, unknown>)["id"] as string) : null;
-        // A row here is a question this surface holds, so it is named as the questions rail names it.
-        const name = id ? questionRowSubject(row as Question) || itemName(row) : itemName(row);
-        return (
-          <li key={id ?? i}>
-            {id ? (
-              <button type="button" className="sf-landing-row" onClick={() => onOpen(id)}>
+    <>
+      {elsewhere ? (
+        <div className="sf-question-inplace" data-question-open={open}>
+          <QuestionView questionId={open} />
+        </div>
+      ) : null}
+      <ul className="sf-landing-list" ref={listRef}>
+        {rows.map((row, i) => {
+          const id = ids[i] ?? null;
+          // A row here is a question this surface holds, so it is named by its subject.
+          const name = id ? questionRowSubject(row as Question) || itemName(row) : itemName(row);
+          const isOpen = id !== null && id === open;
+          return (
+            <li key={id ?? i}>
+              {id ? (
+                <>
+                  <button
+                    type="button"
+                    className="sf-landing-row"
+                    aria-expanded={isOpen}
+                    data-solicitation-id={id}
+                    data-exposure-role="list_row"
+                    // The form the open question draws its body in: the form learner's evidence, read off this row at act time.
+                    data-form={planFor(fromPanel(QUESTION_CONTENT_SHAPE, (row as Question).body), policy).form}
+                    data-form-shape={QUESTION_CONTENT_SHAPE}
+                    onClick={() => onOpen(id)}
+                  >
+                    <span className="sf-landing-text">{name}</span>
+                  </button>
+                  {isOpen ? (
+                    <div className="sf-question-inplace" data-question-open={id}>
+                      <QuestionView questionId={id} inPlace />
+                    </div>
+                  ) : null}
+                </>
+              ) : (
                 <span className="sf-landing-text">{name}</span>
-              </button>
-            ) : (
-              <span className="sf-landing-text">{name}</span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }
 
@@ -615,10 +661,10 @@ function Drawn({ entry, answer, reading, quiet = false }: { entry: ViewEntry; an
   // A thread under a row with nothing citing it and no words for that says nothing: an ask the walk made no change for has no line about changes.
   if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} counted={entry.folded === true || quiet} />;
   const draw = (rows: readonly unknown[]): ReactNode =>
-    entry.form === "questions" ? <Questions rows={rows} onOpen={reading.onOpenQuestion} /> : <Rows rows={rows} entry={entry} reading={reading} />;
+    entry.form === "questions" ? <Questions rows={rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} /> : <Rows rows={rows} entry={entry} reading={reading} />;
   return (
     <>
-      {draw(got.rows)}
+      {entry.form === "questions" ? <Questions rows={got.rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} lead /> : draw(got.rows)}
       {got.earlier.length > 0 ? <Earlier count={got.earlier.length} draw={() => draw(got.earlier)} /> : null}
     </>
   );
@@ -776,17 +822,21 @@ export function Entries({
   enabled,
   intervalMs,
   onOpenQuestion,
+  openQuestion = null,
 }: {
   entries: readonly ViewEntry[];
   readers?: readonly VerdictReader[];
   enabled: boolean;
   intervalMs: number;
+  /** Opens a question in place, or closes it when it is the open one. */
   onOpenQuestion: (id: string) => void;
+  /** The question open in place, if any. */
+  openQuestion?: string | null;
 }): ReactNode {
   // Read on the entries' cadence, so a declaration an owner writes later moves what is shown with no reload.
   const declarations = useReport(DECLARATIONS, { enabled, intervalMs }).data;
   const declared = declarations?.ok ? declaredWords(declarations.answer) : new Map<string, readonly string[]>();
-  const reading: Reading = { declared, readers, enabled, intervalMs, onOpenQuestion };
+  const reading: Reading = { declared, readers, enabled, intervalMs, onOpenQuestion, openQuestion };
   const session = useSession();
   const signedOut = session.data !== undefined && session.data.signedIn !== true;
   return (

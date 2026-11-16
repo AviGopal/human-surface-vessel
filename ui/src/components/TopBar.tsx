@@ -65,7 +65,7 @@ export function TopBar({
       // "not now" and "need more", exactly, are the replies offered beside the box.
       const phrase = readReplyPhrase(args.text);
       const outcome = phrase?.outcome ?? "answered";
-      // Recorded on the question, so the questions rail shows it answered.
+      // Recorded on the question, so the question open in place shows it answered.
       const q = args.ctx.question;
       const content = contributionContent({ panelId: q.id, revision: q.revision, askId: null, kind: outcome === "answered" ? "answer" : "dismiss", value: outcome === "answered" ? args.text.trim() : outcome });
       const receipt = await sendContribution({ ...content, response_id: crypto.randomUUID(), ...(phrase ? { classified_by: "box-phrase", classified_phrase: phrase.phrase } : {}) });

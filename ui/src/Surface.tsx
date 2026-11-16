@@ -1,11 +1,12 @@
 /**
- * The surface: an ask bar across the top, a rail listing the questions put to a person, and
- * one main pane showing the open question or, with none open, the landing the view names.
- * The page never scrolls — the rail and the main pane each scroll on their own, and content
- * inside the main pane is never boxed into a scroller of its own.
+ * The surface: an ask bar across the top, and the landing the view names below it. A question
+ * waiting on the person opens in place on the landing, under its row, so what is being worked
+ * on stays in view (interface-as-shapes: asks are answered in their context, through the box).
+ * The page never scrolls — the main pane scrolls on its own, and content inside it is never
+ * boxed into a scroller of its own.
  *
- * What is open is the URL (`/question/:id`), so it survives a reload, can be linked, and the
- * back button means what it should.
+ * Which question is open is the URL (`/question/:id`), so it survives a reload, can be linked,
+ * and the back button means what it should.
  */
 
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -13,8 +14,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useRenderPolicy, useUiView } from "./api/queries";
 import { IssuesDrawer, useInterfaceGaps } from "./components/IssuesDrawer";
-import { QuestionsList } from "./components/QuestionsList";
-import { QuestionView } from "./components/QuestionView";
 import { Landing } from "./components/Landing";
 import { TopBar } from "./components/TopBar";
 import { boxContext } from "./lib/box";
@@ -26,9 +25,10 @@ import { QuestionsProvider, useQuestions } from "./state/questions";
 
 /**
  * The layout this build renders, published for exposure records. Records made
- * under this layout must not be attributed to the earlier "onepage" grid.
+ * under this layout must not be attributed to the earlier "onepage" grid or the
+ * "workbench" grid with its questions rail.
  */
-const PRESENTATION = "workbench";
+const PRESENTATION = "landing";
 
 function Workbench(): ReactNode {
   const { paused, intervalMs } = useLiveControls();
@@ -52,7 +52,7 @@ function Workbench(): ReactNode {
   // Nothing selected: the landing, drawn from its view.
   const landingView = useUiView("landing", { enabled: !paused, intervalMs });
 
-  // The box answers a walk step's question (human_input) open on the questions page, unless the
+  // The box answers a walk step's question (human_input) open in place on the landing, unless the
   // person set it aside. Other questions carry their own forms, so the box stays a new ask there.
   const [setAside, setSetAside] = useState<string | null>(null);
   const open = questionId ? (questions.query.data?.questions.find((q) => q.id === questionId && q.run !== undefined && !q.answered && !q.declined) ?? null) : null;
@@ -60,14 +60,10 @@ function Workbench(): ReactNode {
   const [about, clearAbout] = useAskAbout();
   const context = boxContext(open, open?.title ?? null, setAside, about);
 
-  const narrow = useNarrow();
-  const [railOpen, setRailOpen] = useState(false);
-  const railFolded = narrow && !railOpen;
-  const waitingCount = questions.waiting > 0 ? <span className="sf-count" data-attention="true">{questions.waiting}</span> : null;
-
+  // Opening the open question again closes it.
   const openQuestion = (id: string): void => {
     setIssuesOpen(false);
-    void navigate({ to: "/question/$questionId", params: { questionId: id } });
+    void (id === questionId ? navigate({ to: "/" }) : navigate({ to: "/question/$questionId", params: { questionId: id } }));
   };
 
   return (
@@ -83,54 +79,19 @@ function Workbench(): ReactNode {
         onToggleIssues={() => setIssuesOpen((v) => !v)}
       />
 
-      <nav className="sf-rail" aria-label="Questions" data-folded={railFolded ? "" : undefined}>
-        <h2 className="sf-rail-head">
-          {narrow ? (
-            // On a phone the rail is one line until opened. What waits on the person is listed in the
-            // main pane's "Waiting on you"; the line carries only its count, so nothing is said twice.
-            <button type="button" className="sf-rail-toggle" aria-expanded={!railFolded} aria-controls="sf-rail-list" onClick={() => setRailOpen(railFolded)}>
-              Questions{waitingCount}
-            </button>
-          ) : (
-            <>Questions{waitingCount}</>
-          )}
-        </h2>
-        <div id="sf-rail-list" className="sf-rail-list" hidden={railFolded}>
-          <QuestionsList selectedId={questionId} onSelect={openQuestion} />
-        </div>
-      </nav>
-
       <main className="sf-main">
-        {questionId ? (
-          <QuestionView questionId={questionId} />
-        ) : (
-          <Landing
-            view={landingView.data}
-            viewError={landingView.isError ? landingView.error.message : null}
-            live={!paused}
-            intervalMs={intervalMs}
-            onOpenQuestion={openQuestion}
-          />
-        )}
+        <Landing
+          view={landingView.data}
+          viewError={landingView.isError ? landingView.error.message : null}
+          live={!paused}
+          intervalMs={intervalMs}
+          onOpenQuestion={openQuestion}
+          openQuestion={questionId}
+        />
       </main>
       {issuesOpen ? <IssuesDrawer onClose={closeIssues} /> : null}
     </div>
   );
-}
-
-/** Whether the page is at phone width, the width at which the rail becomes a band (styles.css). */
-const NARROW = "(max-width: 760px)";
-function useNarrow(): boolean {
-  const [narrow, setNarrow] = useState(() => typeof window.matchMedia === "function" && window.matchMedia(NARROW).matches);
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const q = window.matchMedia(NARROW);
-    const on = (): void => setNarrow(q.matches);
-    on();
-    q.addEventListener("change", on);
-    return () => q.removeEventListener("change", on);
-  }, []);
-  return narrow;
 }
 
 export function Surface(): ReactNode {

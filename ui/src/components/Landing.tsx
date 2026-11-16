@@ -8,12 +8,13 @@
  * its mark differs, so a fallback is never silent. The full refusal stays readable in
  * `human_surface:ui_view`.
  *
- * Rows here select what to look at; the only thing sent from this screen is a person's
- * verdict on a row an entry offers it on.
+ * Rows here select what to look at. What is sent from this screen is a person's verdict on a
+ * row an entry offers it on, and an answer to a question opened in place.
  */
 import type { ReactNode } from "react";
 import type { UiViewState } from "../api/client";
 import { Entries } from "./Reports";
+import { QuestionView } from "./QuestionView";
 
 /** The line naming the view in force: which revision, and who wrote it. */
 export function viewLine(view: UiViewState): string {
@@ -32,13 +33,17 @@ export function Landing({
   view,
   viewError,
   onOpenQuestion,
+  openQuestion = null,
   live = true,
   intervalMs = 60_000,
 }: {
   view: UiViewState | undefined;
   /** Why the view could not be read, when it could not. */
   viewError?: string | null;
+  /** Opens a question in place on the landing, or closes it when it is the open one. */
   onOpenQuestion: (id: string) => void;
+  /** The question open in place, if any. */
+  openQuestion?: string | null;
   /** False while the page is paused: entries are not re-read. */
   live?: boolean;
   /** The page's live cadence (the render policy's); entries are re-read no faster than once a minute. */
@@ -52,6 +57,8 @@ export function Landing({
     );
   }
   const passed = notDrawnLine(view);
+  // A view that lists no questions still shows one opened by a link, above its entries.
+  const listsQuestions = view.entries.some((e) => e.form === "questions");
   const about = passed ? "A newer layout for this page was not used" : "About this page's layout";
   return (
     <div className="sf-landing" data-view-id={view.id} data-view-revision={view.revision}>
@@ -70,7 +77,12 @@ export function Landing({
           ) : null}
         </div>
       </details>
-      <Entries entries={view.entries} readers={view.readers} enabled={live} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} />
+      {openQuestion !== null && !listsQuestions ? (
+        <div className="sf-question-inplace" data-question-open={openQuestion}>
+          <QuestionView questionId={openQuestion} />
+        </div>
+      ) : null}
+      <Entries entries={view.entries} readers={view.readers} enabled={live} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} openQuestion={openQuestion} />
     </div>
   );
 }

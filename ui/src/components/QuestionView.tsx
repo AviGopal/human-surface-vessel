@@ -63,7 +63,8 @@ function GapDetail({ gapId }: { gapId: string | null }): ReactNode {
   );
 }
 
-function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
+/** `inPlace`: drawn under its row on the landing, which already names it, so it carries no heading of its own. */
+function QuestionCard({ incoming, inPlace }: { incoming: Question; inPlace: boolean }): ReactNode {
   const { recordReceipt } = useQuestions();
   const [question, setQuestion] = useState(incoming);
   const [text, setText] = useState("");
@@ -110,18 +111,22 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
   const state = stateOf(mutation);
 
   return (
-    <article className="sf-question" aria-labelledby={`${id}-title`}>
-      <header className="sf-view-head">
-        <p className="sf-view-eyebrow">{question.title}</p>
-        <h2 id={`${id}-title`} className="sf-view-title sf-question-subject" title={questionSubject(question)}>
-          {questionSubject(question) || <span className="sf-muted">question text not recorded</span>}
-        </h2>
+    <article className="sf-question" {...(inPlace ? { "aria-label": questionSubject(question) || question.title } : { "aria-labelledby": `${id}-title` })}>
+      {inPlace ? null : (
+        <header className="sf-view-head">
+          <p className="sf-view-eyebrow">{question.title}</p>
+          <h2 id={`${id}-title`} className="sf-view-title sf-question-subject" title={questionSubject(question)}>
+            {questionSubject(question) || <span className="sf-muted">question text not recorded</span>}
+          </h2>
+        </header>
+      )}
+      {gapId || question.answered || question.declined ? (
         <p className="sf-view-facts">
           {gapId ? <span className="sf-mono">{gapId}</span> : null}
           {question.answered ? <span className="sf-chip">answered</span> : null}
           {question.declined ? <span className="sf-chip">declined</span> : null}
         </p>
-      </header>
+      ) : null}
 
       <section className="sf-view-section">
         <QuestionBody question={question} gapId={gapId} />
@@ -271,12 +276,12 @@ function QuestionCard({ incoming }: { incoming: Question }): ReactNode {
   );
 }
 
-export function QuestionView({ questionId }: { questionId: string }): ReactNode {
+export function QuestionView({ questionId, inPlace = false }: { questionId: string; inPlace?: boolean }): ReactNode {
   const { ordered, query } = useQuestions();
   const question = ordered.find((q) => q.id === questionId);
   if (!question) {
     return <p className="sf-main-empty">{query.isPending ? "Loading…" : "This question is no longer listed."}</p>;
   }
   // Keyed so a different question gets a fresh draft and a fresh held revision.
-  return <QuestionCard key={question.id} incoming={question} />;
+  return <QuestionCard key={question.id} incoming={question} inPlace={inPlace} />;
 }

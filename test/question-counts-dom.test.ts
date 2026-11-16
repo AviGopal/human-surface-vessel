@@ -1,6 +1,6 @@
 /**
- * The rail's folded lines carry the read's counts over every open question, not the rows that
- * fitted in the slice; and an entry that drew nothing says why in the producer's words.
+ * An entry that drew nothing says why in the producer's words, its counts the read's over every
+ * open question, not the rows that fitted in the slice.
  *
  * Shapes: one node 11-11. The rail said "No reader 16" while the read counted 282 open questions
  * naming no listed reader (248 more were not in the 50-row slice), and "Waiting on you" said
@@ -38,7 +38,6 @@ const { act } = React;
 const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tanstack/react-query", uiSrc));
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
-const { QuestionsList } = await import("../ui/src/components/QuestionsList");
 const { Entries } = await import("../ui/src/components/Reports");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -62,14 +61,6 @@ async function draw(child: unknown): Promise<HTMLElement> {
 }
 
 describe("counts and empty reasons come from the read", () => {
-  test("must-fail: a folded line counts every open question of its class, and says how many this page holds", async () => {
-    const el = await draw(React.createElement(QuestionsList, { selectedId: null, onSelect: () => {} }));
-    const heads = [...el.querySelectorAll(".sf-qgroup-head")].map((h) => h.textContent);
-    expect(heads).toEqual(["For your information33", "Nothing would read your answer282", "Left blank or unfinished: nothing to answer1"]);
-    const notes = [...el.querySelectorAll(".sf-qgroup-note")].map((n) => n.textContent);
-    expect(notes).toEqual(["2 of them in this page of questions", "1 of them in this page of questions", "none of them in this page of questions"]);
-  });
-
   test("must-fail: an entry that drew no rows gives the producer's reason, not a stock phrase", async () => {
     const { pointer, form, field, title } = DEFAULT_VIEWS.landing.entries[0]!;
     const el = await draw(React.createElement(Entries, { entries: [{ pointer, form, field, title }], enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }));

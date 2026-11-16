@@ -7,7 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Question } from "../ui/src/api/participation";
 import { bodyLead, classifyQuestion } from "../ui/src/lib/questionClass";
-import { contentOf, gapTitle, groupQuestions, questionRowSubject, questionSubject, waitingCount } from "../ui/src/state/questions";
+import { gapTitle, groupQuestions, questionRowSubject, questionSubject, waitingCount } from "../ui/src/state/questions";
 
 function q(id: string, kind: string, body: unknown, extra: Partial<Question> = {}): Question {
   return { id, revision: 1, title: "t", body, createdAt: 0, updatedAt: 0, responses: [], answered: false, declined: false, kind, ...extra };
@@ -78,11 +78,6 @@ describe("the rail", () => {
     const groups = groupQuestions([...all, settled]);
     expect(groups.find((g) => g.label === "About something already closed")?.questions.map((x) => x.id)).toEqual(["needs-human-closed-gap"]);
     expect(groups.find((g) => g.label === "About something already closed")?.folded).toBe(true);
-  });
-
-  test("a gap first read as open is not a change to offer; a gap that closed is", () => {
-    expect(contentOf([{ ...escalation, gapStatus: "open" }])).toBe(contentOf([escalation]));
-    expect(contentOf([{ ...escalation, gapStatus: "closed" }])).not.toBe(contentOf([escalation]));
   });
 });
 
