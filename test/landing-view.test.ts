@@ -126,7 +126,9 @@ describe("the landing drawn from its view", () => {
     expect(el.querySelector("[data-report=system_load_report] h2")!.textContent).toBe("system load report");
     const root = el.querySelector(".sf-landing")!;
     expect(root.getAttribute("data-view-id")).toBe("landing@3");
-    expect(el.querySelector("[data-view-line]")!.textContent).toBe("Showing view landing@3, written by operator:qa.");
+    // Plain words say which layout; the view's id and writer are its record, as written.
+    expect(el.querySelector("[data-view-line]")!.textContent).toBe("A rearranged layout.");
+    expect(el.querySelector("[data-view-record]")!.textContent).toBe("landing@3 · operator:qa");
   });
 
   test("must-fail: a view naming a pointer this build has never seen draws it, with no rebuild", async () => {
@@ -139,8 +141,10 @@ describe("the landing drawn from its view", () => {
       id: "landing@0",
       notDrawn: { id: "landing@2", refusal: "unknown_field", detail: "blocks: a view is {region, entries: [{pointer, form, ...}]}" },
     }) });
-    expect(el.querySelector("[data-view-line]")!.textContent).toBe("Showing the default view (landing@0).");
-    expect(el.querySelector("[data-view-not-drawn]")!.textContent).toContain("View landing@2 was not drawn: unknown field (blocks:");
+    expect(el.querySelector("[data-view-line]")!.textContent).toBe("My usual layout.");
+    expect(el.querySelector("[data-view-record]")!.textContent).toBe("landing@0");
+    expect(el.querySelector("[data-view-not-drawn]")!.textContent).toBe("A newer layout was not used.");
+    expect(el.querySelector("[data-view-not-drawn-record]")!.textContent).toBe("landing@2 · unknown_field: blocks: a view is {region, entries: [{pointer, form, ...}]}");
   });
 
   test("must-fail: which view is drawn is a mark opened by hover or tap, not a line; a fallback's mark differs (R.3)", async () => {
@@ -153,7 +157,7 @@ describe("the landing drawn from its view", () => {
     expect(mark.hasAttribute("data-fell-back")).toBe(true);
     const summary = mark.querySelector("summary")!;
     expect(summary.getAttribute("aria-label")).toBe("A newer layout for this page was not used");
-    expect(summary.getAttribute("title")).toContain("View landing@2 was not drawn");
+    expect(summary.getAttribute("title")).toBe("My usual layout. A newer layout was not used.");
     expect(mark.querySelector("[data-view-line]")).not.toBeNull();
     expect(mark.querySelector("[data-view-not-drawn]")).not.toBeNull();
     // What is in view with the mark closed names no view, refusal or field.

@@ -63,7 +63,7 @@ describe("the first screen follows the landing's view", () => {
     const main = el.querySelector("main")!;
     const entries = [...main.querySelectorAll("[data-report]")].map((b) => b.getAttribute("data-report"));
     expect(entries).toEqual(["system_load_report", "uiQuestion"]);
-    expect(main.textContent).toContain("Showing view landing@4.");
+    expect(main.querySelector("[data-view-record]")!.textContent).toContain("landing@4");
     expect(main.querySelector("[data-report=uiQuestion]")?.textContent).toContain("Waiting on you");
     expect(main.querySelector("[data-report=uiQuestion] button")?.textContent).toContain("Reach gap docs align tick");
     expect(main.querySelector("[data-report=system_load_report]")?.textContent).toContain("2.61");

@@ -5,8 +5,9 @@
  * is the only list of what to draw. Which view is in force, and a newer view that was passed
  * over with its reason, is a mark beside the landing, opened by hover or tap: mechanism, so
  * not a line of the page (surface-acts-on-shapes-present R.3). A passed-over view still shows:
- * its mark differs, so a fallback is never silent. The full refusal stays readable in
- * `human_surface:ui_view`.
+ * its mark differs, so a fallback is never silent. The mark says which layout in plain words,
+ * naming no part of the system (the USER 11-16, by research); under them, the view's id, writer
+ * and any refusal as records name them. The full refusal stays readable in `human_surface:ui_view`.
  *
  * Rows here select what to look at. What is sent from this screen is a person's verdict on a
  * row an entry offers it on, and an answer to a question opened in place.
@@ -16,17 +17,25 @@ import type { UiViewState } from "../api/client";
 import { Entries } from "./Reports";
 import { QuestionView } from "./QuestionView";
 
-/** The line naming the view in force: which revision, and who wrote it. */
+/** Which layout is in force, in plain words: the usual one, or one rearranged since. */
 export function viewLine(view: UiViewState): string {
-  if (view.revision === 0) return `Showing the default view (${view.id}).`;
-  return `Showing view ${view.id}${view.writtenBy ? `, written by ${view.writtenBy}` : ""}.`;
+  return view.revision === 0 ? "My usual layout." : "A rearranged layout.";
 }
 
-/** Why a newer view is not drawn, in words. */
+/** The view in force as records name it: its id and its writer, as written. */
+export function viewRecord(view: UiViewState): string {
+  return view.writtenBy ? `${view.id} · ${view.writtenBy}` : view.id;
+}
+
+/** That a newer view is not drawn, in plain words; its id and refusal as written are its record. */
 export function notDrawnLine(view: UiViewState): string | null {
+  return view.notDrawn ? "A newer layout was not used." : null;
+}
+
+/** The passed-over view as records name it: its id, refusal and detail, as written. */
+export function notDrawnRecord(view: UiViewState): string | null {
   const n = view.notDrawn;
-  if (!n) return null;
-  return `View ${n.id} was not drawn: ${n.refusal.replace(/_/g, " ")} (${n.detail}).`;
+  return n ? `${n.id} · ${n.refusal}: ${n.detail}` : null;
 }
 
 export function Landing({
@@ -70,10 +79,18 @@ export function Landing({
           <p className="sf-report-note" data-view-line="">
             {viewLine(view)}
           </p>
+          <p className="sf-report-note sf-view-record" data-view-record="">
+            {viewRecord(view)}
+          </p>
           {passed ? (
-            <p className="sf-report-note" data-view-not-drawn="">
-              {passed}
-            </p>
+            <>
+              <p className="sf-report-note" data-view-not-drawn="">
+                {passed}
+              </p>
+              <p className="sf-report-note sf-view-record" data-view-not-drawn-record="">
+                {notDrawnRecord(view)}
+              </p>
+            </>
           ) : null}
         </div>
       </details>
