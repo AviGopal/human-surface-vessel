@@ -423,7 +423,7 @@ function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
 }
 
 /** `sectionStale`: the entry these rows belong to is drawn from a read that failed since; its note covers their threads. */
-type Reading = { declared: ReadonlyMap<string, readonly string[]>; marks: ReadonlyMap<string, readonly MarkBinding[]>; readers: readonly VerdictReader[]; faces: Readonly<Record<string, string>>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
+export type Reading = { declared: ReadonlyMap<string, readonly string[]>; marks: ReadonlyMap<string, readonly MarkBinding[]>; readers: readonly VerdictReader[]; faces: Readonly<Record<string, string>>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
 
 /**
  * An entry's thread under one row: its read, bound to the row's id, drawn as its own entry.
@@ -891,7 +891,8 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
  * rows it cannot draw. One entry that throws falls back alone: drawn again as plain rows, or, if
  * those throw too, as its title alone. The other entries, the box and the sign-in stand.
  */
-class Fallback extends Component<{ what: string; fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+/** Falls back once its child throws, and draws the child again when what it draws from changes (`resetKey`). */
+class Fallback extends Component<{ what: string; resetKey: string; fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
   override state = { failed: false };
   static getDerivedStateFromError(): { failed: boolean } {
     return { failed: true };
@@ -899,12 +900,21 @@ class Fallback extends Component<{ what: string; fallback: ReactNode; children: 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error(`[entries] ${this.props.what} threw; falling back`, error, info.componentStack);
   }
+  override componentDidUpdate(prev: { resetKey: string }): void {
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false });
+  }
   override render(): ReactNode {
     return this.state.failed ? this.props.fallback : this.props.children;
   }
 }
 
-function EntryBoundary({ entry, reading }: { entry: ViewEntry; reading: Reading }): ReactNode {
+/** How an entry is drawn; a test may draw it otherwise. */
+export type DrawEntry = (props: { entry: ViewEntry; reading: Reading }) => ReactNode;
+
+export function EntryBoundary({ entry, reading, draw: Draw = Entry }: { entry: ViewEntry; reading: Reading; draw?: DrawEntry }): ReactNode {
+  // The entry's read is the one it draws (the same query), so new rows, or a changed entry, draw it again in its own form.
+  const read = useReport(entry.pointer, { enabled: reading.enabled, intervalMs: reading.intervalMs });
+  const resetKey = `${JSON.stringify(entry)}@${read.dataUpdatedAt}`;
   const title = typeof entry.title === "string" ? entry.title : reportTitle(String(entry.pointer.type));
   const what = `entry ${JSON.stringify(entry.pointer)}`;
   const titleAlone = (
@@ -914,15 +924,15 @@ function EntryBoundary({ entry, reading }: { entry: ViewEntry; reading: Reading 
     </section>
   );
   const asRows = (
-    <Fallback what={`${what} as rows`} fallback={titleAlone}>
+    <Fallback what={`${what} as rows`} resetKey={resetKey} fallback={titleAlone}>
       <div className="sf-entry-fallback" data-entry-fallback="rows">
-        <Entry entry={{ ...entry, form: "rows" }} reading={reading} />
+        <Draw entry={{ ...entry, form: "rows" }} reading={reading} />
       </div>
     </Fallback>
   );
   return (
-    <Fallback what={`${what} (form ${entry.form})`} fallback={asRows}>
-      <Entry entry={entry} reading={reading} />
+    <Fallback what={`${what} (form ${entry.form})`} resetKey={resetKey} fallback={asRows}>
+      <Draw entry={entry} reading={reading} />
     </Fallback>
   );
 }
