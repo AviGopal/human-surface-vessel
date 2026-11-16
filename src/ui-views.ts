@@ -271,7 +271,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
   return {
     uiView_write:
       `writes the view of a human surface region (${names}): {region, entries, faces?, note?}. ${entry}. ` +
-      `faces is {role: ${FACES.join(" | ")}} (1 to ${MAX_FACES} roles), the face a row's words are drawn in by the row's role as records stamps it; a role not named draws in the page's face; a value drawn with its field's name is always mono; a write without faces keeps ${faceLine(DEFAULT_FACES)}. ${defaults}. ` +
+      `faces is {role: ${FACES.join(" | ")}} (1 to ${MAX_FACES} roles), the face a row's words are drawn in by the row's role as records stamps it; a role not named draws in the page's face; a value drawn with its field's name is always mono; a write without faces keeps the faces in force (by default ${faceLine(DEFAULT_FACES)}). ${defaults}. ` +
       `a write naming the view already in force succeeds as unchanged and writes no revision; ` +
       `undo restores the view in force before the current one; read back in human_surface:ui_view`,
     "human_surface:ui_view":
@@ -573,9 +573,9 @@ function pointerOf(r: unknown): { pointer: ReportPointer } | { detail: string } 
 
 type Checked = { ok: true; entries: readonly ViewEntry[]; faces: Faces } | { ok: false; refusal: ViewRefusal; detail: string };
 
-/** The faces as written, or why they are not; none written keeps the region's default. */
-function facesOf(f: unknown, region: ViewRegion): { faces: Faces } | { detail: string } {
-  if (f === undefined) return { faces: DEFAULT_VIEWS[region].faces };
+/** The faces as written, or why they are not; none written keeps `kept`, the faces in force. */
+function facesOf(f: unknown, kept: Faces): { faces: Faces } | { detail: string } {
+  if (f === undefined) return { faces: kept };
   const named = typeof f === "object" && f !== null && !Array.isArray(f) ? Object.entries(f as Record<string, unknown>) : [];
   const ok = named.length >= 1 && named.length <= MAX_FACES && named.every(([k, v]) => ROLE_NAME.test(k) && (FACES as readonly unknown[]).includes(v));
   if (!ok) return { detail: `faces: 1 to ${MAX_FACES} {role: ${FACES.join(" | ")}}` };
@@ -586,7 +586,7 @@ function faceLine(f: Faces): string {
   return Object.entries(f).map(([r, v]) => `${r} ${v}`).join(", ");
 }
 
-function validate(input: { region: unknown; entries: unknown; faces?: unknown; blocks?: unknown; limits?: unknown; reports?: unknown }): Checked {
+function validate(input: { region: unknown; entries: unknown; faces?: unknown; blocks?: unknown; limits?: unknown; reports?: unknown }, kept?: Faces): Checked {
   if (!isRegion(input.region)) return { ok: false, refusal: "unknown_region", detail: `regions: ${VIEW_REGIONS.join(", ")}` };
   // A view in the earlier form is refused by name, so its writer learns the form in force.
   for (const old of ["blocks", "limits", "reports"] as const) {
@@ -604,7 +604,8 @@ function validate(input: { region: unknown; entries: unknown; faces?: unknown; b
     keys.add(key);
     entries.push(got.entry);
   }
-  const faces = facesOf(input.faces, input.region);
+  // A stored line from before faces draws the default; a write without them keeps those in force.
+  const faces = facesOf(input.faces, kept ?? DEFAULT_VIEWS[input.region].faces);
   if ("detail" in faces) return { ok: false, refusal: "bad_entry", detail: faces.detail };
   return { ok: true, entries, faces: faces.faces };
 }
@@ -663,7 +664,8 @@ export function writeView(
   run: ViewRun | null = null,
 ): ViewWrite {
   load();
-  const checked = validate(input);
+  const inForce = isRegion(input.region) ? currentView(input.region) : null;
+  const checked = validate(input, inForce?.faces);
   if (!checked.ok) return { ok: false, refusal: checked.refusal, detail: checked.detail };
   const region = input.region as ViewRegion;
   // A view identical to the one in force changes nothing on screen, so it is not a revision:

@@ -38,6 +38,13 @@ describe("the write", () => {
     expect(undoView("landing", null)).toMatchObject({ ok: true, view: { faces: { person: "mono" } } });
   });
 
+  test("must-fail: a write without faces keeps the faces in force, so changing entries does not undo a faces change", () => {
+    writeView({ region: "landing", entries: ENTRIES, faces: { person: "mono" } }, null);
+    const more = [...ENTRIES, { pointer: { type: "record_read", shape: "failure" }, form: "rows" }];
+    expect(writeView({ region: "landing", entries: more }, null)).toMatchObject({ ok: true, view: { faces: { person: "mono" } } });
+    expect(currentView("landing").faces).toEqual({ person: "mono" });
+  });
+
   test("must-fail: faces other than serif, sans and mono, or keyed by anything but a role name, are refused", () => {
     for (const faces of [{ person: "comic" }, { "Person!": "serif" }, {}, ["serif"], "serif"]) {
       const got = writeView({ region: "landing", entries: ENTRIES, faces }, null);
