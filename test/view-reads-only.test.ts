@@ -13,6 +13,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { forgetViews } from "./setup.ts";
 import { REGISTRATION_PAYLOAD } from "../src/discovery-registration.ts";
+import { SESSION_RESOLVES } from "../src/routes/proxy.ts";
 import { currentView, resetViewsForTest, VIEW_READS, viewShapeDescriptions, writeView } from "../src/ui-views.ts";
 
 beforeEach(forgetViews);
@@ -50,6 +51,12 @@ describe("a view names reads only", () => {
       expect(v.revision).toBe(0);
       expect(v.notDrawn).toMatchObject({ id: `landing@${i + 1}`, refusal: "bad_entry" });
     }
+  });
+
+  test("must-fail: the lists are exactly these: a view reads records or the questions, a session also writes the person's own rows", () => {
+    // Exact sets, not names that must be absent: any name added to either list is a change this test sees.
+    expect([...VIEW_READS]).toEqual(["record_read", "uiQuestion"]);
+    expect([...SESSION_RESOLVES].sort()).toEqual(["record_read", "record_write", "uiQuestion"]);
   });
 
   test("the declared inputs and the description name the same list, and every default entry is on it", () => {
