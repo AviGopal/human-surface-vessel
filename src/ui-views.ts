@@ -252,6 +252,61 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
   };
 }
 
+/**
+ * The pointer fields `uiView_write` reads, as JSON Schema, told to discovery as the shape's inputs
+ * so a producer that builds the pointer (the walk's request) sees them when it writes (law 8): a
+ * shape with no declared inputs is left out of what that producer reads. Generated from the same
+ * constants the write is checked against; the rules that join fields (judge needs rows, strip
+ * needs folded, a thread's pointer names "$row") are in the description and in the refusal a write
+ * gets back.
+ */
+export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown>> {
+  const plain = { type: ["string", "number", "boolean"] };
+  const where = { type: "object", minProperties: 1, maxProperties: MAX_WHERE, propertyNames: { pattern: FIELD_NAME.source }, additionalProperties: plain, description: "records' where: equality on a row's fields" };
+  const pointer = {
+    type: "object",
+    required: ["type"],
+    properties: { type: { type: "string", pattern: SHAPE_NAME.source, description: "the shape read; a view only reads, never a _write shape" }, where },
+    additionalProperties: plain,
+  };
+  const field = { type: "string", pattern: FIELD_NAME.source };
+  const entry = (thread: Record<string, unknown> | null): Record<string, unknown> => ({
+    type: "object",
+    required: ["pointer", "form"],
+    additionalProperties: false,
+    properties: {
+      pointer,
+      form: { enum: [...ENTRY_FORMS] },
+      title: { type: "string", minLength: 1, maxLength: 80 },
+      field,
+      show: { type: "integer", minimum: 1, maximum: MAX_SHOW },
+      judge: { enum: [...JUDGE_KINDS] },
+      empty: { type: "string", minLength: 1, maxLength: 160 },
+      note: { type: "string", minLength: 1, maxLength: 120 },
+      words: { type: "array", minItems: 1, maxItems: MAX_WORDS, uniqueItems: true, items: field },
+      newest: { const: true },
+      folded: { const: true },
+      strip: { type: "object", required: ["hours"], additionalProperties: false, properties: { hours: { type: "integer", minimum: 1, maximum: MAX_STRIP_HOURS } } },
+      graded: { type: "object", required: ["pointer"], additionalProperties: false, properties: { pointer } },
+      about: { const: true },
+      ...(thread ? { thread } : {}),
+    },
+  });
+  const under = entry(null);
+  return {
+    uiView_write: {
+      type: "object",
+      required: ["region"],
+      properties: {
+        region: { enum: [...VIEW_REGIONS] },
+        entries: { type: "array", minItems: 1, maxItems: MAX_ENTRIES, items: entry({ anyOf: [under, { type: "array", minItems: 1, maxItems: MAX_THREADS, items: under }] }), description: "required unless undo" },
+        note: { type: "string", maxLength: 500 },
+        undo: { const: true, description: "restore the view in force before the current one" },
+      },
+    },
+  };
+}
+
 /** Why a write stored nothing. Closed, so the writer can act on it without parsing prose. */
 export type ViewRefusal = "unknown_region" | "unknown_field" | "bad_entry" | "nothing_to_undo";
 

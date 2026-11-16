@@ -28,7 +28,7 @@ import {
   VESSEL_ID,
   VESSEL_NAME,
 } from "./config.ts";
-import { viewShapeDescriptions } from "./ui-views.ts";
+import { viewShapeDescriptions, viewShapeInputs } from "./ui-views.ts";
 
 const REREGISTER_INTERVAL_MS = 60_000;
 
@@ -41,6 +41,9 @@ export const REGISTRATION_PAYLOAD = {
   // Per-shape descriptions goal recall matches against, each derived from the contract
   // that serves the shape; a shape with none here is described by discovery's own tick.
   shape_descriptions: viewShapeDescriptions(),
+  // The pointer fields a caller fills, so a producer that builds a pointer (the walk's request)
+  // sees uiView_write and its vocabulary when it writes; a shape with none is left out of that read.
+  shape_inputs: viewShapeInputs(),
   resolve_endpoint: `${SELF_ENDPOINT}${RESOLVE_PATH}`,
   resolve_request_format: "pointer",
   auth_scheme: "ApiKey",
