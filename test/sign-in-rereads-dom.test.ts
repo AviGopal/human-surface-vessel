@@ -72,7 +72,7 @@ const setValue = (input: HTMLInputElement, value: string) => {
   Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 };
-const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What people asked")!;
+const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Asked of me")!;
 
 async function mount(): Promise<HTMLElement> {
   const el = document.createElement("div");

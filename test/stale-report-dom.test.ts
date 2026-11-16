@@ -57,7 +57,7 @@ const settle = async () => {
   for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 };
 
-const ASKS = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", words: ["what"], title: "What people asked" };
+const ASKS = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", words: ["what"], title: "Asked of me" };
 
 async function mount(entries: unknown[] = [ASKS]): Promise<{ el: HTMLElement; reread: () => Promise<void> }> {
   const el = document.createElement("div");

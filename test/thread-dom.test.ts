@@ -74,7 +74,7 @@ function inView(node: Element): string {
   copy.querySelectorAll("details:not([open]) > :not(summary)").forEach((n) => n.remove());
   return copy.textContent ?? "";
 }
-const asked = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What people asked")!;
+const asked = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Asked of me")!;
 const askRow = (el: HTMLElement, id: string): Element => el.querySelector(`.sf-row[data-row="${id}"]`)!;
 const threadOf = (el: HTMLElement, id: string): Element => [...askRow(el, id).children].find((c) => c.matches(`.sf-thread[data-thread-of="${id}"]`))!;
 

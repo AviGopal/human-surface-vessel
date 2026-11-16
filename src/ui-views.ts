@@ -204,14 +204,14 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[]; 
       // claim; the newest three are drawn. Records cannot yet say which are held for a person (the hold is
       // in each row's meta), so none is called held. Nothing on the page explains Right or Wrong: an
       // empty entry is its title and a count (the USER: no words on the interface to explain it).
-      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Failing checks" },
+      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Problems I found" },
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
         // Three, so the folded reads under the asks start on the first screen; the rest are "N earlier".
         show: 3,
         newest: true,
-        title: "What people asked",
+        title: "Asked of me",
         words: ["what"],
         // Each ask offers to set the box to a new ask about it, citing it and its answer.
         about: true,
@@ -224,14 +224,14 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[]; 
           // made for, the grader's verdict closed until the person's. Where the landing stands is in
           // what the walk did (its landing calls), not a second read here.
           { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "gitDiff", where: { role: "walk" } }, form: "rows", show: 1, newest: true, words: ["repo", "diff"], judge: "land", graded: LAND_GRADES },
-          { pointer: { type: "record_read", root: ROW_BINDING, calls: "all", output: false }, form: "rows", show: 12, words: ["type", "state"], title: "What the walk did", folded: true },
+          { pointer: { type: "record_read", root: ROW_BINDING, calls: "all", output: false }, form: "rows", show: 12, words: ["type", "state"], title: "What I did", folded: true },
         ],
       },
       // The raw reads, folded and counted under the asks. A line of how the system is doing comes
       // back only with a live writer of what it shows: a read nothing writes is a fossil.
-      { pointer: { type: "record_read", shape: "answer", where: { role: "described" } }, form: "rows", show: 10, newest: true, judge: "outcome", graded: WALK_GRADES, title: "What the walk answered", words: ["text"], folded: true, strip: DAY },
-      { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, newest: true, title: "What failed", folded: true, strip: DAY },
-      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "Verdicts and outcomes", words: ["r"], folded: true, strip: DAY },
+      { pointer: { type: "record_read", shape: "answer", where: { role: "described" } }, form: "rows", show: 10, newest: true, judge: "outcome", graded: WALK_GRADES, title: "My answers", words: ["text"], folded: true, strip: DAY },
+      { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 10, newest: true, title: "What went wrong", folded: true, strip: DAY },
+      { pointer: { type: "record_read", shape: "outcome" }, form: "rows", show: 10, newest: true, title: "How it was judged", words: ["r"], folded: true, strip: DAY },
     ],
   },
 };

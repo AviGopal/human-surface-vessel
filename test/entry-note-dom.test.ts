@@ -45,7 +45,7 @@ beforeEach(() => {
 const settle = async () => {
   for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 };
-const failing = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Failing checks")!;
+const failing = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Problems I found")!;
 async function mount(entries: unknown[]): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);
@@ -65,7 +65,7 @@ describe("an entry's note", () => {
     const noted = { ...failing, note: "Held until a person rules." };
     const el = await mount([noted]);
     const section = el.querySelector("section.sf-report")!;
-    expect(section.querySelector("h2")!.textContent).toBe("Failing checks");
+    expect(section.querySelector("h2")!.textContent).toBe("Problems I found");
     const note = section.querySelector("[data-note]")!;
     expect(note.textContent).toBe(noted.note);
     expect(note.previousElementSibling!.tagName).toBe("H2");

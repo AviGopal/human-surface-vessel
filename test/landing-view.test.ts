@@ -118,11 +118,11 @@ describe("the landing drawn from its view", () => {
 
   test("must-fail: entries are drawn in the view's order, titled by the view, and the view in force is named", async () => {
     const el = await mount({ view: view([
-      { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", title: "What people asked" },
+      { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", title: "Asked of me" },
       { pointer: { type: "system_load_report" }, form: "fields" },
     ], 3, { writtenBy: "operator:qa" }) });
     expect(drawn(el)).toEqual(["record_read", "system_load_report"]);
-    expect(el.querySelector("[data-report=record_read] h2")!.textContent).toBe("What people asked");
+    expect(el.querySelector("[data-report=record_read] h2")!.textContent).toBe("Asked of me");
     expect(el.querySelector("[data-report=system_load_report] h2")!.textContent).toBe("system load report");
     const root = el.querySelector(".sf-landing")!;
     expect(root.getAttribute("data-view-id")).toBe("landing@3");

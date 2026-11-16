@@ -57,7 +57,7 @@ function inView(node: Element): string {
   copy.querySelectorAll("details:not([open]) > :not(summary)").forEach((n) => n.remove());
   return copy.textContent ?? "";
 }
-const failed = { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 3, title: "What failed" };
+const failed = { pointer: { type: "record_read", shape: "failure" }, form: "rows", show: 3, title: "What went wrong" };
 
 describe("a folded entry is closed and counted", () => {
   test("must-fail: drawn closed, its summary the title and the count of every row the read holds", async () => {
@@ -65,7 +65,7 @@ describe("a folded entry is closed and counted", () => {
     const fold = el.querySelector("details.sf-report-folded")!;
     expect(fold).not.toBeNull();
     expect(fold.hasAttribute("open")).toBe(false);
-    expect(fold.querySelector("summary")!.textContent).toBe("What failed12");
+    expect(fold.querySelector("summary")!.textContent).toBe("What went wrong12");
     expect(fold.querySelector(".sf-report-count")!.getAttribute("data-count")).toBe("12");
     expect(inView(el)).not.toContain("9 earlier");
   });

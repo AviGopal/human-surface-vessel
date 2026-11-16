@@ -52,7 +52,7 @@ afterAll(async () => {
 const settle = async () => {
   for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 };
-const asks = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", title: "What people asked", words: ["what"] };
+const asks = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", title: "Asked of me", words: ["what"] };
 async function mount(): Promise<HTMLElement> {
   const el = document.createElement("div");
   document.body.appendChild(el);

@@ -203,7 +203,7 @@ describe("the view contract", () => {
   });
 
   test("the default view's asks declare it, so the field has a reader from the start", () => {
-    const listed = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What people asked");
+    const listed = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Asked of me");
     expect(listed?.about).toBe(true);
   });
 });

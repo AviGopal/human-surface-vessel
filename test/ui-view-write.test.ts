@@ -19,7 +19,7 @@ import { REGISTRATION_PAYLOAD } from "../src/discovery-registration.ts";
 import { currentView, resetViewsForTest, viewShapeDescriptions } from "../src/ui-views.ts";
 
 const load = { pointer: { type: "record_read", shape: "system_load_report" }, form: "fields" };
-const asked = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", show: 10, title: "What people asked" };
+const asked = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", show: 10, title: "Asked of me" };
 
 async function write(pointer: Record<string, unknown>, auth = true) {
   const res = await impulsesRouter.request("/v2/impulses/resolve", {
@@ -52,7 +52,7 @@ describe("uiView_write", () => {
       ["record_read", "outcome"],
     ]);
     expect(r.json.entries.map((e: any) => e.folded === true)).toEqual([false, false, false, true, true, true]);
-    expect(r.json.entries[2]).toMatchObject({ newest: true, thread: [{ newest: true, judge: "outcome" }, { pointer: { refs_to: "$row", shape: "gitDiff" }, show: 1, newest: true, judge: "land", graded: { pointer: { refs_to: "$row", shape: "land_verdict", where: { role: "described" } } } }, { pointer: { root: "$row", calls: "all" }, title: "What the walk did", folded: true }] });
+    expect(r.json.entries[2]).toMatchObject({ newest: true, thread: [{ newest: true, judge: "outcome" }, { pointer: { refs_to: "$row", shape: "gitDiff" }, show: 1, newest: true, judge: "land", graded: { pointer: { refs_to: "$row", shape: "land_verdict", where: { role: "described" } } } }, { pointer: { root: "$row", calls: "all" }, title: "What I did", folded: true }] });
   });
 
   test("must-fail: a valid view is stored, advances the revision, names its writer, and the page reads it", async () => {
@@ -203,7 +203,7 @@ describe("uiView_write", () => {
   });
 
   test("must-fail: an entry is stored as written, and only its pointer is a pointer", async () => {
-    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "What the walk answered", empty: "The walk has answered nothing yet.", words: ["text"], graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } }, thread: { pointer: { type: "record_read", refs_to: "$row" }, form: "rows", show: 2, newest: true, judge: "outcome", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } }, newest: true, folded: true };
+    const entry = { pointer: { type: "record_read", shape: "answer" }, form: "rows", judge: "outcome", show: 10, title: "My answers", empty: "The walk has answered nothing yet.", words: ["text"], graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } }, thread: { pointer: { type: "record_read", refs_to: "$row" }, form: "rows", show: 2, newest: true, judge: "outcome", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } }, newest: true, folded: true };
     const w = await write({ region: "landing", entries: [entry, load] });
     expect(w.json.body.view.entries).toEqual([entry, load]);
   });
@@ -295,7 +295,7 @@ describe("human_surface:ui_view {region}: the view a writer of views reads befor
 describe("a refused view names the entry it is about, and carries the view in force", () => {
   test("must-fail: two entries reading the same pointer are named by place (node1 11-16: a walk's first view)", async () => {
     const same = { pointer: { type: "record_read", shape: "world_changed", where: { id: "c".repeat(64) } }, form: "fields" };
-    const w = await write({ region: "landing", entries: [load, { ...same, title: "What failed" }, { ...same, title: "What people asked" }] });
+    const w = await write({ region: "landing", entries: [load, { ...same, title: "What went wrong" }, { ...same, title: "Asked of me" }] });
     expect(w.status).toBe(422);
     expect(w.json.error).toContain("entries 2 and 3 read the same pointer");
   });

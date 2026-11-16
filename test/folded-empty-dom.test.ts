@@ -41,7 +41,7 @@ beforeEach(() => {
 const settle = async () => {
   for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 };
-const failed = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What failed")!;
+const failed = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What went wrong")!;
 
 async function mount(entry: unknown): Promise<HTMLElement> {
   const el = document.createElement("div");

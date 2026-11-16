@@ -68,8 +68,8 @@ async function mount(entries: unknown[]): Promise<HTMLElement> {
   await settle();
   return el;
 }
-const failed = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What failed")!;
-const summary = (el: HTMLElement): Element => el.querySelector('[aria-label="What failed"] > summary')!;
+const failed = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What went wrong")!;
+const summary = (el: HTMLElement): Element => el.querySelector('[aria-label="What went wrong"] > summary')!;
 const bars = (el: HTMLElement): HTMLElement[] => [...summary(el).querySelectorAll(".sf-strip-bar")] as HTMLElement[];
 /** A bar's height as a share of its strip, and whether it is held off flat. */
 const pct = (b: HTMLElement): number => Number(b.style.height.replace("%", ""));
@@ -87,7 +87,7 @@ async function writeView(entries: unknown[]) {
 describe("a folded read draws when its rows came", () => {
   test("must-fail (a): the three default folded reads declare a 24-hour strip", () => {
     const folded = DEFAULT_VIEWS.landing.entries.filter((e) => e.folded);
-    expect(folded.map((e) => e.title)).toEqual(["What the walk answered", "What failed", "Verdicts and outcomes"]);
+    expect(folded.map((e) => e.title)).toEqual(["My answers", "What went wrong", "How it was judged"]);
     expect(folded.map((e) => e.strip)).toEqual([{ hours: 24 }, { hours: 24 }, { hours: 24 }]);
   });
 
@@ -128,7 +128,7 @@ describe("a folded read draws when its rows came", () => {
     // The strip's ends are named for a sighted reader.
     expect([...summary(el).querySelectorAll(".sf-strip-axis > span")].map((s) => s.textContent)).toEqual(["24 h ago", "now"]);
     // The count flows with the title's words, so a wrapped title keeps it after its last word.
-    expect(summary(el).querySelector(".sf-report-name")!.textContent).toBe("What failed9 in all");
+    expect(summary(el).querySelector(".sf-report-name")!.textContent).toBe("What went wrong9 in all");
     expect(bars(el)[20]!.getAttribute("title")).toBe("1 PM: 4");
     expect(bars(el)[23]!.getAttribute("title")).toBe("4 PM: 2");
     const text = summary(el).textContent! + [...summary(el).querySelectorAll("[title],[aria-label]")].map((n) => `${n.getAttribute("title")} ${n.getAttribute("aria-label")}`).join(" ");
@@ -136,7 +136,7 @@ describe("a folded read draws when its rows came", () => {
   });
 
   test("must-fail (e): strip on an open entry, or hours outside 1..168, is refused by name", async () => {
-    const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What people asked")!;
+    const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Asked of me")!;
     for (const [entry, said] of [
       [{ ...asks, strip: { hours: 24 } }, "strip needs folded"],
       [{ ...failed, strip: { hours: 0 } }, "strip: {hours: 1..168}"],
@@ -178,7 +178,7 @@ describe("controls", () => {
 
   test("the fold still opens to its rows", async () => {
     const el = await mount([failed]);
-    const fold = el.querySelector('[aria-label="What failed"]') as HTMLDetailsElement;
+    const fold = el.querySelector('[aria-label="What went wrong"]') as HTMLDetailsElement;
     expect(fold.open).toBe(false);
     expect(fold.querySelectorAll(".sf-row").length).toBe(9);
   });

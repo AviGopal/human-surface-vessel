@@ -77,8 +77,8 @@ async function mount(entries: unknown[]): Promise<HTMLElement> {
 }
 const button = (row: Element, text: string) => [...row.querySelectorAll("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === text) as HTMLButtonElement;
 const row = (el: HTMLElement) => el.querySelector(`.sf-row[data-row="${ANSWER.id}"]`)!;
-// The folded "What the walk answered" entry of the default landing, unfolded.
-const answered = { ...DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What the walk answered")!, folded: undefined };
+// The folded "My answers" entry of the default landing, unfolded.
+const answered = { ...DEFAULT_VIEWS.landing.entries.find((e) => e.title === "My answers")!, folded: undefined };
 
 describe("a row's time, details and verdict share one line", () => {
   test("must-fail: the details (opened by the time) and the verdict group are children of one line", async () => {

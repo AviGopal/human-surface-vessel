@@ -75,8 +75,8 @@ async function mount(entries: unknown[]): Promise<HTMLElement> {
 }
 const button = (row: Element, text: string) => [...row.querySelectorAll("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === text) as HTMLButtonElement;
 const row = (el: HTMLElement) => el.querySelector(`.sf-row[data-row="${ANSWER.id}"]`)!;
-// The folded "What the walk answered" entry of the default landing, unfolded.
-const answered = { ...DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What the walk answered")!, folded: undefined };
+// The folded "My answers" entry of the default landing, unfolded.
+const answered = { ...DEFAULT_VIEWS.landing.entries.find((e) => e.title === "My answers")!, folded: undefined };
 
 describe("the system's own grade is drawn only after this person's verdict", () => {
   test("must-fail: before the person's verdict nothing of the system's grade is drawn or read", async () => {
@@ -109,7 +109,7 @@ describe("the system's own grade is drawn only after this person's verdict", () 
   });
 
   test("must-fail: the default landing declares the system's grade on every answer it offers a verdict on", () => {
-    const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What people asked")!;
+    const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Asked of me")!;
     const graded = { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } };
     expect([asks.thread!].flat()[0]!.graded).toEqual(graded);
     expect(answered.graded).toEqual(graded);

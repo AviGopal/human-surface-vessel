@@ -56,7 +56,7 @@ async function mount(entry: unknown): Promise<HTMLElement> {
   await settle();
   return el;
 }
-const asks = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", title: "What people asked", words: ["what"] };
+const asks = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows", title: "Asked of me", words: ["what"] };
 const folded = { ...asks, title: "Asks", folded: true, strip: { hours: 24 } };
 const REFUSED = { failure: { status: 403, body: "a read is refused here" } };
 

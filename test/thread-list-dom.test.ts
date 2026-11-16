@@ -89,28 +89,28 @@ describe("a thread that lists reads", () => {
   });
 
   test("must-fail: a thread the view folds is one closed line under the row, its title and count", async () => {
-    const el = await mount([asks([answers, { ...account, title: "What the walk did", folded: true }])]);
+    const el = await mount([asks([answers, { ...account, title: "What I did", folded: true }])]);
     const fold = el.querySelector(`.sf-row[data-row="${ASK.id}"] > details.sf-thread`) as HTMLDetailsElement;
     expect(fold).not.toBeNull();
     expect(fold.open).toBe(false);
-    expect(fold.getAttribute("aria-label")).toBe("What the walk did");
-    expect(fold.querySelector("summary")!.textContent).toBe("What the walk did1");
+    expect(fold.getAttribute("aria-label")).toBe("What I did");
+    expect(fold.querySelector("summary")!.textContent).toBe("What I did1");
     expect(fold.querySelector("summary [data-count]")!.getAttribute("data-count")).toBe("1");
     // The answer, which carries the verdict, stays open beside it.
     expect(el.querySelector(`.sf-row[data-row="${ASK.id}"] > div.sf-thread .sf-row[data-row="${ANSWER.id}"]`)).not.toBeNull();
   });
 
   test("must-fail: a folded read that holds nothing is its title and 0, with nothing to open", async () => {
-    const none = { pointer: { type: "record_read", refs_to: "$row", shape: "nothing" }, form: "rows", title: "What the walk did", folded: true };
+    const none = { pointer: { type: "record_read", refs_to: "$row", shape: "nothing" }, form: "rows", title: "What I did", folded: true };
     const el = await mount([asks([answers, none])]);
     const line = el.querySelector(`.sf-row[data-row="${ASK.id}"] > .sf-thread-folded`) as HTMLElement;
     expect(line).not.toBeNull();
     expect(line.tagName).toBe("P");
     expect(line.querySelector("summary, details, button")).toBeNull();
-    expect(line.textContent).toBe("What the walk did0");
+    expect(line.textContent).toBe("What I did0");
     expect(line.querySelector("[data-count]")!.getAttribute("data-count")).toBe("0");
     // control: a read that holds a row still opens to it.
-    const el2 = await mount([asks([answers, { ...account, title: "What the walk did", folded: true }])]);
+    const el2 = await mount([asks([answers, { ...account, title: "What I did", folded: true }])]);
     expect(el2.querySelector(`.sf-row[data-row="${ASK.id}"] > details.sf-thread-folded`)).not.toBeNull();
   });
 

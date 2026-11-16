@@ -74,7 +74,7 @@ const settle = async () => {
 };
 
 /** The asks as the default landing draws them, with the change under each. */
-const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "What people asked")!;
+const asks = DEFAULT_VIEWS.landing.entries.find((e) => e.title === "Asked of me")!;
 
 async function mount(entries: unknown[] = [asks]): Promise<HTMLElement> {
   const el = document.createElement("div");
