@@ -68,8 +68,17 @@ describe("counts and empty reasons come from the read", () => {
     expect(el.textContent).not.toContain("answered with no rows");
   });
 
-  test("must-fail: a view's own empty words come first in plain words, the producer's reason folded under why", async () => {
+  test("must-fail: with no empty words of the view's, the producer's reason is drawn as written beside the count 0", async () => {
     const waiting = DEFAULT_VIEWS.landing.entries[0]!;
+    expect(waiting.empty).toBeUndefined();
+    const el = await draw(React.createElement(Entries, { entries: [waiting], enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }));
+    expect(el.querySelector("[data-report] h2 [data-count]")!.textContent).toBe("0");
+    expect(el.querySelector("[data-report] > .sf-report-note")!.textContent).toBe(EMPTY);
+    expect(el.querySelector("details[data-empty-reason]")).toBeNull();
+  });
+
+  test("must-fail: a view's own empty words come first in plain words, the producer's reason folded under why", async () => {
+    const waiting = { ...DEFAULT_VIEWS.landing.entries[0]!, empty: "Nothing is waiting on you." };
     const el = await draw(React.createElement(Entries, { entries: [waiting], enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }));
     const note = el.querySelector("[data-report] > .sf-report-note")!;
     expect(note.textContent).toBe("Nothing is waiting on you.");

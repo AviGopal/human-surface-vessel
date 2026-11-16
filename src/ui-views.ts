@@ -184,12 +184,13 @@ const LAND_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_B
 export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }> = {
   landing: {
     entries: [
-      { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you", empty: "Nothing is waiting on you." },
+      { pointer: { type: "uiQuestion", open: true }, form: "questions", field: "questions", title: "Waiting on you" },
       // A detector's gap that states a `claim` (the test is right) can be judged: the person's Right or Wrong
       // on a held one is read where holds are lifted. Records answers each gap's latest row, open, holding a
       // claim; the newest three are drawn. Records cannot yet say which are held for a person (the hold is
-      // in each row's meta), so its note says what a verdict does on a held one rather than calling them all held.
-      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Failing checks", note: "Right releases a held one; Wrong marks its test wrong.", empty: "No check is failing." },
+      // in each row's meta), so none is called held. Nothing on the page explains Right or Wrong: an
+      // empty entry is its title and a count (the USER: no words on the interface to explain it).
+      { pointer: { type: "record_read", shape: "gap", latest_by: "gap_id", where: { status: "open" }, has: "claim" }, form: "rows", show: 3, newest: true, words: ["claim"], judge: "outcome", title: "Failing checks" },
       {
         pointer: { type: "record_read", shape: "world_changed" },
         form: "rows",
@@ -204,7 +205,7 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[] }
         // Then what the walk did with it, records' calls under that root, folded and counted: there
         // to look into, not to read before the answer. Its order and its cut are records'.
         thread: [
-          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer", where: { role: "described" } }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, empty: "Not answered yet." },
+          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer", where: { role: "described" } }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES },
           // Then the change the walk made for it, if any: its newest diff, judged under the ask it was
           // made for, the grader's verdict closed until the person's. Where the landing stands is in
           // what the walk did (its landing calls), not a second read here.

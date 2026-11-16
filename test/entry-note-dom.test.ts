@@ -58,13 +58,16 @@ async function mount(entries: unknown[]): Promise<HTMLElement> {
 }
 
 describe("an entry's note", () => {
-  test("must-fail: the failing checks are titled by name, and what a verdict does is the note under it", async () => {
-    expect(failing.note).toBe("Right releases a held one; Wrong marks its test wrong.");
-    const el = await mount([failing]);
+  test("must-fail: the failing checks are titled by name and explain no verdict; a view's own note is drawn under the title", async () => {
+    // the USER 11-16: no words on the interface to explain it
+    expect(failing.note).toBeUndefined();
+    expect((await mount([failing])).querySelector("[data-note]")).toBeNull();
+    const noted = { ...failing, note: "Held until a person rules." };
+    const el = await mount([noted]);
     const section = el.querySelector("section.sf-report")!;
     expect(section.querySelector("h2")!.textContent).toBe("Failing checks");
     const note = section.querySelector("[data-note]")!;
-    expect(note.textContent).toBe(failing.note!);
+    expect(note.textContent).toBe(noted.note);
     expect(note.previousElementSibling!.tagName).toBe("H2");
   });
 
@@ -75,9 +78,9 @@ describe("an entry's note", () => {
 
   test("must-fail: with no rows there is nothing to act on, and no note", async () => {
     gaps = [];
-    const el = await mount([failing]);
+    const el = await mount([{ ...failing, note: "Held until a person rules." }]);
     expect(el.querySelector("[data-note]")).toBeNull();
-    expect(el.textContent).toContain("No check is failing.");
+    expect(el.querySelector("h2 [data-count]")!.textContent).toBe("0");
   });
 
   test("must-fail: the contract takes a note on an open entry, and refuses it folded, in a thread, on fields, too long or blank", () => {

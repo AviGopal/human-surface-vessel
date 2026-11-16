@@ -438,7 +438,7 @@ function Thread({ entry, row, rowId, reading }: { entry: ViewEntry; row: Readonl
   ) : (
     <>
       {a.stale && !reading.sectionStale ? <Stale stale={a.stale} /> : null}
-      <Drawn entry={entry} answer={a.answer} reading={reading} quiet />
+      <Drawn entry={entry} answer={a.answer} reading={reading} />
     </>
   );
   if (entry.folded) {
@@ -683,13 +683,12 @@ function emptyReasonOf(answer: unknown): string | null {
 
 /**
  * An entry with no rows: the view's own words first, when it declares them, with the producer's
- * reason folded under "why"; else the producer's reason; else a plain note. The reason is never
- * dropped, only placed behind the plain sentence. A folded entry's summary already counts its rows
- * ("0 in all"), so with nothing else to say it opens on nothing rather than say so twice.
+ * reason folded under "why"; else the producer's reason, as written; else nothing. The page adds no
+ * sentence of its own: an entry's title carries its count, 0 included, so an empty one says so by
+ * its form. The reason is never dropped, only placed behind the view's words.
  */
-function Empty({ said, why, counted }: { said: string | undefined; why: string | null; counted: boolean }): ReactNode {
-  if (said === undefined && why === null && counted) return null;
-  if (said === undefined) return <p className="sf-muted sf-report-note">{why ?? "answered with no rows"}</p>;
+function Empty({ said, why }: { said: string | undefined; why: string | null }): ReactNode {
+  if (said === undefined) return why === null ? null : <p className="sf-muted sf-report-note">{why}</p>;
   return (
     <>
       <p className="sf-muted sf-report-note">{said}</p>
@@ -704,7 +703,7 @@ function Empty({ said, why, counted }: { said: string | undefined; why: string |
 }
 
 /** The answer drawn in the entry's form, or what was found instead of rows. */
-function Drawn({ entry, answer, reading, quiet = false }: { entry: ViewEntry; answer: unknown; reading: Reading; quiet?: boolean }): ReactNode {
+function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; reading: Reading }): ReactNode {
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) {
@@ -721,7 +720,7 @@ function Drawn({ entry, answer, reading, quiet = false }: { entry: ViewEntry; an
     );
   }
   // A thread under a row with nothing citing it and no words for that says nothing: an ask the walk made no change for has no line about changes.
-  if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} counted={entry.folded === true || quiet} />;
+  if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} />;
   const draw = (rows: readonly unknown[]): ReactNode =>
     entry.form === "questions" ? <Questions rows={rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} inline={false} /> : <Rows rows={rows} entry={entry} reading={reading} />;
   return (
@@ -864,10 +863,13 @@ function Entry({ entry, reading }: { entry: ViewEntry; reading: Reading }): Reac
       </details>
     );
   }
+  // Drawn open, an entry whose read holds no rows carries its count as a folded one does: 0.
+  const none = a?.ok === true && entry.form !== "fields" && ((got) => "total" in got && got.total === 0)(rowsOf(a.answer, entry));
   return (
-    <section className="sf-report" data-report={pointer.type} data-form={entry.form} aria-label={title}>
+    <section className="sf-report" data-report={pointer.type} data-form={entry.form} data-empty={none ? "" : undefined} aria-label={title}>
       <h2 className="sf-report-title">
         {title}
+        {none ? <span className="sf-report-count" data-count={0}>0</span> : null}
         {a && !a.ok && a.signIn ? <span className="sf-report-count" data-sign-in-to-see="">{SIGN_IN_TO_SEE}</span> : null}
       </h2>
       {/* What the rows are for, under the title; with no rows there is nothing to act on, so it is not drawn. */}

@@ -120,11 +120,12 @@ describe("the ask is the unit", () => {
     expect(replies.filter((r) => r.classList.contains("sf-row-parent"))).toEqual([]);
   });
 
-  test("control: an ask with one reply has no fold; an ask with none says so", async () => {
+  test("control: an ask with one reply has no fold; an ask with none draws no reply and no sentence", async () => {
     const el = await mount([asked]);
     expect(threadOf(el, ONE.id).querySelector("details.sf-earlier")).toBeNull();
     expect(own(threadOf(el, ONE.id)).length).toBe(1);
-    expect(threadOf(el, NONE.id).textContent).toContain("Not answered yet.");
+    expect(own(threadOf(el, NONE.id))).toEqual([]);
+    expect(threadOf(el, NONE.id).querySelector(".sf-report-note")).toBeNull();
     expect(threadOf(el, NONE.id).querySelector("details.sf-earlier")).toBeNull();
   });
 

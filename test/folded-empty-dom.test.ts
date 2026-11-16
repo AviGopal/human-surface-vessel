@@ -1,7 +1,8 @@
 /**
  * A folded entry's summary counts its rows ("0 in all"). Opened with none, it adds nothing: no
  * second, machine-worded "answered with no rows" under the count. A producer's own reason for the
- * empty answer is still drawn, and an unfolded entry, which has no count, still says it is empty.
+ * empty answer is still drawn. An unfolded entry with no rows carries the same count, 0, by its
+ * title, and no sentence: the page adds no words of its own to say a read is empty.
  *
  * Shape: one node 11-12. Each of the landing's three folded entries, opened, said "0 in all", then
  * "none in the last 24 hours", then "answered with no rows".
@@ -69,9 +70,11 @@ describe("a folded entry with no rows", () => {
     expect(el.textContent).toContain("the store is being rebuilt");
   });
 
-  test("control: an unfolded entry, which has no count, still says it is empty", async () => {
+  test("must-fail: an unfolded entry with no rows is its title and the count 0, with no sentence", async () => {
     const { folded: _f, strip: _s, ...open } = failed;
     const el = await mount(open);
-    expect(el.textContent).toContain("answered with no rows");
+    const section = el.querySelector("section[data-empty]")!;
+    expect(section.querySelector("h2 [data-count]")!.textContent).toBe("0");
+    expect(section.textContent).toBe(`${open.title}0`);
   });
 });

@@ -90,10 +90,11 @@ describe("a person's ask is a thread", () => {
     expect([...threadOf(el, ASK_A.id).querySelectorAll(".sf-row-words")].map((p) => p.textContent)).toEqual(["Answer 4."]);
   });
 
-  test("must-fail: the thread's own show bounds it and the cut is a count; an ask with none says so", async () => {
+  test("must-fail: the thread's own show bounds it and the cut is a count; an ask with none draws no reply and no sentence", async () => {
     const el = await mount([asked]);
     expect(threadOf(el, ASK_A.id).querySelector("details.sf-earlier > summary")!.textContent).toBe("3 earlier");
-    expect(threadOf(el, ASK_B.id).textContent).toContain("Not answered yet.");
+    expect(threadOf(el, ASK_B.id).querySelectorAll(".sf-row")).toHaveLength(0);
+    expect(threadOf(el, ASK_B.id).querySelector(".sf-report-note")).toBeNull();
   });
 
   test("must-fail: a newer system row citing the ask never pushes its answer out of view", async () => {
