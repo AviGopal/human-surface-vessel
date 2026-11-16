@@ -157,6 +157,18 @@ describe("a change judged under its ask", () => {
     expect(grade.textContent).toContain("the system graded this: right");
   });
 
+  test("must-fail: a grade naming its row in a where value reads that row's id there too", async () => {
+    // qa 11-16: the grade was bound by top-level arguments only, so a where value went out as
+    // "$row", read nothing, and the page said the system had not graded the change.
+    const thread = asks.thread as Record<string, unknown>[];
+    const change = thread.find((t) => t["judge"] === "land")!;
+    const graded = { pointer: { type: "record_read", refs_to: "$row", shape: "land_verdict", where: { role: "described", judged: "$row" } } };
+    const el = await mount([{ ...asks, thread: thread.map((t) => (t === change ? { ...t, graded } : t)) }]);
+    await judge(el, "Wrong");
+    expect(reads.find((p) => p["shape"] === "land_verdict")).toEqual({ type: "record_read", refs_to: DIFF.id, shape: "land_verdict", where: { role: "described", judged: DIFF.id } });
+    expect(reads.filter((p) => JSON.stringify(p).includes("$row"))).toEqual([]);
+  });
+
   test("must-fail: an ask the walk made no change for draws no line about changes", async () => {
     diffs = [];
     // A thread with nothing citing its row and no words for that says nothing, in any view.

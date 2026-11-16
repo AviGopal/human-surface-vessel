@@ -23,7 +23,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { bind, ROW_BINDING, threadsOf, writeLandVerdict, writeOutcome, type ReportAnswer, type ReportPointer, type VerdictReader, type ViewEntry } from "../api/client";
+import { threadsOf, writeLandVerdict, writeOutcome, type ReportAnswer, type ReportPointer, type VerdictReader, type ViewEntry } from "../api/client";
 import { useRenderPolicy, useReport } from "../api/queries";
 import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
@@ -131,8 +131,10 @@ function gradeWords(r: unknown): string {
  * the system's is that read's `where`, never sorted out here. Mounted only after this person's
  * verdict, so nothing of it is read or drawn before; drawn closed, and outside Right and Wrong.
  */
-function SystemGrade({ graded, rowId, reading }: { graded: NonNullable<ViewEntry["graded"]>; rowId: string; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
-  const q = useReport(bind(graded.pointer, ROW_BINDING, rowId), { enabled: reading.enabled, intervalMs: reading.intervalMs });
+function SystemGrade({ graded, row, reading }: { graded: NonNullable<ViewEntry["graded"]>; row: Readonly<Record<string, unknown>>; reading: Pick<Reading, "enabled" | "intervalMs"> }): ReactNode {
+  // Bound as a thread is, so "$row" as an argument or a where value both read this row's id.
+  const pointer = bindRow(graded.pointer, row);
+  const q = useReport(pointer ?? { type: "record_read" }, { enabled: reading.enabled && pointer !== null, intervalMs: reading.intervalMs });
   const a: ReportAnswer | undefined = q.data;
   const got = a?.ok ? rowsOf(a.answer, {}) : null;
   return (
@@ -268,7 +270,7 @@ function Judge({ row, rowId, kind, graded, after, reading }: { row: Readonly<Rec
       </div>
     ) : null}
     {verdict.state === "done" && after ? <AfterVerdict after={after} row={row} mine={verdict.id} reading={reading} /> : null}
-    {verdict.state === "done" && graded ? <SystemGrade graded={graded} rowId={rowId} reading={reading} /> : null}
+    {verdict.state === "done" && graded ? <SystemGrade graded={graded} row={row} reading={reading} /> : null}
     </>
   );
 }

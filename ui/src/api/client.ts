@@ -87,14 +87,6 @@ export type VerdictReader = {
 type Plain = string | number | boolean;
 /** A read's pointer: plain arguments, and at most records' `where` ({field: value}, by equality) in a `graded` read. */
 export type ReportPointer = Readonly<Record<string, Plain | Readonly<Record<string, Plain>>>> & { readonly type: string };
-/** In an entry's thread, a pointer argument with this value stands for the id of the row it is under (src/ui-views.ts ROW_BINDING). */
-export const ROW_BINDING = "$row";
-
-/** A pointer with each argument written as `token` replaced by `id`. */
-export function bind(pointer: ReportPointer, token: string, id: string): ReportPointer {
-  return Object.fromEntries(Object.entries(pointer).map(([k, v]) => [k, v === token ? id : v])) as ReportPointer;
-}
-
 /** One thing a view draws (src/ui-views.ts ViewEntry): a pointer and its form. Only the pointer is sent. */
 export type ViewEntry = {
   readonly pointer: ReportPointer;
@@ -109,7 +101,7 @@ export type ViewEntry = {
   /** The fields that hold a row's words when the owner declares none (src/row-words.ts). */
   readonly words?: readonly string[];
   readonly marks?: readonly MarkBinding[];
-  /** One further read drawn under each row, bound to its id through ROW_BINDING, or a list of them drawn in order; none holds a thread itself. */
+  /** One further read drawn under each row, bound to it by "$row" or "$row.<field>" (src/row-binding.ts), or a list of them drawn in order; none holds a thread itself. */
   readonly thread?: ViewEntry | readonly ViewEntry[];
   /** Draw the rows `show` kept in reverse of the producer's order. */
   readonly newest?: true;
