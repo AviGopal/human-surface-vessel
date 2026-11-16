@@ -58,6 +58,9 @@ const SCENARIO = `
   const revision = (await asked.json()).body.revision;
   // and changes what the ask page draws.
   const viewed = await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: asPerson, body: JSON.stringify({ pointer: { type: "uiView_write", region: "landing", entries: DEFAULT_VIEWS.landing.entries.slice(0, 1) } }) });
+  // A walk's write refused after it, which carries the view in force: the walk keeps a refusal's text whole as a records row.
+  const twice = DEFAULT_VIEWS.landing.entries.slice(0, 1);
+  const refused = await impulsesRouter.request("/v2/impulses/resolve", { method: "POST", headers: { "content-type": "application/json", Authorization: "ApiKey " + process.env.METABOB_API_KEY }, body: JSON.stringify({ pointer: { type: "uiView_write", region: "landing", entries: [...twice, ...twice] } }) });
   const answered = await participationRouter.request("/api/participation", { method: "POST", headers: asPerson, body: JSON.stringify({ panel_id: "qnk-1", panel_revision: revision, response_id: "qnk-r1", kind: "answer", value: "left" }) });
   const timeout = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r("timed out"), 3000))]);
   const reads = {};
@@ -73,7 +76,7 @@ const SCENARIO = `
     };
     streams[k].ac.abort();
   }
-  const out = { signedIn: signIn.status, asked: asked.status, viewed: viewed.status, answered: answered.status, ...reads };
+  const out = { signedIn: signIn.status, asked: asked.status, viewed: viewed.status, answered: answered.status, refused: { status: refused.status, text: await refused.text() }, ...reads };
   identity.stop(true);
   console.log(JSON.stringify(out));
 `;
@@ -143,6 +146,12 @@ describe("every read of the questions and answers names a person only to themsel
     }
     const { panel, answer, signIn } = stateOf(r["self"].state);
     expect([panel.producer, answer.caller.label, signIn.body.user_id]).toEqual([`key:${KEY_ID}`, `key:${KEY_ID}`, KEY_ID]);
+  });
+
+  test("must-fail: a refused write's view in force names the person who wrote it as a person", () => {
+    expect(r["refused"].status).toBe(422);
+    expect(r["refused"].text).not.toContain(KEY_ID);
+    expect(JSON.parse(r["refused"].text).in_force.view.writtenBy).toBe("a person");
   });
 
   test("must-fail: a view the person wrote names them only to themselves, on the page's read and the shape read", () => {
