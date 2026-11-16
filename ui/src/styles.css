@@ -2062,7 +2062,7 @@ body { overflow: hidden; }
 .sf-row-diff[open] > summary { margin-bottom: var(--sf-space-1); }
 .sf-row-diff > .sf-diff { max-height: 24rem; overflow: auto; padding: var(--sf-space-2); background: var(--sf-panel-alt); border-radius: var(--sf-radius-sm); }
 .sf-row-diff-cut { color: var(--sf-ink-3); }
-/* Whether a change compiles, above its Right and Wrong: a failure in ink and weight, its errors one tap away. */
+/* A change's typecheck as written, above its Right and Wrong: each field on its line, a long one folded under its name. */
 .sf-typecheck { margin: var(--sf-space-1) 0 0; font-size: var(--sf-text-sm); color: var(--sf-ink-2); }
 .sf-typecheck p { margin: 0; }
 .sf-typecheck-long > summary { cursor: pointer; }
