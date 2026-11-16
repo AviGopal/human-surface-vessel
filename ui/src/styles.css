@@ -2152,7 +2152,7 @@ p.sf-thread-folded { margin-block: 0; font-size: var(--sf-text-sm); color: var(-
 h2.sf-report-title > .sf-report-count { margin-left: var(--sf-space-2); }
 .sf-strip { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; border-bottom: 1px solid var(--sf-rule-strong); }
 .sf-strip-bar { display: block; width: 4px; background: var(--sf-ink-3); border-radius: 1px 1px 0 0; }
-/* One width for every caption, so the strips of every folded read line up whatever their numbers. */
+/* Drawn only for a strip that is cut, beside it, so it takes the room its words need. */
 .sf-strip-caption { font-size: var(--sf-text-xs); font-weight: 400; color: var(--sf-ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 @media (max-width: 480px) { .sf-strip-bar { width: 3px; } }
 
