@@ -91,7 +91,7 @@ describe("an entry's note", () => {
       { pointer, form: "rows", note: "x".repeat(121) },
       { pointer, form: "rows", note: " " },
       // A fields entry has no rows, so a note there would never be drawn.
-      { pointer: { type: "fixture_fields" }, form: "fields", note: "x" },
+      { pointer: { type: "record_read", shape: "fixture_fields" }, form: "fields", note: "x" },
     ]) {
       const w = writeView({ region: "landing", entries: [entry] }, null);
       expect(w.ok).toBe(false);

@@ -129,7 +129,7 @@ describe("one rule for a view's marks and an owner's", () => {
     const m = [{ field: "typecheck.passed", states: { false: "not-reached" } }];
     const ok = writeView({ region: "landing", entries: [{ pointer: ENTRY.pointer, form: "rows", marks: m }] }, null);
     expect(ok.ok).toBe(true);
-    const refused = writeView({ region: "landing", entries: [{ pointer: { type: "answer" }, form: "fields", marks: m }] }, null);
+    const refused = writeView({ region: "landing", entries: [{ pointer: { type: "record_read", shape: "answer" }, form: "fields", marks: m }] }, null);
     expect(refused.ok ? "" : refused.detail).toContain("marks needs form");
     const bad = writeView({ region: "landing", entries: [{ pointer: ENTRY.pointer, form: "rows", marks: [{ field: "x", states: { a: "green" } }] }] }, null);
     expect(bad.ok).toBe(false);

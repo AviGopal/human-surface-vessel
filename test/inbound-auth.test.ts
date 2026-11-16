@@ -274,13 +274,26 @@ describe("a lookup through the surface goes only under the caller's own credenti
 
   test("must-fail: a signed-in person's lookup goes under the person's key, never the node's", async () => {
     const cookie = personCookie("valid-person-key-1");
-    for (const type of ["vesselCapability", "bash"]) {
+    for (const type of ["record_read", "uiQuestion"]) {
       const r = await lookup(type, { Origin: HERE, Cookie: cookie });
       expect(r.status).toBe(200);
     }
     expect(sentAuth.length).toBe(2);
     expect(sentAuth.every((a) => a === "ApiKey valid-person-key-1")).toBe(true);
     expect(sentAuth.some((a) => a === `ApiKey ${METABOB_API_KEY}`)).toBe(false);
+  });
+
+  // A session carries the person's key, so a type a tool answers would run that tool as the person,
+  // whatever named it (a stored view, a script on the page). Shape: 49e5af7, a written view's
+  // pointer was sent as written; shellResult, gitCommitResult and gitDiff each reached their tool.
+  test("must-fail: a signed-in session sends the page's reads and the person's rows only; a tool's shape is refused before discovery", async () => {
+    const cookie = personCookie("valid-person-key-1");
+    for (const type of ["shellResult", "bash", "gitCommitResult", "git_commit", "gitDiff", "fileEditResult", "dispatch_goal", "vesselCapability", ""]) {
+      const r = await lookup(type, { Origin: HERE, Cookie: cookie });
+      expect(r.status).toBe(403);
+      expect(await r.json()).toMatchObject({ error: "not_a_page_read" });
+    }
+    expect(sentAuth).toEqual([]);
   });
 
   test("a keyed caller's lookup goes under the key it presented, never the node's", async () => {

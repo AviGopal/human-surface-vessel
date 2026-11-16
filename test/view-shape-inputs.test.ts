@@ -67,7 +67,7 @@ describe("uiView_write declares its inputs, from the contract a write is checked
 
   test("must-fail: an entry's fields in the schema are exactly the fields a write accepts", () => {
     views.resetViewsForTest();
-    const refused = views.writeView({ region: "landing", entries: [{ pointer: { type: "answer" }, form: "rows", zz: 1 }] }, null);
+    const refused = views.writeView({ region: "landing", entries: [{ pointer: { type: "record_read", shape: "answer" }, form: "rows", zz: 1 }] }, null);
     const listed = refused.ok ? "" : refused.detail;
     const accepted = /an entry has (.+) only/.exec(listed)![1]!.replace(" and ", ", ").split(", ").sort();
     expect(Object.keys(entrySchema()["properties"] as object).sort()).toEqual(accepted);
@@ -91,7 +91,7 @@ describe("uiView_write declares its inputs, from the contract a write is checked
 
   test("control: a write the contract refuses does not fit either", () => {
     expect(fits(declared()!, { region: "margin" })).toBe(false);
-    expect(fits(declared()!, { region: "landing", entries: [{ pointer: { type: "answer" }, form: "table" }] })).toBe(false);
-    expect(fits(declared()!, { region: "landing", entries: [{ pointer: { type: "answer" }, form: "rows", zz: 1 }] })).toBe(false);
+    expect(fits(declared()!, { region: "landing", entries: [{ pointer: { type: "record_read", shape: "answer" }, form: "table" }] })).toBe(false);
+    expect(fits(declared()!, { region: "landing", entries: [{ pointer: { type: "record_read", shape: "answer" }, form: "rows", zz: 1 }] })).toBe(false);
   });
 });

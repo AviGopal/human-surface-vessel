@@ -28,7 +28,7 @@ import { waitAfterMisses } from "../recheck.ts";
 import { FRAME_MAX_BYTES, frameSessionOf, readFrame, storeFrame } from "../page-frame.ts";
 import { unnamed, unnamePeople } from "../unname.ts";
 import { arrivedOverTls, closeSession, keySignInAvailable, loginAllowed, noteLoginFailure, openSession, sessionOf, signInWithKey, viewOf } from "../person-session.ts";
-import { VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
+import { VIEW_READS, VIEW_REGIONS, currentView, type ViewRegion } from "../ui-views.ts";
 import {
   DISCOVERY_ENDPOINT,
   HOST,
@@ -395,6 +395,15 @@ proxyRouter.get("/api/discovery/shapes", async (c) => {
  * since a lookup under it would be the node asking, whatever the caller is (a shell or git tool
  * among them).
  */
+/**
+ * What a signed-in person's session may send through the lookup: the reads a view may name
+ * (VIEW_READS) and the person's own rows (record_write). The session carries the person's key, so
+ * anything else, whatever named it (a stored view, a script on the page), would run a tool as the
+ * person; it is refused here, before discovery. A caller presenting its own key is not a session
+ * and is not narrowed: its key's own permissions decide.
+ */
+export const SESSION_RESOLVES: ReadonlySet<string> = new Set<string>([...VIEW_READS, "record_write"]);
+
 proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve"), async (c) => {
   const rawBody = await rawBodyOf(c);
   const url = `${DISCOVERY_ENDPOINT.replace(/\/+$/, "")}/resolve`;
@@ -418,6 +427,9 @@ proxyRouter.post("/api/discovery/resolve", requireCaller("/api/discovery/resolve
       recordObservation({ type: "person_write", caller: callerOf(admittedCaller(c)), visibility: "operator_only", body: { recorded: false, reason: "sign_in_required", pointer } });
     }
     return c.json({ error: "sign_in_required", reason: "a lookup is sent only under the caller's own key: sign in" }, 401, corsHeaders(c.req.header("Origin")));
+  }
+  if (!presented && !SESSION_RESOLVES.has(type)) {
+    return c.json({ error: "not_a_page_read", reason: `a signed-in session sends ${[...SESSION_RESOLVES].join(", ")} only` }, 403, corsHeaders(c.req.header("Origin")));
   }
   const sent = await passthrough({ url, method: "POST", rawBody, origin: c.req.header("Origin"), authorization });
   return isWritePointerType(type) ? sent : unnamed(sent, person?.userId ?? null);

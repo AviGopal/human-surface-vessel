@@ -9,7 +9,7 @@ import { impulsesRouter } from "../src/routes/impulses.ts";
 import { proxyRouter } from "../src/routes/proxy.ts";
 import { REGISTRATION_PAYLOAD } from "../src/discovery-registration.ts";
 
-const load = { pointer: { type: "system_load_report" }, form: "fields" };
+const load = { pointer: { type: "record_read", shape: "system_load_report" }, form: "fields" };
 const asked = { pointer: { type: "record_read", shape: "world_changed" }, form: "rows" };
 
 async function write(pointer: Record<string, unknown>, auth = true) {

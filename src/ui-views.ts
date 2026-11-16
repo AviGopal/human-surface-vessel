@@ -150,6 +150,15 @@ const MAX_ENTRIES = 8;
 const MAX_SHOW = 200;
 /** How many reads an entry's `thread` may list under each row. */
 export const MAX_THREADS = 3;
+
+/**
+ * The reads a view may name: the page resolves an entry's pointer under the signed-in person's own
+ * key on every poll, so what a view names runs as that person. A name says nothing about whether a
+ * shape writes (a tool's output shape resolves to the tool: shellResult runs a shell,
+ * gitCommitResult commits), so a view names only these: records' read, which answers rows, and the
+ * questions the surface holds. Rows of any shape come from record_read {shape, where, ...}.
+ */
+export const VIEW_READS = ["record_read", "uiQuestion"] as const;
 /** The widest window a strip may draw: a week, an hour per bar. */
 const MAX_STRIP_HOURS = 168;
 const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_:.-]{0,79}$/;
@@ -232,7 +241,7 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
   const names = contract.regions.join(", ");
   const entry =
     `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, note?, words?: [1 to ${MAX_WORDS} field names], marks?: [1 to ${MAX_WORDS} {field, states: {value: state}, label?}], thread?: an entry with no thread, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
-    `drawn top to bottom in list order; a pointer is never a _write shape. form fields draws an answer's plain values; rows draws each row in full; ` +
+    `drawn top to bottom in list order; a pointer's type is one of ${VIEW_READS.join(", ")}, the page reading as the signed-in person: rows of any shape come from record_read {shape, where?, refs_to?, latest_by?, has?}, never by naming that shape as the type. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
     `judge (rows only) offers a person's verdict on each row: "outcome" writes an outcome citing it, "land" a land_verdict citing it with the row's repo and tree; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; note (1 to 120 characters, an entry drawn open whose form is rows or questions) is one line under its title, drawn while the read has rows; ` +
     `words names the fields drawn as a row's words when its shape's shape_description row (records, written by the owner) names none in its own words field; ` +
@@ -272,7 +281,7 @@ export function viewShapeInputs(): Record<"uiView_write", Record<string, unknown
   const pointer = {
     type: "object",
     required: ["type"],
-    properties: { type: { type: "string", pattern: SHAPE_NAME.source, description: "the shape read; a view only reads, never a _write shape" }, where },
+    properties: { type: { enum: [...VIEW_READS], description: "the read: record_read answers rows of any shape (its shape argument names which), uiQuestion the questions the surface holds" }, where },
     additionalProperties: plain,
   };
   const field = { type: "string", pattern: FIELD_NAME.source };
@@ -531,8 +540,9 @@ function pointerOf(r: unknown): { pointer: ReportPointer } | { detail: string } 
   }
   const type = out["type"];
   if (typeof type !== "string" || !SHAPE_NAME.test(type)) return { detail: `type: a shape name` };
-  // Drawing the screen must not write anything, and a _write shape is a write by name.
-  if (type.endsWith("_write")) return { detail: `${type}: a view only reads` };
+  // Drawing the screen must not write or run anything, and the page reads as the person: a view
+  // names one of the reads, never a shape a tool answers (VIEW_READS).
+  if (!(VIEW_READS as readonly string[]).includes(type)) return { detail: `${type}: a view reads through ${VIEW_READS.join(" or ")} only; rows of any shape come from record_read {shape, where?, refs_to?, latest_by?, has?}` };
   if (where !== undefined) {
     const fields = typeof where === "object" && where !== null && !Array.isArray(where) ? Object.entries(where as Record<string, unknown>) : [];
     const plain = fields.length >= 1 && fields.length <= MAX_WHERE && fields.every(([k, v]) => FIELD_NAME.test(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean"));
