@@ -190,6 +190,9 @@ describe("uiView_write declares its inputs, from the contract a write is checked
     const marked = (absent: unknown) => ({ region: "landing", entries: [{ pointer: { type: "record_read", shape: "gitDiff" }, form: "rows", marks: [{ field: "check.passed", states: { true: "reached" }, absent }] }] });
     expect(fits(declared()!, marked({ state: "waiting", label: "No tests were run" }))).toBe(true);
     expect(fits(declared()!, marked({ state: "waiting" }))).toBe(false);
+    expect(fits(declared()!, marked({ state: "waiting", label: "" }))).toBe(false);
+    expect(fits(declared()!, marked({ state: "waiting", label: "x", colour: "red" }))).toBe(false);
+    for (const list of [thread, deeper]) expect(fits(list, Array.from({ length: views.MAX_THREADS + 1 }, () => ({ pointer: read, form: "rows" })))).toBe(false);
   });
 
   test("control: a write the contract refuses does not fit either", () => {
