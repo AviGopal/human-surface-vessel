@@ -207,6 +207,48 @@ const MAX_FACES = 16;
 const ROLE_NAME = /^[a-z][a-z0-9_]{0,31}$/;
 export const DEFAULT_FACES: Faces = { person: "serif", walk: "sans", described: "sans", owner: "sans", operator: "sans", detector: "mono", records: "mono" };
 
+/**
+ * WHAT WAITS ON THE PERSON'S GRADE IS THE PAGE'S OWN, drawn first above whatever view is in force (the USER 11-17, by
+ * research: "Show them", on both views, first on the screen). A pending grade must not depend on a layout anyone wrote,
+ * the walk included, so no view can move or hide it, as with the box and the sign-in. Records answers the waits from
+ * its own rule (a walk failure waiting for a person on a root with no person row about it since): `person_wait` rows,
+ * derived, never stored, each naming the tree that waits. Under each: what was asked, then the walk's diff of that
+ * tree, with what its checks said (a check that never ran says so) and the person's Right or Wrong; with no diff of
+ * that tree, "Not checked yet" and nothing to grade. Nothing waiting: its
+ * title and a 0.
+ */
+const CHANGES_WAITING: ViewEntry = {
+  pointer: { type: "record_read", shape: "person_wait" },
+  form: "rows",
+  show: 10,
+  newest: true,
+  title: "Changes waiting on you",
+  thread: [
+    { pointer: { type: "record_read", where: { id: "$row.root" } }, form: "rows", show: 1, words: ["what", "claim"] },
+    {
+      // The change the wait is about: the walk's diff of the very tree git_land was asked to land, never the ask's
+      // newest diff, which may be an older tree than the one waiting.
+      pointer: { type: "record_read", refs_to: "$row.root", shape: "gitDiff", where: { role: "walk", tree: "$row.tree" } },
+      form: "rows",
+      show: 1,
+      newest: true,
+      words: ["repo", "diff"],
+      // What the change's own checks said, as git_land reads them: whether the tree typechecks and, for a gap's change,
+      // whether the gap's test passes on it.
+      // A check that never ran says so in words, beside Right and Wrong, so a grade is never offered as if checked. The
+      // typecheck as written is drawn above Right and Wrong already; its mark only adds a failure's state and its absence.
+      marks: [
+        { field: "typecheck.passed", states: { false: "not-reached" }, label: "Typechecks", absent: { state: "waiting", label: "Not type-checked" } },
+        { field: "check.passed", states: { true: "reached", false: "not-reached" }, label: "Its test passes", absent: { state: "waiting", label: "No tests were run" } },
+      ],
+      judge: "land",
+      graded: LAND_GRADES,
+      empty: "Not checked yet: no change to grade.",
+    },
+  ],
+};
+export const PAGE_ENTRIES: readonly ViewEntry[] = [CHANGES_WAITING];
+
 export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[]; faces: Faces }> = {
   landing: {
     faces: DEFAULT_FACES,
@@ -274,12 +316,12 @@ const CONTRACT: ViewContract = { regions: VIEW_REGIONS, defaults: DEFAULT_VIEWS 
 export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record<"uiView_write" | "human_surface:ui_view", string> {
   const names = contract.regions.join(", ");
   const entry =
-    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, note?, words?: [1 to ${MAX_WORDS} top-level field names of the rows read, letters, digits and _ only, e.g. ["what"] or ["text"]], marks?: [1 to ${MAX_WORDS} {field, states: {value: state}, label?}], thread?: an entry, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
+    `entries is a list of 1 to ${MAX_ENTRIES} {pointer: {type, ...plain arguments, where?: {field: value} (equality, 1 to ${MAX_WHERE} fields)}, form: ${ENTRY_FORMS.join(" | ")}, title?, field?, show?: 1..${MAX_SHOW}, judge?: ${JUDGE_KINDS.map((k) => `"${k}"`).join(" | ")}, empty?, note?, words?: [1 to ${MAX_WORDS} top-level field names of the rows read, letters, digits and _ only, e.g. ["what"] or ["text"]], marks?: [1 to ${MAX_WORDS} {field, states: {value: state}, label?, absent?: {state, label}}], thread?: an entry, or a list of 1 to ${MAX_THREADS} of them, newest?: true, folded?: true, strip?: {hours: 1..${MAX_STRIP_HOURS}}, graded?: {pointer}, about?: true}, ` +
     `drawn top to bottom in list order, under the box a person asks through and their sign-in, which are the page's own and drawn above every view; a pointer's type is one of ${VIEW_READS.join(", ")}, the page reading as the signed-in person: rows of any shape come from record_read {shape, where?, refs_to?, latest_by?, has?}, never by naming that shape as the type. form fields draws an answer's plain values; rows draws each row in full; ` +
     `questions draws each row as a question the surface holds. field names the answer's field holding the rows; show draws the last n rows as the producer ordered them; ` +
     `judge (rows only) offers a person's verdict on each row: "outcome" writes an outcome citing it, "land" a land_verdict citing it with the row's repo and tree; empty is what the entry says when the read has no rows, ahead of the producer's own reason, which is folded under it; note (1 to 120 characters, an entry drawn open whose form is rows or questions) is one line under its title, drawn while the read has rows; ` +
     `words names the fields drawn as a row's words when its shape's shape_description row (records, written by the owner) names none in its own words field; ` +
-    `marks (rows only) binds a row's field (a name, or a dotted path of up to 3 into nested values) to a state per value as written (true, false, a number, a string, keyed by its text, so true and "true" read alike; 1 to ${MAX_MARK_VALUES}), each state one of ${MARK_STATES.join(", ")}, drawn as a dot in that state's colour beside label (the field when none), the value as written and the state's own word; a value not named draws no mark; the shape's shape_description row naming its own marks comes first; ` +
+    `marks (rows only) binds a row's field (a name, or a dotted path of up to 3 into nested values) to a state per value as written (true, false, a number, a string, keyed by its text, so true and "true" read alike; 1 to ${MAX_MARK_VALUES}), each state one of ${MARK_STATES.join(", ")}, drawn as a dot in that state's colour beside label (the field when none), the value as written and the state's own word; a value not named draws no mark; absent: {state, label} draws that state and those words, with no value, for a row without the field or with null there, so a check that never ran says so; the shape's shape_description row naming its own marks comes first; ` +
     `a row with neither is drawn as its shape and time, every other field folded under details; ` +
     `newest: true (rows only) draws the rows show kept newest first, the reverse of the producer's order, which also decides which rows are kept; ` +
     `folded: true draws the entry closed under its title and the count of rows its read holds; ` +
@@ -452,6 +494,8 @@ export interface NotDrawn {
 export type ViewInForce = UiView & {
   readonly notDrawn: NotDrawn | null;
   readonly readers: readonly VerdictReader[];
+  /** The page's own entries, drawn first above the view's whatever view is in force (PAGE_ENTRIES). */
+  readonly above: readonly ViewEntry[];
   /** What is drawn is the default as defined now: a revision naming it, or a stored copy that still matches it. */
   readonly drawsDefault: boolean;
 };
@@ -594,7 +638,7 @@ function entryOf(e: unknown, depth = 0): { entry: ViewEntry } | { detail: string
       ...(typeof empty === "string" ? { empty: empty.trim() } : {}),
       ...(typeof note === "string" ? { note: note.trim() } : {}),
       ...(words !== undefined ? { words: words as string[] } : {}),
-      ...(marks !== undefined ? { marks: (marks as MarkBinding[]).map((b) => ({ field: b.field, states: { ...b.states }, ...(typeof b.label === "string" ? { label: b.label.trim() } : {}) })) } : {}),
+      ...(marks !== undefined ? { marks: (marks as MarkBinding[]).map((b) => ({ field: b.field, states: { ...b.states }, ...(typeof b.label === "string" ? { label: b.label.trim() } : {}), ...(b.absent ? { absent: { state: b.absent.state, label: b.absent.label.trim() } } : {}) })) } : {}),
       ...(under.length > 0 ? { thread: listed ? under : under[0]! } : {}),
       ...(newest === true ? { newest } : {}),
       ...(folded === true ? { folded } : {}),
@@ -711,7 +755,7 @@ export function currentView(region: ViewRegion): ViewInForce {
   const latest = history.get(region)?.at(-1) ?? defaultView(region);
   const drawsDefault = latest.isDefault === true || sameView(latest, DEFAULT_VIEWS[region].entries, DEFAULT_VIEWS[region].faces);
   // Every field said on every view, so a reader of a line stored before a field existed reads its value, not its absence.
-  return { ...latest, restoreOf: latest.restoreOf ?? null, isDefault: latest.isDefault === true, notDrawn: passedOver.get(region) ?? null, readers: VERDICT_READERS, drawsDefault };
+  return { ...latest, restoreOf: latest.restoreOf ?? null, isDefault: latest.isDefault === true, notDrawn: passedOver.get(region) ?? null, readers: VERDICT_READERS, above: PAGE_ENTRIES, drawsDefault };
 }
 
 /** The next revision number: past every stored line, drawn or not. */

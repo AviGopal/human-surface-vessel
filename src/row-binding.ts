@@ -4,7 +4,8 @@
  * row and a view's writer cannot. Written as ROW_BINDING, a dot and a field name (an argument or a
  * `where` value), it stands for that field of the row as written, so a thread reads what shares a
  * value with its row (a change's tree) as well as what cites it. A row without that field, or whose
- * field is not a plain value, draws no thread.
+ * field is not a plain value, draws no thread; one whose field is null states there is nothing to read
+ * by it, so the thread says its `empty` words without reading (statesNone).
  *
  * Shared by the view check (src/ui-views.ts) and the page (ui/src/components/Reports.tsx).
  */
@@ -48,4 +49,12 @@ export function bindRow<P extends Pointer>(pointer: P, row: Readonly<Record<stri
     Object.entries(pointer).map(([k, v]) => [k, k === "where" && typeof v === "object" && v !== null ? Object.fromEntries(Object.entries(v).map(([f, x]) => [f, one(x)])) : one(v)]),
   );
   return unbound ? null : (out as P);
+}
+
+/** Whether the row states null for a field the pointer is bound to: it says there is nothing to read by it. */
+export function statesNone(pointer: Pointer, row: Readonly<Record<string, unknown>>): boolean {
+  return valuesOf(pointer).some((v) => {
+    const m = typeof v === "string" ? ROW_FIELD_BINDING.exec(v) : null;
+    return m !== null && Object.prototype.hasOwnProperty.call(row, m[1]!) && row[m[1]!] === null;
+  });
 }

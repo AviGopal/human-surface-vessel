@@ -23,18 +23,26 @@ export const MAX_MARK_LABEL = 40;
 /**
  * One binding: the field read, the state each of its values reads as (the value as written:
  * true, false, a number or a string, keyed by its text, so true and "true" read alike), and the
- * declarer's word for the field.
+ * declarer's word for the field. `absent` is what a row says when it lacks the field or holds null
+ * there: a state and the declarer's words for it ("no tests were run"), so a row that was never
+ * checked says so instead of drawing no mark, which would read as nothing to report.
  */
-export type MarkBinding = { readonly field: string; readonly states: Readonly<Record<string, MarkState>>; readonly label?: string };
+export type MarkBinding = { readonly field: string; readonly states: Readonly<Record<string, MarkState>>; readonly label?: string; readonly absent?: { readonly state: MarkState; readonly label: string } };
 
 /** Why `v` is not 1 to MAX_WORDS bindings, or null when it is. */
 export function marksProblem(v: unknown): string | null {
-  const shape = `marks: 1 to ${MAX_WORDS} {field, states: {value: state}, label?}; field a field name or a dotted path of up to 3, 1 to ${MAX_MARK_VALUES} values, each state one of ${MARK_STATES.join(", ")}, label 1 to ${MAX_MARK_LABEL} characters`;
+  const shape = `marks: 1 to ${MAX_WORDS} {field, states: {value: state}, label?, absent?: {state, label}}; field a field name or a dotted path of up to 3, 1 to ${MAX_MARK_VALUES} values, each state one of ${MARK_STATES.join(", ")}, label 1 to ${MAX_MARK_LABEL} characters; absent is the state and words for a row without the field or with null there`;
   if (!Array.isArray(v) || v.length < 1 || v.length > MAX_WORDS) return shape;
   for (const b of v) {
     if (typeof b !== "object" || b === null || Array.isArray(b)) return shape;
-    const { field, states, label, ...rest } = b as Record<string, unknown>;
+    const { field, states, label, absent, ...rest } = b as Record<string, unknown>;
     if (Object.keys(rest).length > 0) return shape;
+    if (absent !== undefined) {
+      if (typeof absent !== "object" || absent === null || Array.isArray(absent)) return shape;
+      const { state, label: said, ...more } = absent as Record<string, unknown>;
+      if (Object.keys(more).length > 0 || !(MARK_STATES as readonly unknown[]).includes(state)) return shape;
+      if (typeof said !== "string" || !said.trim() || said.length > MAX_MARK_LABEL) return shape;
+    }
     if (typeof field !== "string" || !MARK_FIELD.test(field)) return shape;
     if (label !== undefined && (typeof label !== "string" || !label.trim() || label.length > MAX_MARK_LABEL)) return shape;
     if (typeof states !== "object" || states === null || Array.isArray(states)) return shape;
@@ -81,6 +89,11 @@ export function rowMarks(row: Readonly<Record<string, unknown>>, bindings: reado
   for (const b of bindings) {
     let value: unknown = row;
     for (const step of b.field.split(".")) value = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>)[step] : undefined;
+    // Absent: its own words, and no value, since there is none to show.
+    if ((value === undefined || value === null) && b.absent) {
+      out.push({ field: b.field, label: b.absent.label.trim(), value: null, state: b.absent.state });
+      continue;
+    }
     if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") continue;
     const state = Object.prototype.hasOwnProperty.call(b.states, String(value)) ? b.states[String(value)] : undefined;
     if (state) out.push({ field: b.field, label: b.label?.trim() || b.field, value, state });

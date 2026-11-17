@@ -9,6 +9,9 @@
  * naming no part of the system (the USER 11-16, by research); under them, the view's id, writer
  * and any refusal as records name them. The full refusal stays readable in `human_surface:ui_view`.
  *
+ * What waits on the person's grade is the page's own, served with every view (PAGE_ENTRIES) and drawn first, so no
+ * view can move or hide it.
+ *
  * Rows here select what to look at. What is sent from this screen is a person's verdict on a
  * row an entry offers it on, and an answer to a question opened in place.
  */
@@ -94,6 +97,11 @@ export function Landing({
           ) : null}
         </div>
       </details>
+      {view.above && view.above.length > 0 ? (
+        <div className="sf-landing-above" data-page-own="">
+          <Entries entries={view.above} readers={view.readers} faces={view.faces} enabled={live} intervalMs={intervalMs} onOpenQuestion={onOpenQuestion} openQuestion={openQuestion} />
+        </div>
+      ) : null}
       {openQuestion !== null && !listsQuestions ? (
         <div className="sf-question-inplace" data-question-open={openQuestion}>
           <QuestionView questionId={openQuestion} />

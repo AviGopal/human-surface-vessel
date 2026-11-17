@@ -13,7 +13,7 @@ GlobalRegistrator.register({ url: "http://surface.test/" });
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { forgetViews, teardownDom, trackRoot } from "./setup.ts";
-import { bindRow, boundToRow } from "../src/row-binding.ts";
+import { bindRow, boundToRow, statesNone } from "../src/row-binding.ts";
 import { resetViewsForTest, writeView } from "../src/ui-views.ts";
 
 const TREE = "3".repeat(40);
@@ -35,6 +35,14 @@ describe("bindRow and boundToRow", () => {
     expect(bindRow(byTree.pointer, { id: DIFF.id, tree: { sha: TREE } })).toBeNull();
     expect(bindRow(byTree.pointer, { id: DIFF.id, tree: null })).toBeNull();
     expect(bindRow({ type: "record_read", refs_to: "$row" }, { tree: TREE })).toBeNull();
+  });
+
+  test("must-fail: a row stating null for a bound field says there is nothing to read; one lacking the field does not", () => {
+    const p = { type: "record_read", shape: "gitDiff", where: { tree: "$row.tree" } };
+    expect(statesNone(p, { tree: null })).toBe(true);
+    expect(statesNone(p, {})).toBe(false);
+    expect(statesNone(p, { tree: "3".repeat(40) })).toBe(false);
+    expect(statesNone({ type: "record_read", refs_to: "$row" }, { id: null })).toBe(false);
   });
 
   test("a value that only looks like a binding is left as written", () => {

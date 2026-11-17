@@ -79,6 +79,8 @@ export interface UiViewState {
   readonly notDrawn?: { readonly id: string; readonly refusal: string; readonly detail: string } | null;
   /** Who reads a person's verdict, by how it is written and the shape it judges, and what it leaves to show after one. */
   readonly readers?: readonly VerdictReader[];
+  /** The page's own entries (src/ui-views.ts PAGE_ENTRIES), drawn first above the view's whatever view is in force. */
+  readonly above?: readonly ViewEntry[];
 }
 
 /** src/ui-views.ts VERDICT_READERS, as served with the view. */

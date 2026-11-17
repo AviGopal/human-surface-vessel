@@ -31,7 +31,7 @@ import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
 import { declaredDescriptions, declaredWords, rowWords, wordsFor } from "../lib/rowWords";
 import { declaredMarks, marksFor, rowMarks, type MarkBinding } from "../lib/rowMarks";
-import { bindRow } from "../lib/rowBinding";
+import { bindRow, statesNone } from "../lib/rowBinding";
 import { STATE_TOKENS } from "../design-tokens";
 import { askAbout, citesOf } from "../lib/box";
 import { Glyph } from "./Glyph";
@@ -485,7 +485,15 @@ function Thread({ entry, row, rowId, reading }: { entry: ViewEntry; row: Readonl
   // Bound to the row by its id or a field of it; a row the binding names no value of draws no thread.
   const pointer = bindRow(entry.pointer, row);
   const q = useReport(pointer ?? { type: "record_read" }, { enabled: reading.enabled && pointer !== null, intervalMs: reading.intervalMs });
-  if (pointer === null) return null;
+  if (pointer === null) {
+    // A row stating null where the read is bound has nothing to read by it: the thread's own words for none, read nothing.
+    return statesNone(entry.pointer, row) && entry.empty !== undefined ? (
+      <div className="sf-thread" data-thread-of={rowId}>
+        {entry.title ? <p className="sf-thread-title">{entry.title}</p> : null}
+        <Empty said={entry.empty} why={null} />
+      </div>
+    ) : null;
+  }
   const a: ReportAnswer | undefined = q.data;
   const inner = !a ? (
     <p className="sf-muted sf-report-note">{q.isError ? "no answer: the read failed" : "reading…"}</p>
@@ -572,7 +580,7 @@ function Marks({ marks }: { marks: ReturnType<typeof rowMarks> }): ReactNode {
         <li key={m.field} className="sf-state-mark" data-state={m.state} data-field={m.field} title={m.field}>
           <span className="sf-state-mark-dot" aria-hidden="true" />
           <span className="sf-state-mark-label">{m.label}</span>
-          <span className="sf-state-mark-value">{fieldText(m.value)}</span>
+          {m.value === null ? null : <span className="sf-state-mark-value">{fieldText(m.value)}</span>}
           <span className="sf-state-mark-state">{STATE_TOKENS[m.state].label}</span>
         </li>
       ))}
