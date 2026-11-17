@@ -138,6 +138,35 @@ describe("changes waiting on the person's grade are the page's own, first on the
     expect(w.textContent).not.toContain("other-tree-vessel");
   });
 
+  test("must-fail: of diffs of the tree that waits, only the walk's is offered, never one another writer made of it", async () => {
+    const modelled = { ...DIFF, role: "described", writer: "described-shape-vessel", repo: "modelled-vessel", seq: 8, t: at(8), id: hex("7") };
+    rows = [ASK, DIFF, modelled, F_ASK, WAIT_ASK];
+    const w = rowIn(block(await mount())!, WAIT_ASK.id)!;
+    expect(rowIn(w, DIFF.id)).not.toBeNull();
+    expect(rowIn(w, modelled.id)).toBeNull();
+    expect(w.textContent).not.toContain("modelled-vessel");
+  });
+
+  test("must-fail: of two walk diffs of the tree that waits, the newer is offered with its own checks", async () => {
+    const older = { ...DIFF, check: { passed: false, gap_id: "shell-run-escapes" } };
+    const newer = { ...DIFF, check: { passed: true, gap_id: "shell-run-escapes" }, seq: 9, t: at(9), id: hex("c") };
+    rows = [ASK, older, newer, F_ASK, WAIT_ASK];
+    const w = rowIn(block(await mount())!, WAIT_ASK.id)!;
+    expect(rowIn(w, newer.id)).not.toBeNull();
+    expect(rowIn(w, older.id)).toBeNull();
+    const marks = [...rowIn(w, newer.id)!.querySelectorAll(".sf-state-mark")].map((m) => [m.getAttribute("data-field"), m.getAttribute("data-state")]);
+    expect(marks).toEqual([["check.passed", "reached"]]);
+  });
+
+  test("must-fail: a diff of the same tree made for another ask is not offered: a grade of it is not about this ask, so it would not answer this wait", async () => {
+    const ASK2 = { ...ASK, what: "Another ask.", seq: 3, t: at(3), id: hex("2") };
+    const elsewhere = { ...DIFF, input_refs: [ASK2.id], repo: "elsewhere-vessel", seq: 8, t: at(8), id: hex("3") };
+    rows = [ASK, ASK2, elsewhere, F_ASK, WAIT_ASK];
+    const w = rowIn(block(await mount())!, WAIT_ASK.id)!;
+    expect(rowIn(w, elsewhere.id)).toBeNull();
+    expect(w.textContent).toContain("Not checked yet: no change to grade.");
+  });
+
   test("must-fail: when the tree that waits has no diff, an older tree's diff is not offered in its place", async () => {
     rows = [ASK, OTHER, F_ASK, WAIT_ASK];
     const el = await mount();
