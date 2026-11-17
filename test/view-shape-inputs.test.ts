@@ -158,7 +158,7 @@ describe("uiView_write declares its inputs, from the contract a write is checked
     }
   });
 
-  test("must-fail: a thread under a thread is declared, as the write takes it; one deeper the write refuses", () => {
+  test("a thread under a thread is declared, as the write takes it; one deeper the write refuses", () => {
     const leaf = { pointer: { type: "record_read", refs_to: "$row", shape: "outcome" }, form: "rows" };
     const two = [{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", refs_to: "$row", shape: "answer" }, form: "rows", thread: leaf } }];
     expect(fits(declared()!, { region: "landing", entries: two })).toBe(true);
@@ -170,7 +170,7 @@ describe("uiView_write declares its inputs, from the contract a write is checked
     views.resetViewsForTest();
   });
 
-  test("must-fail: a thread list's entries declare their read, so a read the page never makes does not fit", () => {
+  test("a thread list's entries declare their read, so a read the page never makes does not fit", () => {
     const thread = (entrySchema()["properties"] as Record<string, Schema>)["thread"]!;
     expect(fits(thread, [{ pointer: { type: "record_read", refs_to: "$row", shape: "answer" }, form: "rows" }])).toBe(true);
     expect(fits(thread, [{ pointer: { type: "shellResult" }, form: "rows" }])).toBe(false);
