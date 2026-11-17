@@ -26,7 +26,12 @@ const A = ask("Put the page back as it was.", 1, hex("a"));
 const B = ask("Show what waits on me first.", 2, hex("b"));
 const C = ask("An ask from before targets.", 3, hex("c"));
 const A_TARGET = { shape: "uiViewState", where: { region: "landing", "view.drawsDefault": true } };
-const A_WANTED = wanted("Return the landing to its default layout.", 4, hex("d"), [C.id, A.id], { root: A.id, targets: [A_TARGET] });
+// Two targets, as the seed allows 1 to 3: one whose shape an owner described, one no owner did.
+const A_MARK = { shape: "outcome", where: { role: "person", r: 1 } };
+const A_WANTED = wanted("Return the landing to its default layout.", 4, hex("d"), [C.id, A.id], { root: A.id, targets: [A_TARGET, A_MARK] });
+// As the owner writes it: what a shape is, in its words, read once per page.
+const OUTCOME_SAID = "A grade of how a request went: r is 1 when it did what was asked, 0 when not.";
+const DESCRIBED = { input_refs: [], shape: "shape_description", of: "outcome", words: ["r"], description: OUTCOME_SAID, seq: 0, t: at(0), writer: "owner", role: "owner", id: hex("4") };
 const A_ANSWER = answer("The landing is back on its default.", 5, hex("e"), A.id, A.id);
 // B's request cites A in its pool and is newer: bound by citation, it would replace A's under A.
 const B_WANTED = wanted("Draw the questions above the asks.", 6, hex("f"), [A.id, B.id], { root: B.id, targets: [{ shape: "uiViewState", where: { region: "landing" } }] });
@@ -34,7 +39,7 @@ const B_ANSWER = answer("Questions now come first.", 7, hex("1"), B.id, B.id);
 // Written before targets: no root on either row, no targets on the request.
 const C_WANTED = wanted("An ask from before targets.", 8, hex("2"), [C.id], {});
 const C_ANSWER = answer("Done before targets.", 9, hex("3"), C.id, null);
-const ALL = [A, B, C, A_WANTED, A_ANSWER, B_WANTED, B_ANSWER, C_WANTED, C_ANSWER];
+const ALL = [DESCRIBED, A, B, C, A_WANTED, A_ANSWER, B_WANTED, B_ANSWER, C_WANTED, C_ANSWER];
 
 const sent: Record<string, unknown>[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -89,10 +94,14 @@ describe("what an ask was taken to mean is drawn under its answer", () => {
     const under = rowIn(rowIn(el, A.id)!, A_ANSWER.id)!;
     const taken = rowIn(under, A_WANTED.id);
     expect(taken).not.toBeNull();
-    const text = taken!.textContent ?? "";
-    expect(text).toContain(A_WANTED.what);
-    expect(text).toContain("uiViewState");
-    expect(text).toContain("view.drawsDefault");
+    expect(taken!.textContent).toContain(A_WANTED.what);
+    // Each target a line of its own, its pairs as words, never the value's JSON.
+    const lines = [...taken!.querySelectorAll(".sf-row-object [data-field-line]")].map((p) => p.textContent);
+    expect(lines).toEqual(["targets uiViewState where region landing, view.drawsDefault yes", "targets outcome where role person, r 1"]);
+    expect(taken!.querySelector(".sf-row-objects")!.textContent).not.toContain("{");
+    // A shape its owner described says what it is in the owner's words; one no owner described is named alone.
+    const said = [...taken!.querySelectorAll(".sf-row-object")].map((o) => o.querySelector(".sf-row-object-what")?.textContent ?? null);
+    expect(said).toEqual([null, OUTCOME_SAID]);
     expect(sent).toContainEqual({ type: "record_read", shape: "change_wanted", where: { root: A.id }, has: "targets" });
   });
 

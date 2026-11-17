@@ -29,7 +29,7 @@ import { SESSION_KEY, useSession } from "../api/session";
 import type { Question } from "../api/participation";
 import { questionRowSubject } from "../state/questions";
 import { useLimits } from "../state/limits";
-import { declaredWords, rowWords, wordsFor } from "../lib/rowWords";
+import { declaredDescriptions, declaredWords, rowWords, wordsFor } from "../lib/rowWords";
 import { declaredMarks, marksFor, rowMarks, type MarkBinding } from "../lib/rowMarks";
 import { bindRow } from "../lib/rowBinding";
 import { STATE_TOKENS } from "../design-tokens";
@@ -393,8 +393,10 @@ function faceOf(role: unknown, faces: Readonly<Record<string, string>>): string 
   return typeof role === "string" && Object.hasOwn(faces, role) ? faces[role] : undefined;
 }
 
-function Word({ k, v, cut }: { k: string; v: unknown; cut: boolean }): ReactNode {
+function Word({ k, v, cut, described }: { k: string; v: unknown; cut: boolean; described: ReadonlyMap<string, string> }): ReactNode {
   if (isTextList(v)) return <div className="sf-row-words"><Items items={v} /></div>;
+  const objects = objectsOf(v);
+  if (objects) return <ObjectLines k={k} items={objects} described={described} />;
   if (typeof v === "string" && heuristicForm(k, v, false) === "diff") return <DiffWord text={v} cut={cut} />;
   return typeof v === "string" ? (
     <div className="sf-row-words sf-row-prose">
@@ -402,6 +404,52 @@ function Word({ k, v, cut }: { k: string; v: unknown; cut: boolean }): ReactNode
     </div>
   ) : (
     <p className="sf-row-words" data-field-line="">{`${k.replace(/_/g, " ")} ${fieldText(v)}`}</p>
+  );
+}
+
+/** A value that is an object or a list of them, as its items; anything else, null. */
+function objectsOf(v: unknown): readonly Record<string, unknown>[] | null {
+  const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+  if (isObject(v)) return [v];
+  return Array.isArray(v) && v.length > 0 && v.every(isObject) ? v : null;
+}
+
+/**
+ * An object's pairs as words: each key as written (a key with a dot in it is one key, never a path) and its plain
+ * value; a nested object as its own pairs after its key; anything deeper as written.
+ */
+export function pairsText(o: Readonly<Record<string, unknown>>): string {
+  return Object.entries(o)
+    .flatMap(([k, v]) => {
+      if (v === undefined || v === null) return [];
+      if (isPlain(v)) return [`${k} ${plain(v)}`];
+      if (typeof v === "object" && !Array.isArray(v)) return [`${k} ${Object.entries(v as Record<string, unknown>).map(([k2, v2]) => `${k2} ${isPlain(v2) ? plain(v2) : fieldText(v2)}`).join(", ")}`];
+      return [`${k} ${fieldText(v)}`];
+    })
+    .join(" · ");
+}
+
+/**
+ * A field holding objects, one line per object: a shape it names first, with what that shape is in its owner's
+ * words when an owner declared them (its shape_description row), then its other pairs. The page says nothing of
+ * its own about any shape: one no owner described is named alone.
+ */
+function ObjectLines({ k, items, described }: { k: string; items: readonly Record<string, unknown>[]; described: ReadonlyMap<string, string> }): ReactNode {
+  return (
+    <div className="sf-row-words sf-row-objects" data-field={k}>
+      {items.map((item, i) => {
+        const { shape, ...rest } = item;
+        const named = typeof shape === "string" ? shape : null;
+        const what = named ? described.get(named) : undefined;
+        const pairs = pairsText(named ? rest : item);
+        return (
+          <div key={i} className="sf-row-object" data-object="">
+            <p data-field-line="">{`${k.replace(/_/g, " ")}${named ? ` ${named}` : ""}${pairs ? ` ${pairs}` : ""}`}</p>
+            {what ? <p className="sf-muted sf-row-object-what">{what}</p> : null}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -423,7 +471,7 @@ function DiffWord({ text, cut }: { text: string; cut: boolean }): ReactNode {
 }
 
 /** `sectionStale`: the entry these rows belong to is drawn from a read that failed since; its note covers their threads. */
-export type Reading = { declared: ReadonlyMap<string, readonly string[]>; marks: ReadonlyMap<string, readonly MarkBinding[]>; readers: readonly VerdictReader[]; faces: Readonly<Record<string, string>>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
+export type Reading = { declared: ReadonlyMap<string, readonly string[]>; described: ReadonlyMap<string, string>; marks: ReadonlyMap<string, readonly MarkBinding[]>; readers: readonly VerdictReader[]; faces: Readonly<Record<string, string>>; enabled: boolean; intervalMs: number; onOpenQuestion: (id: string) => void; openQuestion: string | null; sectionStale?: true };
 
 /**
  * An entry's thread under one row: its read, bound to the row's id, drawn as its own entry.
@@ -541,7 +589,7 @@ function Rows({ rows, entry, reading, inThread = false }: { rows: readonly unkno
         return (
           <li key={id ?? i} className={threads.length > 0 && !inThread ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined} data-face={faceOf(o["role"], reading.faces)}>
             {words.length > 0 ? (
-              words.map((w, j) => <Word key={j} k={w.field} v={w.value} cut={o["truncated"] === true} />)
+              words.map((w, j) => <Word key={j} k={w.field} v={w.value} cut={o["truncated"] === true} described={reading.described} />)
             ) : (
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
@@ -962,7 +1010,8 @@ export function Entries({
   const declarations = useReport(DECLARATIONS, { enabled, intervalMs }).data;
   const declared = declarations?.ok ? declaredWords(declarations.answer) : new Map<string, readonly string[]>();
   const marks = declarations?.ok ? declaredMarks(declarations.answer) : new Map<string, readonly MarkBinding[]>();
-  const reading: Reading = { declared, marks, readers, faces, enabled, intervalMs, onOpenQuestion, openQuestion };
+  const described = declarations?.ok ? declaredDescriptions(declarations.answer) : new Map<string, string>();
+  const reading: Reading = { declared, described, marks, readers, faces, enabled, intervalMs, onOpenQuestion, openQuestion };
   const session = useSession();
   const signedOut = session.data !== undefined && session.data.signedIn !== true;
   return (

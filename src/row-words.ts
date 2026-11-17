@@ -34,6 +34,23 @@ export function declaredWords(answer: unknown): ReadonlyMap<string, readonly str
   return out;
 }
 
+/**
+ * The owners' own words for what a shape is, from the same read: per described shape (`of`), its latest row's
+ * `description`. A shape no owner described has none here, and is named by its shape alone.
+ */
+export function declaredDescriptions(answer: unknown): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  if (!Array.isArray(answer)) return out;
+  for (const row of answer) {
+    if (typeof row !== "object" || row === null) continue;
+    const { of, description } = row as Record<string, unknown>;
+    if (typeof of !== "string") continue;
+    if (typeof description === "string" && description.trim()) out.set(of, description.trim());
+    else out.delete(of);
+  }
+  return out;
+}
+
 /** The fields drawn as `shape`'s words: the owner's declaration, else the entry's, else none. */
 export function wordsFor(shape: unknown, declared: ReadonlyMap<string, readonly string[]>, entryWords: readonly string[] | undefined): readonly string[] | null {
   return (typeof shape === "string" ? declared.get(shape) : undefined) ?? entryWords ?? null;

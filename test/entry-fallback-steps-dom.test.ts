@@ -35,7 +35,7 @@ afterAll(async () => {
   await teardownDom();
 });
 
-const READING: Reading = { declared: new Map(), marks: new Map(), readers: [], faces: {}, enabled: true, intervalMs: 60_000, onOpenQuestion: () => {}, openQuestion: null };
+const READING: Reading = { declared: new Map(), described: new Map(), marks: new Map(), readers: [], faces: {}, enabled: true, intervalMs: 60_000, onOpenQuestion: () => {}, openQuestion: null };
 const settle = async () => {
   for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 };
