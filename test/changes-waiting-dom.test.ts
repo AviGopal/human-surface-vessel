@@ -225,6 +225,29 @@ describe("changes waiting on the person's grade are the page's own, first on the
     expect(waits).toEqual([WAIT_GAP.id, WAIT_ASK.id]);
   });
 
+  test("must-fail: a stored view's mark keeps its words for absence: written, served, and drawn", async () => {
+    resetViewsForTest();
+    const marked = { ...STORED, words: ["what"], marks: [{ field: "seen", states: { true: "reached" }, absent: { state: "waiting", label: " Not seen yet " } }] };
+    expect(writeView({ region: "landing", entries: [marked] }, "walk").ok).toBe(true);
+    const served = currentView("landing").entries;
+    expect((served[0] as { marks?: unknown }).marks).toEqual([{ field: "seen", states: { true: "reached" }, absent: { state: "waiting", label: "Not seen yet" } }]);
+    rows = [ASK];
+    const el = await mount([...served]);
+    const ask = [...el.querySelectorAll(`.sf-row[data-row="${ASK.id}"]`)].find((r) => !block(el)!.contains(r))!;
+    const said = [...ask.querySelectorAll(".sf-state-mark")].map((m) => [m.getAttribute("data-state"), m.querySelector(".sf-state-mark-label")!.textContent]);
+    expect(said).toEqual([["waiting", "Not seen yet"]]);
+    expect(ask.querySelectorAll(".sf-state-mark-value").length).toBe(0);
+  });
+
+  test("must-fail: a wait row without the tree field draws no change line at all; only a stated null says not checked", async () => {
+    const { tree: _tree, ...unstated } = wait(ASK.id, null, F_ASK);
+    rows = [ASK, DIFF, F_ASK, unstated];
+    const w = rowIn(block(await mount())!, unstated.id)!;
+    expect(w).not.toBeNull();
+    expect(w.textContent).not.toContain("Not checked yet");
+    expect(rowIn(w, DIFF.id)).toBeNull();
+  });
+
   test("control: nothing waiting draws its title and a 0, and no row", async () => {
     rows = [ASK, DIFF];
     const el = await mount();

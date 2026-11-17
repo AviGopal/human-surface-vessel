@@ -127,6 +127,7 @@ describe("one rule for a view's marks and an owner's", () => {
     expect(marksProblem(absent)).toBeNull();
     expect(rowMarks({}, absent)).toEqual([{ field: "a.b", label: "Never ran", value: null, state: "waiting" }]);
     expect(rowMarks({ a: null }, absent)).toEqual([{ field: "a.b", label: "Never ran", value: null, state: "waiting" }]);
+    expect(rowMarks({ a: { b: null } }, absent)).toEqual([{ field: "a.b", label: "Never ran", value: null, state: "waiting" }]);
     expect(rowMarks({ a: { b: true } }, absent)).toEqual([{ field: "a.b", label: "a.b", value: true, state: "reached" }]);
     expect(rowMarks({ a: { b: false } }, absent)).toEqual([]);
     expect(marksProblem([{ field: "a", states: { x: "reached" }, absent: { state: "green", label: "x" } }])).not.toBeNull();
