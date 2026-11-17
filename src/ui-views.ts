@@ -307,6 +307,14 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
 }
 
 /**
+ * What each view call does to a shape, as discovery keeps it: the region read answers the view in force
+ * (uiViewState), and the write changes it. Declared apart so a reader judging an ask by its effect counts
+ * a read made after the change, never the write's own reply.
+ */
+export const VIEW_SHAPE_ANSWERS = { "human_surface:ui_view": "uiViewState" } as const;
+export const VIEW_SHAPE_CHANGES = { uiView_write: ["uiViewState"] } as const;
+
+/**
  * The pointer fields `uiView_write` reads, as JSON Schema, told to discovery as the shape's inputs
  * so a producer that builds the pointer (the walk's request) sees them when it writes (law 8): a
  * shape with no declared inputs is left out of what that producer reads. Generated from the same

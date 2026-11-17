@@ -28,7 +28,7 @@ import {
   VESSEL_ID,
   VESSEL_NAME,
 } from "./config.ts";
-import { viewShapeDescriptions, viewShapeInputs } from "./ui-views.ts";
+import { VIEW_SHAPE_ANSWERS, VIEW_SHAPE_CHANGES, viewShapeDescriptions, viewShapeInputs } from "./ui-views.ts";
 
 const REREGISTER_INTERVAL_MS = 60_000;
 
@@ -44,6 +44,10 @@ export const REGISTRATION_PAYLOAD = {
   // The pointer fields a caller fills, so a producer that builds a pointer (the walk's request)
   // sees uiView_write and its vocabulary when it writes; a shape with none is left out of that read.
   shape_inputs: viewShapeInputs(),
+  // What a call answers and what it changes, by shape: the region read answers uiViewState and the
+  // write changes it, so an ask whose target is the view as drawn is judged by a read after the write.
+  shape_answers: VIEW_SHAPE_ANSWERS,
+  shape_changes: VIEW_SHAPE_CHANGES,
   // A surface's views are data it holds (law 11): each surface keeps its own, so a view read or
   // written on another surface is a different view. Pinned, discovery sends a node's view calls to
   // its own surface first; with none, to the one peer that holds views, and with several it refuses

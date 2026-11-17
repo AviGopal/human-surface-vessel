@@ -49,6 +49,20 @@ describe("a region's view through the routes", () => {
     expect(REGISTRATION_PAYLOAD.shapes as readonly string[]).not.toContain("uiView");
   });
 
+  test("must-fail: the surface declares that its region read answers uiViewState and its write changes it, both advertised", () => {
+    const payload = REGISTRATION_PAYLOAD as unknown as { shapes: string[]; shape_answers: Record<string, string>; shape_changes: Record<string, string[]> };
+    expect(payload.shape_answers).toEqual({ "human_surface:ui_view": "uiViewState" });
+    expect(payload.shape_changes).toEqual({ uiView_write: ["uiViewState"] });
+    const named = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+    for (const [call, shapes] of [...Object.entries(payload.shape_answers).map(([k, v]) => [k, [v]] as const), ...Object.entries(payload.shape_changes)]) {
+      expect(payload.shapes).toContain(call);
+      for (const shape of shapes) {
+        expect(shape).toMatch(named);
+        expect(payload.shapes).toContain(shape);
+      }
+    }
+  });
+
   test("must-fail: the report ties a view to the run that wrote it, when the write names one", async () => {
     const report = async () => {
       const res = await impulsesRouter.request("/v2/impulses/resolve", {

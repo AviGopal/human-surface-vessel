@@ -59,6 +59,8 @@ describe("uiView_write", () => {
     const w = await write({ region: "landing", entries: [load, asked] });
     expect(w.status).toBe(200);
     expect(w.json).toMatchObject({ resolved: true, shape: "uiView_write", body: { region: "landing", revision: 1 } });
+    // The write changes the view; its reply stays the write's own, never a uiViewState answer a reader could count.
+    expect("region" in w.json || "view" in w.json).toBe(false);
     expect(w.json.body.view.writtenBy).toBeTruthy();
     const r = await read("landing");
     expect(r.json).toMatchObject({ revision: 1, id: "landing@1", entries: [load, asked] });
