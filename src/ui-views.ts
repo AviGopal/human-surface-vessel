@@ -693,7 +693,8 @@ export function currentView(region: ViewRegion): ViewInForce {
   load();
   const latest = history.get(region)?.at(-1) ?? defaultView(region);
   const drawsDefault = latest.isDefault === true || sameView(latest, DEFAULT_VIEWS[region].entries, DEFAULT_VIEWS[region].faces);
-  return { ...latest, notDrawn: passedOver.get(region) ?? null, readers: VERDICT_READERS, drawsDefault };
+  // Every field said on every view, so a reader of a line stored before a field existed reads its value, not its absence.
+  return { ...latest, restoreOf: latest.restoreOf ?? null, isDefault: latest.isDefault === true, notDrawn: passedOver.get(region) ?? null, readers: VERDICT_READERS, drawsDefault };
 }
 
 /** The next revision number: past every stored line, drawn or not. */

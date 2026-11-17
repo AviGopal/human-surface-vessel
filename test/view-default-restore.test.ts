@@ -169,6 +169,13 @@ describe("undo steps back", () => {
     appendFileSync(join(dir, "ui-views.jsonl"), line(1, [load], null) + line(2, [...DEFAULT_VIEWS.landing.entries], 0) + line(3, [load, asked], null));
     resetViewsForTest();
     expect(await inForce()).toMatchObject({ revision: 3, entries: [load, asked] });
+    // A line from before says it is no default and restored nothing, as a reader of the region's view reads it.
+    const region = await impulsesRouter.request("/v2/impulses/resolve", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...testAuth() },
+      body: JSON.stringify({ pointer: { type: "human_surface:ui_view", region: "landing" } }),
+    });
+    expect(((await region.json()) as any).view).toMatchObject({ revision: 3, isDefault: false, restoreOf: null, drawsDefault: false });
     expect((await write({ region: "landing", undo: true })).json.body.view).toMatchObject({ revision: 4, undoOf: 2 });
     // The old copy is a stored view, not the default: going back to the default is still a revision.
     expect((await write({ region: "landing", default: true })).json.body.view).toMatchObject({ revision: 5, isDefault: true });
