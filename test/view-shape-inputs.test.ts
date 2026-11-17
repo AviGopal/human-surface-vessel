@@ -114,6 +114,33 @@ describe("uiView_write declares its inputs, from the contract a write is checked
     expect(fits(thread, { ...one, zz: 1 })).toBe(false);
   });
 
+  test("must-fail: each declaration fits what discovery keeps, so none is dropped and every shape stays callable", () => {
+    // discovery-vessel resolvers.ts sanitizeShapeInputs: a shape's schema over 8,192 characters (JSON.stringify length),
+    // one naming an address, or one past 65,536 in all is dropped without a word. uiView_write's came to 18,191, so the
+    // walk read no inputs for it and skipped every view write, a person's undo and return-to-default included.
+    const ADDRESS = /[a-z][a-z0-9+.-]*:\/\/|\b\d{1,3}(?:\.\d{1,3}){3}\b|\[[0-9a-f]*:[0-9a-f:]*\](?::\d{2,5})?|\b[a-z][a-z0-9.-]*:\d{2,5}\b/i;
+    const all = (REGISTRATION_PAYLOAD as unknown as { shape_inputs: Record<string, Schema> }).shape_inputs;
+    let total = 0;
+    for (const [shape, schema] of Object.entries(all)) {
+      const text = JSON.stringify(schema);
+      expect({ shape, over: text.length > 8_192, address: ADDRESS.test(text) }).toEqual({ shape, over: false, address: false });
+      total += text.length;
+    }
+    expect(total).toBeLessThanOrEqual(65_536);
+    expect(Object.keys(all).sort()).toEqual(["human_surface:ui_view", "uiView_write"]);
+  });
+
+  test("a thread's list is declared by its entries' required fields, and the write checks them in full", () => {
+    const thread = (entrySchema()["properties"] as Record<string, Schema>)["thread"]!;
+    const one = { pointer: { type: "record_read", refs_to: "$row", shape: "answer" }, form: "rows" };
+    expect(fits(thread, [{ ...one, zz: 1 }])).toBe(true);
+    expect(fits(thread, [{ form: "rows" }])).toBe(false);
+    views.resetViewsForTest();
+    const w = views.writeView({ region: "landing", entries: [{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: [{ ...one, zz: 1 }] }] }, "walk");
+    expect(w.ok).toBe(false);
+    views.resetViewsForTest();
+  });
+
   test("control: a write the contract refuses does not fit either", () => {
     expect(fits(declared()!, { region: "margin" })).toBe(false);
     expect(fits(declared()!, { region: "landing", entries: [{ pointer: { type: "record_read", shape: "answer" }, form: "table" }] })).toBe(false);

@@ -376,19 +376,21 @@ export const VIEW_SHAPE_CHANGES = { uiView_write: ["uiViewState"] } as const;
 export function viewShapeInputs(): Record<"uiView_write" | "human_surface:ui_view", Record<string, unknown>> {
   const plain = { type: ["string", "number", "boolean"] };
   const where = { type: "object", additionalProperties: plain, description: `records' where: equality on a row's fields, 1 to ${MAX_WHERE}` };
-  const pointer = {
+  // The read is said in words once, on the entries' own pointer; a thread's or a grade's pointer is the same read.
+  const read = (said: boolean): Record<string, unknown> => ({
     type: "object",
     required: ["type"],
-    properties: { type: { enum: [...VIEW_READS], description: "the read: record_read answers rows of any shape (its shape argument names which), uiQuestion the questions the surface holds" }, where },
+    properties: { type: { enum: [...VIEW_READS], ...(said ? { description: "the read: record_read answers rows of any shape (its shape argument names which), uiQuestion the questions the surface holds" } : {}) }, where },
     additionalProperties: plain,
-  };
+  });
+  const pointer = read(false);
   const field = { type: "string", pattern: FIELD_NAME.source };
-  const entry = (thread: Record<string, unknown> | null): Record<string, unknown> => ({
+  const entry = (thread: Record<string, unknown> | null, said = false): Record<string, unknown> => ({
     type: "object",
     required: ["pointer", "form"],
     additionalProperties: false,
     properties: {
-      pointer,
+      pointer: said ? read(true) : pointer,
       form: { enum: [...ENTRY_FORMS] },
       title: { type: "string", minLength: 1, maxLength: 80 },
       field,
@@ -406,9 +408,10 @@ export function viewShapeInputs(): Record<"uiView_write" | "human_surface:ui_vie
           required: ["field", "states"],
           additionalProperties: false,
           properties: {
-            field: { type: "string", pattern: MARK_FIELD.source, description: "a field name, or a dotted path of up to 3 into nested values" },
-            states: { type: "object", additionalProperties: { enum: [...MARK_STATES] }, description: `the state each value reads as, keyed by the value as written: true, false, a number, a string; 1 to ${MAX_MARK_VALUES}` },
+            field: { type: "string", pattern: MARK_FIELD.source, ...(said ? { description: "a field name, or a dotted path of up to 3 into nested values" } : {}) },
+            states: { type: "object", additionalProperties: { enum: [...MARK_STATES] }, ...(said ? { description: `the state each value reads as, keyed by the value as written: true, false, a number, a string; 1 to ${MAX_MARK_VALUES}` } : {}) },
             label: { type: "string", minLength: 1, maxLength: MAX_MARK_LABEL },
+            absent: { type: "object", required: ["state", "label"], additionalProperties: false, properties: { state: { enum: [...MARK_STATES] }, label: { type: "string", minLength: 1, maxLength: MAX_MARK_LABEL } }, ...(said ? { description: "the state and words for a row without the field, or with null there" } : {}) },
           },
         },
       },
@@ -420,9 +423,16 @@ export function viewShapeInputs(): Record<"uiView_write" | "human_surface:ui_vie
       ...(thread ? { thread } : {}),
     },
   });
-  // A thread is one entry or a list of them; a thread's entry may hold one more, which holds none.
-  const threadOf = (e: Record<string, unknown>): Record<string, unknown> => ({ ...e, type: ["object", "array"], minItems: 1, maxItems: MAX_THREADS, items: e, description: "one entry, or a list of them" });
-  const under = entry(threadOf(entry(null)));
+  // A thread is one entry or a list of them; a thread's entry may hold one more, which holds none. Discovery keeps no
+  // declaration over 8,192 characters a shape, and declaring every level in full, once as a lone entry and again as a
+  // list's items, came to 18,191: discovery dropped it and no walk could call uiView_write at all. So an entry's fields
+  // are declared in full once a level, for the lone entry under the first; a list's items and the last level are
+  // declared by their required fields, with the same fields as any entry, and the write checks them in full and names
+  // what it refuses.
+  const loose = (said: string): Record<string, unknown> => ({ type: "object", required: ["pointer", "form"], properties: { pointer, form: { enum: [...ENTRY_FORMS] } }, description: said });
+  const threadOf = (e: Record<string, unknown>, items: Record<string, unknown>): Record<string, unknown> => ({ ...e, type: ["object", "array"], minItems: 1, maxItems: MAX_THREADS, items, description: "one entry, or a list of them" });
+  const last = loose("an entry with the same fields as any other, and no thread");
+  const under = entry(threadOf(last, last));
   return {
     "human_surface:ui_view": {
       type: "object",
@@ -434,7 +444,7 @@ export function viewShapeInputs(): Record<"uiView_write" | "human_surface:ui_vie
       properties: {
         region: { enum: [...VIEW_REGIONS] },
         faces: { type: "object", additionalProperties: { enum: [...FACES] }, description: `the face a row's words are drawn in, by the row's role (1 to ${MAX_FACES} roles)` },
-        entries: { type: "array", minItems: 1, maxItems: MAX_ENTRIES, items: entry(threadOf(under)), description: "required unless default, restore or undo" },
+        entries: { type: "array", minItems: 1, maxItems: MAX_ENTRIES, items: entry(threadOf(under, loose("an entry with the same fields as any other, and a thread of its own at most one deep")), true), description: "required unless default, restore or undo" },
         note: { type: "string", maxLength: 500 },
         default: { const: true, description: "return the region to its default as this surface defines it now" },
         restore: { type: "integer", minimum: 0, description: "draw this revision again (0 is the default)" },
