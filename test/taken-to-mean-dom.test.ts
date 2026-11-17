@@ -102,7 +102,7 @@ describe("what an ask was taken to mean is drawn under its answer", () => {
     expect(taken!.querySelector(".sf-row-objects [data-field-line]")).toBeNull();
     // Labelled as the view titles it, above the reading: what the block is, so it never reads as a second answer.
     const thread = taken!.closest(".sf-thread")!;
-    expect(thread.querySelector(":scope > .sf-thread-title")!.textContent).toBe("Taken to mean");
+    expect([...thread.children].find((c) => c.matches(".sf-thread-title"))?.textContent).toBe("Taken to mean");
     expect(taken!.querySelector(".sf-row-objects")!.textContent).not.toContain("{");
     // A shape its owner described says what it is in the owner's words; one no owner described is named alone.
     const said = [...taken!.querySelectorAll(".sf-row-object")].map((o) => o.querySelector(".sf-row-object-what")?.textContent ?? null);
