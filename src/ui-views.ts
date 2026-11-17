@@ -432,7 +432,12 @@ export interface NotDrawn {
 }
 
 /** The view in force, and the newest stored view that was passed over, if any. */
-export type ViewInForce = UiView & { readonly notDrawn: NotDrawn | null; readonly readers: readonly VerdictReader[] };
+export type ViewInForce = UiView & {
+  readonly notDrawn: NotDrawn | null;
+  readonly readers: readonly VerdictReader[];
+  /** What is drawn is the default as defined now: a revision naming it, or a stored copy that still matches it. */
+  readonly drawsDefault: boolean;
+};
 
 export interface ViewRun {
   readonly dispatchId: string | null;
@@ -687,7 +692,8 @@ function defaultView(region: ViewRegion): UiView {
 export function currentView(region: ViewRegion): ViewInForce {
   load();
   const latest = history.get(region)?.at(-1) ?? defaultView(region);
-  return { ...latest, notDrawn: passedOver.get(region) ?? null, readers: VERDICT_READERS };
+  const drawsDefault = latest.isDefault === true || sameView(latest, DEFAULT_VIEWS[region].entries, DEFAULT_VIEWS[region].faces);
+  return { ...latest, notDrawn: passedOver.get(region) ?? null, readers: VERDICT_READERS, drawsDefault };
 }
 
 /** The next revision number: past every stored line, drawn or not. */

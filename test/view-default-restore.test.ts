@@ -96,6 +96,17 @@ describe("back to the default", () => {
     await write({ region: "landing", default: true });
     expect(viewLine(await inForce())).toBe("My usual layout.");
   });
+
+  test("must-fail: a stored view drawing just what the default draws is named the usual layout", async () => {
+    // Undo after a return to the default can restore a copy of it: the page is the same, so is its line.
+    await write({ region: "landing", entries: [load] });
+    await write({ region: "landing", entries: [...DEFAULT_VIEWS.landing.entries] });
+    await write({ region: "landing", default: true });
+    expect((await write({ region: "landing", undo: true })).json.body.view).toMatchObject({ revision: 4, undoOf: 2 });
+    const view = await inForce();
+    expect(view).toMatchObject({ isDefault: false, drawsDefault: true });
+    expect(viewLine(view)).toBe("My usual layout.");
+  });
 });
 
 describe("restore a revision", () => {
@@ -121,9 +132,9 @@ describe("restore a revision", () => {
     expect((await inForce()).revision).toBe(1);
   });
 
-  test("must-fail: entries with default or restore are refused: a write is one of them", async () => {
-    for (const extra of [{ default: true }, { restore: 0 }]) {
-      const r = await write({ region: "landing", entries: [load], ...extra });
+  test("must-fail: any two of entries, default, restore and undo are refused: a write is one of them", async () => {
+    for (const both of [{ entries: [load], default: true }, { entries: [load], restore: 0 }, { entries: [load], undo: true }, { default: true, restore: 0 }, { default: true, undo: true }, { restore: 0, undo: true }]) {
+      const r = await write({ region: "landing", ...both });
       expect(r.status).toBe(422);
       expect(r.json.refusal).toBe("bad_entry");
     }

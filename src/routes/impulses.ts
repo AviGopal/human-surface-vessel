@@ -1005,9 +1005,10 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
       const region = pointer["region"];
       const run = runOf(pointer);
       const by = caller?.label ?? null;
-      const returning = pointer["default"] === true || pointer["restore"] !== undefined;
-      const write = returning && pointer["entries"] !== undefined
-        ? { ok: false as const, refusal: "bad_entry" as const, detail: "a write names entries, or default, or restore: one of them" }
+      // A write is one of them: two together would leave one silently unheeded.
+      const named = (["entries", "default", "restore", "undo"] as const).filter((k) => pointer[k] !== undefined);
+      const write = named.length > 1
+        ? { ok: false as const, refusal: "bad_entry" as const, detail: `${named.join(" and ")}: a write names entries, default, restore or undo, one of them` }
         : pointer["default"] === true
           ? restoreView(region, 0, by, Date.now(), run)
           : pointer["restore"] !== undefined

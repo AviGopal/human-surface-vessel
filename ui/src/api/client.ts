@@ -73,6 +73,8 @@ export interface UiViewState {
   readonly writtenBy?: string | null;
   /** The view draws the default as the surface defines it now: revision 0, or a revision naming it. */
   readonly isDefault?: boolean;
+  /** What is drawn is the default as defined now: a revision naming it, or a stored view that still matches it. */
+  readonly drawsDefault?: boolean;
   /** A newer stored view that is not drawn, and why; null when the newest is in force. */
   readonly notDrawn?: { readonly id: string; readonly refusal: string; readonly detail: string } | null;
   /** Who reads a person's verdict, by how it is written and the shape it judges, and what it leaves to show after one. */
