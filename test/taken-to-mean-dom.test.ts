@@ -96,8 +96,13 @@ describe("what an ask was taken to mean is drawn under its answer", () => {
     expect(taken).not.toBeNull();
     expect(taken!.textContent).toContain(A_WANTED.what);
     // Each target a line of its own, its pairs as words, never the value's JSON.
-    const lines = [...taken!.querySelectorAll(".sf-row-object [data-field-line]")].map((p) => p.textContent);
-    expect(lines).toEqual(["targets uiViewState where region landing, view.drawsDefault yes", "targets outcome where role person, r 1"]);
+    const lines = [...taken!.querySelectorAll(".sf-row-object-line")].map((p) => p.textContent);
+    expect(lines).toEqual(["uiViewState where region landing, view.drawsDefault yes", "outcome where role person, r 1"]);
+    // In the row's own type, not the mono of a value drawn with its field's name.
+    expect(taken!.querySelector(".sf-row-objects [data-field-line]")).toBeNull();
+    // Labelled as the view titles it, above the reading: what the block is, so it never reads as a second answer.
+    const thread = taken!.closest(".sf-thread")!;
+    expect(thread.querySelector(":scope > .sf-thread-title")!.textContent).toBe("Taken to mean");
     expect(taken!.querySelector(".sf-row-objects")!.textContent).not.toContain("{");
     // A shape its owner described says what it is in the owner's words; one no owner described is named alone.
     const said = [...taken!.querySelectorAll(".sf-row-object")].map((o) => o.querySelector(".sf-row-object-what")?.textContent ?? null);

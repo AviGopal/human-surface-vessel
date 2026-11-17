@@ -430,7 +430,8 @@ export function pairsText(o: Readonly<Record<string, unknown>>): string {
 }
 
 /**
- * A field holding objects, one line per object: a shape it names first, with what that shape is in its owner's
+ * A field holding objects, one line per object in the row's type (no field name before it, so not the mono of a
+ * value drawn with its field's name; the entry's title says what the block is): a shape it names first, with what that shape is in its owner's
  * words when an owner declared them (its shape_description row), then its other pairs. The page says nothing of
  * its own about any shape: one no owner described is named alone.
  */
@@ -444,7 +445,7 @@ function ObjectLines({ k, items, described }: { k: string; items: readonly Recor
         const pairs = pairsText(named ? rest : item);
         return (
           <div key={i} className="sf-row-object" data-object="">
-            <p data-field-line="">{`${k.replace(/_/g, " ")}${named ? ` ${named}` : ""}${pairs ? ` ${pairs}` : ""}`}</p>
+            <p className="sf-row-object-line">{named && pairs ? `${named} ${pairs}` : (named ?? pairs)}</p>
             {what ? <p className="sf-muted sf-row-object-what">{what}</p> : null}
           </div>
         );
@@ -518,8 +519,10 @@ function Thread({ entry, row, rowId, reading }: { entry: ViewEntry; row: Readonl
       </details>
     );
   }
+  // Open, a thread the view titled says its title above its rows: the view's word for what the read is, never the page's.
   return (
     <div className="sf-thread" data-thread-of={rowId}>
+      {entry.title ? <p className="sf-thread-title">{entry.title}</p> : null}
       {inner}
     </div>
   );
