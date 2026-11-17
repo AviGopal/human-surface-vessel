@@ -443,7 +443,7 @@ function Thread({ entry, row, rowId, reading }: { entry: ViewEntry; row: Readonl
   ) : (
     <>
       {a.stale && !reading.sectionStale ? <Stale stale={a.stale} /> : null}
-      <Drawn entry={entry} answer={a.answer} reading={reading} />
+      <Drawn entry={entry} answer={a.answer} reading={reading} inThread />
     </>
   );
   if (entry.folded) {
@@ -527,9 +527,10 @@ function Marks({ marks }: { marks: ReturnType<typeof rowMarks> }): ReactNode {
   );
 }
 
-function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewEntry; reading: Reading }): ReactNode {
+function Rows({ rows, entry, reading, inThread = false }: { rows: readonly unknown[]; entry: ViewEntry; reading: Reading; inThread?: boolean }): ReactNode {
   const judge = entry.judge;
   const threads = threadsOf(entry);
+  // Only a row at the top of a view carries the parent weight: a reply with a thread of its own under it stays a reply.
   return (
     <ol className="sf-rows">
       {rows.map((row, i) => {
@@ -538,7 +539,7 @@ function Rows({ rows, entry, reading }: { rows: readonly unknown[]; entry: ViewE
         const words = rowWords(o, wordsFor(o["shape"], reading.declared, entry.words));
         const time = when(o["t"]);
         return (
-          <li key={id ?? i} className={threads.length > 0 ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined} data-face={faceOf(o["role"], reading.faces)}>
+          <li key={id ?? i} className={threads.length > 0 && !inThread ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined} data-face={faceOf(o["role"], reading.faces)}>
             {words.length > 0 ? (
               words.map((w, j) => <Word key={j} k={w.field} v={w.value} cut={o["truncated"] === true} />)
             ) : (
@@ -708,7 +709,7 @@ function Empty({ said, why }: { said: string | undefined; why: string | null }):
 }
 
 /** The answer drawn in the entry's form, or what was found instead of rows. */
-function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; reading: Reading }): ReactNode {
+function Drawn({ entry, answer, reading, inThread = false }: { entry: ViewEntry; answer: unknown; reading: Reading; inThread?: boolean }): ReactNode {
   if (entry.form === "fields") return <Fields answer={answer} />;
   const got = rowsOf(answer, entry);
   if ("missing" in got) {
@@ -727,7 +728,7 @@ function Drawn({ entry, answer, reading }: { entry: ViewEntry; answer: unknown; 
   // A thread under a row with nothing citing it and no words for that says nothing: an ask the walk made no change for has no line about changes.
   if (got.rows.length === 0) return <Empty said={entry.empty} why={emptyReasonOf(answer)} />;
   const draw = (rows: readonly unknown[]): ReactNode =>
-    entry.form === "questions" ? <Questions rows={rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} inline={false} /> : <Rows rows={rows} entry={entry} reading={reading} />;
+    entry.form === "questions" ? <Questions rows={rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} inline={false} /> : <Rows rows={rows} entry={entry} reading={reading} inThread={inThread} />;
   return (
     <>
       {entry.form === "questions" ? <Questions rows={got.rows} open={reading.openQuestion} onOpen={reading.onOpenQuestion} lead /> : draw(got.rows)}

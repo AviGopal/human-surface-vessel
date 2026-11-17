@@ -182,6 +182,13 @@ const MAX_WHERE = 4;
 const DAY = { hours: 24 } as const;
 
 const WALK_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "outcome", where: { role: "described" } } };
+/**
+ * Under an answer, what its request took the ask to mean: the reading in its own words and the shapes the ask is
+ * judged by, so a person grades the answer with its target in view. Bound by the ask the answer was written for (its
+ * `root`), never by citation, since a later ask's rows cite this one in their pool; and only a row naming its targets,
+ * so rows written before targets were asked for draw nothing.
+ */
+const TAKEN_TO_MEAN = { pointer: { type: "record_read", shape: "change_wanted", where: { root: "$row.root" }, has: "targets" }, form: "rows", show: 1, newest: true, words: ["what", "targets"] } as const;
 /** The walk's own grades of a change: land_verdicts citing it that the described-shape vessel wrote. */
 const LAND_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "land_verdict", where: { role: "described" } } };
 
@@ -223,7 +230,7 @@ export const DEFAULT_VIEWS: Record<ViewRegion, { entries: readonly ViewEntry[]; 
         // Then what the walk did with it, records' calls under that root, folded and counted: there
         // to look into, not to read before the answer. Its order and its cut are records'.
         thread: [
-          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer", where: { role: "described" } }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES },
+          { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "answer", where: { role: "described" } }, form: "rows", show: 1, newest: true, words: ["text"], judge: "outcome", graded: WALK_GRADES, thread: TAKEN_TO_MEAN },
           // Then the change the walk made for it, if any: its newest diff, judged under the ask it was
           // made for, the grader's verdict closed until the person's. Where the landing stands is in
           // what the walk did (its landing calls), not a second read here.

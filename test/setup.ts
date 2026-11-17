@@ -27,7 +27,36 @@ export function testAuth(): { Authorization: string } {
 // globalThis.fetch at load leaves its stub. happy-dom's Request drops the forbidden Origin header and its fetch
 // is not the runtime's, so a later file that reads Origin or talks to a real local server measures the wrong
 // thing. A file that does should call restoreNativeGlobals() first.
-const NATIVE = { fetch: globalThis.fetch, Request: globalThis.Request, Response: globalThis.Response, Headers: globalThis.Headers };
+// NO REAL NETWORK. A test reaches only servers this process stood up (Bun.serve), on loopback; any other URL
+// throws, naming it. Run on a host that serves a substrate, a fetch that fell through a test's fake would
+// otherwise reach the live vessels on their localhost ports; with no network it would fail as refused, so a
+// suite that passes in a throwaway could still read and write live state on a host.
+const OWN_PORTS = new Set<number>();
+const serve = Bun.serve.bind(Bun);
+(Bun as { serve: typeof Bun.serve }).serve = ((options: Parameters<typeof Bun.serve>[0]) => {
+  const server = serve(options);
+  if (typeof server.port === "number") OWN_PORTS.add(server.port);
+  return server;
+}) as typeof Bun.serve;
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+/** Whether a test may fetch `url`: a loopback port one of this run's own servers holds. */
+export function ownServer(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return LOOPBACK.has(u.hostname) && OWN_PORTS.has(Number(u.port));
+  } catch {
+    return false;
+  }
+}
+const realFetch = globalThis.fetch;
+const guardedFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const url = input instanceof Request ? input.url : String(input);
+  if (!ownServer(url)) return Promise.reject(new TypeError(`test fetch refused: ${url} is not a server this test run stood up`));
+  return realFetch(input, init);
+}) as typeof fetch;
+globalThis.fetch = guardedFetch;
+
+const NATIVE = { fetch: guardedFetch, Request: globalThis.Request, Response: globalThis.Response, Headers: globalThis.Headers };
 
 /** Put back the runtime's fetch/Request/Response/Headers, unregistering a happy-dom an earlier file left behind. */
 export async function restoreNativeGlobals(): Promise<void> {
