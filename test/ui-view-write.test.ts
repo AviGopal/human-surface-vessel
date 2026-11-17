@@ -52,7 +52,7 @@ describe("uiView_write", () => {
       ["record_read", "outcome"],
     ]);
     expect(r.json.entries.map((e: any) => e.folded === true)).toEqual([false, false, false, true, true, true]);
-    expect(r.json.entries[2]).toMatchObject({ newest: true, thread: [{ newest: true, judge: "outcome" }, { pointer: { refs_to: "$row", shape: "gitDiff" }, show: 1, newest: true, judge: "land", graded: { pointer: { refs_to: "$row", shape: "land_verdict", where: { role: "described" } } } }, { pointer: { root: "$row", calls: "all" }, title: "What I did", folded: true }] });
+    expect(r.json.entries[2]).toMatchObject({ newest: true, thread: [{ newest: true, judge: "outcome" }, { pointer: { refs_to: "$row", shape: "gitDiff" }, show: 1, newest: true, judge: "land", graded: { pointer: { refs_to: "$row", shape: "land_verdict", where: { role: "described" } } } }, { pointer: { root: "$row", calls: "all" }, title: "What I did", folded: true }, { pointer: { refs_to: "$row", shape: "world_changed", where: { role: "person" } }, words: ["what"], thread: { pointer: { refs_to: "$row", shape: "answer" }, judge: "outcome" } }] });
   });
 
   test("must-fail: a valid view is stored, advances the revision, names its writer, and the page reads it", async () => {
@@ -62,6 +62,14 @@ describe("uiView_write", () => {
     expect(w.json.body.view.writtenBy).toBeTruthy();
     const r = await read("landing");
     expect(r.json).toMatchObject({ revision: 1, id: "landing@1", entries: [load, asked] });
+  });
+
+  test("must-fail: a thread's entry may hold one thread of its own: a follow-up under the ask it cites, its answer under it", async () => {
+    const answers = { pointer: { type: "record_read", refs_to: "$row", shape: "answer" }, form: "rows", show: 1 };
+    const follow = { pointer: { type: "record_read", refs_to: "$row", shape: "world_changed", where: { role: "person" } }, form: "rows", show: 3, words: ["what"], thread: answers };
+    const w = await write({ region: "landing", entries: [{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: [answers, follow] }] });
+    expect(w.status).toBe(200);
+    expect(currentView("landing").entries[0]!.thread).toMatchObject([answers, follow]);
   });
 
   test("must-fail: each refusal is named, answers 422, and stores nothing", async () => {
@@ -96,7 +104,7 @@ describe("uiView_write", () => {
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "fields", words: ["what"] }] }, "bad_entry", "words needs form"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x", refs_to: "$row" }, form: "rows" }] }, "bad_entry", "$row: only a thread's pointer"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: { pointer: { type: "record_read", shape: "y" }, form: "rows" } }] }, "bad_entry", 'thread: its pointer names "$row"'],
-      [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: { pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows", thread: { pointer: { type: "record_read", shape: "z", refs_to: "$row" }, form: "rows" } } }] }, "bad_entry", "thread: one level only"],
+      [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: { pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows", thread: { pointer: { type: "record_read", shape: "z", refs_to: "$row" }, form: "rows", thread: { pointer: { type: "record_read", shape: "w", refs_to: "$row" }, form: "rows" } } } }] }, "bad_entry", "thread: two levels at most"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "fields", thread: { pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows" } }] }, "bad_entry", "thread needs form"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: { pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows", colour: "red" } }] }, "bad_entry", "colour"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", newest: "yes" }] }, "bad_entry", "newest: true"],
@@ -112,10 +120,10 @@ describe("uiView_write", () => {
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", judge: "outcome", graded: { pointer: { type: "outcome_write", refs_to: "$row" } } }] }, "bad_entry", "a view reads through"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: { pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows", graded: { pointer: { type: "record_read", refs_to: "$row", shape: "outcome", where: { role: "described" } } } } }] }, "bad_entry", 'graded needs a judge'],
       [{ region: "landing", entries: [load, { ...load, form: "rows" }] }, "bad_entry", "entries 1 and 2 read the same pointer"],
-      [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [] }] }, "bad_entry", "thread: one entry or a list of 1 to 3"],
-      [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [1, 2, 3, 4].map((n) => ({ pointer: { type: `y${n}`, refs_to: "$row" }, form: "rows" })) }] }, "bad_entry", "thread: one entry or a list of 1 to 3"],
+      [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [] }] }, "bad_entry", "thread: one entry or a list of 1 to 4"],
+      [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [1, 2, 3, 4, 5].map((n) => ({ pointer: { type: `y${n}`, refs_to: "$row" }, form: "rows" })) }] }, "bad_entry", "thread: one entry or a list of 1 to 4"],
       [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [{ pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows" }, { pointer: { type: "record_read", shape: "z" }, form: "rows" }] }] }, "bad_entry", 'thread: its pointer names "$row"'],
-      [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [{ pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows", thread: { pointer: { type: "record_read", shape: "z", refs_to: "$row" }, form: "rows" } }] }] }, "bad_entry", "thread: one level only"],
+      [{ region: "landing", entries: [{ pointer: { type: "record_read", shape: "x" }, form: "rows", thread: [{ pointer: { type: "record_read", shape: "y", refs_to: "$row" }, form: "rows", thread: { pointer: { type: "record_read", shape: "z", refs_to: "$row" }, form: "rows", thread: { pointer: { type: "record_read", shape: "w", refs_to: "$row" }, form: "rows" } } }] }] }, "bad_entry", "thread: two levels at most"],
     ];
     for (const [pointer, refusal, why] of cases) {
       const w = await write(pointer);
@@ -138,7 +146,7 @@ describe("uiView_write", () => {
   });
 
   test("the list's bound is in the description a writer reads", () => {
-    expect(viewShapeDescriptions().uiView_write).toContain("thread?: an entry with no thread, or a list of 1 to 3 of them");
+    expect(viewShapeDescriptions().uiView_write).toContain("thread?: an entry, or a list of 1 to 4 of them");
   });
 
   test("must-fail: a write with no caller is refused and stores nothing", async () => {

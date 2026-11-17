@@ -116,9 +116,9 @@ function Unanswered({ a, className }: { a: Extract<ReportAnswer, { ok: false }>;
   return a.signIn ? <p className={className} data-sign-in-to-see="">Sign in to see this.</p> : <p className={className}>no answer: {a.reason}</p>;
 }
 
-/** Whether any entry, or its thread, offers a verdict: the page says how to sign in once, not under every row. */
-function offersVerdicts(entries: readonly ViewEntry[]): boolean {
-  return entries.some((e) => e.judge !== undefined || threadsOf(e).some((t) => t.judge !== undefined));
+/** Whether any entry, or a thread at any level under it, offers a verdict: the page says how to sign in once, not under every row. */
+export function offersVerdicts(entries: readonly ViewEntry[]): boolean {
+  return entries.some((e) => e.judge !== undefined || offersVerdicts(threadsOf(e)));
 }
 
 /** An outcome's `r` as words: right for 1, wrong for 0, else the value as written. */
