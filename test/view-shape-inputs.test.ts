@@ -178,6 +178,20 @@ describe("uiView_write declares its inputs, from the contract a write is checked
     expect(fits(deeper, [{ pointer: { type: "shellResult" }, form: "rows" }])).toBe(false);
   });
 
+  test("what the declaration says of a list's entries and a mark's absence is checked before a call, not only at the write", () => {
+    const thread = (entrySchema()["properties"] as Record<string, Schema>)["thread"]!;
+    const deeper = ((thread["properties"] as Record<string, Schema>)["thread"])!;
+    const read = { type: "record_read", refs_to: "$row", shape: "answer" };
+    for (const list of [thread, deeper]) {
+      expect(fits(list, [{ pointer: read, form: "rows" }])).toBe(true);
+      expect(fits(list, [{ pointer: read }])).toBe(false);
+      expect(fits(list, [{ pointer: read, form: "bogus" }])).toBe(false);
+    }
+    const marked = (absent: unknown) => ({ region: "landing", entries: [{ pointer: { type: "record_read", shape: "gitDiff" }, form: "rows", marks: [{ field: "check.passed", states: { true: "reached" }, absent }] }] });
+    expect(fits(declared()!, marked({ state: "waiting", label: "No tests were run" }))).toBe(true);
+    expect(fits(declared()!, marked({ state: "waiting" }))).toBe(false);
+  });
+
   test("control: a write the contract refuses does not fit either", () => {
     expect(fits(declared()!, { region: "margin" })).toBe(false);
     expect(fits(declared()!, { region: "landing", entries: [{ pointer: { type: "record_read", shape: "answer" }, form: "table" }] })).toBe(false);
