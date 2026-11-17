@@ -218,6 +218,13 @@ describe("changes waiting on the person's grade are the page's own, first on the
     expect(judges(w)).toEqual([]);
   });
 
+  test("must-fail: of two waits, the newer is drawn first", async () => {
+    rows = [ASK, GAP_ROOT, DIFF, F_ASK, F_GAP, WAIT_ASK, WAIT_GAP];
+    const b = block(await mount())!;
+    const waits = [...b.querySelectorAll(".sf-row[data-row^='person_wait:']")].map((r) => r.getAttribute("data-row"));
+    expect(waits).toEqual([WAIT_GAP.id, WAIT_ASK.id]);
+  });
+
   test("control: nothing waiting draws its title and a 0, and no row", async () => {
     rows = [ASK, DIFF];
     const el = await mount();
