@@ -141,6 +141,43 @@ describe("uiView_write declares its inputs, from the contract a write is checked
     views.resetViewsForTest();
   });
 
+  test("must-fail: a mark's fields, its words for absence included, are declared as the write takes them", () => {
+    const marks = [{ field: "check.passed", states: { true: "reached" }, label: "Its test passes", absent: { state: "waiting", label: "No tests were run" } }];
+    const entries = [{ pointer: { type: "record_read", shape: "gitDiff" }, form: "rows", marks }];
+    expect(fits(declared()!, { region: "landing", entries })).toBe(true);
+    expect(fits(declared()!, { region: "landing", entries: [{ ...entries[0], marks: [{ ...marks[0], absent: { state: "green", label: "x" } }] }] })).toBe(false);
+    views.resetViewsForTest();
+    expect(views.writeView({ region: "landing", entries }, "walk").ok).toBe(true);
+    views.resetViewsForTest();
+  });
+
+  test("must-fail: what the read and a mark's fields mean is said to the walk, once", () => {
+    const text = JSON.stringify(declared());
+    for (const said of ["the read: record_read answers rows of any shape", "a field name, or a dotted path of up to 3", "the state each value reads as", "the state and words for a row without the field"]) {
+      expect({ said, times: text.split(said).length - 1 }).toEqual({ said, times: 1 });
+    }
+  });
+
+  test("must-fail: a thread under a thread is declared, as the write takes it; one deeper the write refuses", () => {
+    const leaf = { pointer: { type: "record_read", refs_to: "$row", shape: "outcome" }, form: "rows" };
+    const two = [{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", refs_to: "$row", shape: "answer" }, form: "rows", thread: leaf } }];
+    expect(fits(declared()!, { region: "landing", entries: two })).toBe(true);
+    views.resetViewsForTest();
+    expect(views.writeView({ region: "landing", entries: two }, "walk").ok).toBe(true);
+    const three = [{ ...two[0], thread: { ...two[0]!.thread, thread: { ...leaf, thread: leaf } } }];
+    views.resetViewsForTest();
+    expect(views.writeView({ region: "landing", entries: three }, "walk").ok).toBe(false);
+    views.resetViewsForTest();
+  });
+
+  test("must-fail: a thread list's entries declare their read, so a read the page never makes does not fit", () => {
+    const thread = (entrySchema()["properties"] as Record<string, Schema>)["thread"]!;
+    expect(fits(thread, [{ pointer: { type: "record_read", refs_to: "$row", shape: "answer" }, form: "rows" }])).toBe(true);
+    expect(fits(thread, [{ pointer: { type: "shellResult" }, form: "rows" }])).toBe(false);
+    const deeper = ((thread["properties"] as Record<string, Schema>)["thread"])!;
+    expect(fits(deeper, [{ pointer: { type: "shellResult" }, form: "rows" }])).toBe(false);
+  });
+
   test("control: a write the contract refuses does not fit either", () => {
     expect(fits(declared()!, { region: "margin" })).toBe(false);
     expect(fits(declared()!, { region: "landing", entries: [{ pointer: { type: "record_read", shape: "answer" }, form: "table" }] })).toBe(false);
