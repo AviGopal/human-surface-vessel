@@ -46,7 +46,7 @@ import { buildUiView } from "../ui-view.ts";
 import { recheckPatch } from "../recheck.ts";
 import { LIMITS } from "../limits.ts";
 import { TIMEOUTS } from "../timeouts.ts";
-import { VIEW_REGIONS, currentView, runOf, undoView, writeView, type ViewRegion } from "../ui-views.ts";
+import { VIEW_REGIONS, currentView, restoreView, runOf, undoView, writeView, type ViewRegion } from "../ui-views.ts";
 import { countEmptyRefusal, countTemplateRefusal } from "../write-refusals.ts";
 import { admitCaller, type Caller } from "../inbound-auth.ts";
 import { sessionOf } from "../person-session.ts";
@@ -1000,12 +1000,21 @@ impulsesRouter.post("/v2/impulses/resolve", async (c) => {
     case "uiView_write": {
       // A WRITE, by anything that can author an impulse: what a region draws, in what order.
       // Checked against the closed vocabulary; a refusal names its reason and
-      // stores nothing. `undo: true` restores the view in force before the current one.
+      // stores nothing. `default: true` names the default as defined when read; `restore: N`
+      // draws revision N again; `undo: true` restores the view in force before the current one.
       const region = pointer["region"];
       const run = runOf(pointer);
-      const write = pointer["undo"] === true
-        ? undoView(region, caller?.label ?? null, Date.now(), run)
-        : writeView({ region, entries: pointer["entries"], faces: pointer["faces"], blocks: pointer["blocks"], limits: pointer["limits"], reports: pointer["reports"], note: pointer["note"] }, caller?.label ?? null, Date.now(), run);
+      const by = caller?.label ?? null;
+      const returning = pointer["default"] === true || pointer["restore"] !== undefined;
+      const write = returning && pointer["entries"] !== undefined
+        ? { ok: false as const, refusal: "bad_entry" as const, detail: "a write names entries, or default, or restore: one of them" }
+        : pointer["default"] === true
+          ? restoreView(region, 0, by, Date.now(), run)
+          : pointer["restore"] !== undefined
+            ? restoreView(region, pointer["restore"], by, Date.now(), run)
+            : pointer["undo"] === true
+              ? undoView(region, by, Date.now(), run)
+              : writeView({ region, entries: pointer["entries"], faces: pointer["faces"], blocks: pointer["blocks"], limits: pointer["limits"], reports: pointer["reports"], note: pointer["note"] }, by, Date.now(), run);
       if (!write.ok) {
         // With the view in force, so a writer that never read it sees what it would replace (a walk
         // wrote a whole landing from the description's titles, and its retry knew no more).

@@ -3,7 +3,7 @@
  * vocabulary, kept per region with a revision log, and read by the page at use
  * time. A view is a list of entries, each a pointer and the form its answer is drawn
  * in; no section is named. A refusal names its reason and stores nothing; "undo"
- * restores the view in force before; the views survive a restart, and a stored view
+ * restores the view in force before, and again the one before that; the views survive a restart, and a stored view
  * refused today is named as passed over, not silently skipped. The surface serves
  * `uiView_write` and never advertises `uiView`, so a learned activity that writes views
  * is that shape's only producer and is not refused as a duplicate of the surface.
@@ -161,8 +161,9 @@ describe("uiView_write", () => {
     await write({ region: "landing", entries: [load] });
     const u1 = await write({ region: "landing", undo: true });
     expect(u1.json.body.view).toMatchObject({ revision: 3, entries: [load, asked], undoOf: 1 });
+    // Undoing again steps back from what the undo restored, not back to what it replaced.
     const u2 = await write({ region: "landing", undo: true });
-    expect(u2.json.body.view).toMatchObject({ revision: 4, entries: [load], undoOf: 2 });
+    expect(u2.json.body.view).toMatchObject({ revision: 4, isDefault: true, undoOf: 0 });
     await forgetViews();
     await write({ region: "landing", entries: [load] });
     const u3 = await write({ region: "landing", undo: true });

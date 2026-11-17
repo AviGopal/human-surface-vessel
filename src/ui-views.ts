@@ -15,8 +15,10 @@
  *
  * Durable as an append-only file under WORKSPACE_ROOT/state/, like the surface's own
  * record of asks: each line is one revision of one region, and the newest line per
- * region is in force. "undo" appends the previous revision's view again as a new
- * revision, so the log stays append-only and every change, undo included, is named.
+ * region is in force. "restore" appends a named revision's view again as a new revision,
+ * and "undo" restores the one before, so the log stays append-only and every change, undo
+ * included, is named. "default" appends a revision that names the default rather than copying
+ * it, so it draws the default as this surface defines it when read, not as it was when written.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -285,7 +287,11 @@ export function viewShapeDescriptions(contract: ViewContract = CONTRACT): Record
       `faces is {role: ${FACES.join(" | ")}} (1 to ${MAX_FACES} roles), the face a row's words are drawn in by the row's role as records stamps it; a role not named draws in the page's face; a value drawn with its field's name is always mono; a write without faces keeps the faces in force (by default ${faceLine(DEFAULT_FACES)}). ${defaults}. ` +
       `each entry reads its own pointer: two entries whose pointers are the same (type and every argument, where included) are refused, so to move an entry, list it once in its new place; ` +
       `a write naming the view already in force succeeds as unchanged and writes no revision; ` +
-      `undo restores the view in force before the current one; read the view in force before changing it with human_surface:ui_view {region}, which answers uiViewState`,
+      `{region, default: true} returns the region to its default as this surface defines it now, and keeps following it when the default changes; ` +
+      `{region, restore: N} draws revision N again (0 is the default), as a new revision; ` +
+      `undo restores the view in force before the current one, and undoing again steps back once more, to the default at last; ` +
+      `this changes what a person sees on the surface: no code change is needed for appearance or layout; ` +
+      `read the view in force before changing it with human_surface:ui_view {region}, which answers uiViewState`,
     "human_surface:ui_view":
       `reads what the human surface draws now: for each region (${names}) the view in force, its entries in draw order, ` +
       `revision and writer, and a stored view that is not drawn with the reason it was refused. With region, only that region's view in force, ` +
@@ -369,16 +375,18 @@ export function viewShapeInputs(): Record<"uiView_write" | "human_surface:ui_vie
       properties: {
         region: { enum: [...VIEW_REGIONS] },
         faces: { type: "object", additionalProperties: { enum: [...FACES] }, description: `the face a row's words are drawn in, by the row's role (1 to ${MAX_FACES} roles)` },
-        entries: { type: "array", minItems: 1, maxItems: MAX_ENTRIES, items: entry(threadOf(under)), description: "required unless undo" },
+        entries: { type: "array", minItems: 1, maxItems: MAX_ENTRIES, items: entry(threadOf(under)), description: "required unless default, restore or undo" },
         note: { type: "string", maxLength: 500 },
-        undo: { const: true, description: "restore the view in force before the current one" },
+        default: { const: true, description: "return the region to its default as this surface defines it now" },
+        restore: { type: "integer", minimum: 0, description: "draw this revision again (0 is the default)" },
+        undo: { const: true, description: "restore the view in force before the current one; again steps back once more" },
       },
     },
   };
 }
 
 /** Why a write stored nothing. Closed, so the writer can act on it without parsing prose. */
-export type ViewRefusal = "unknown_region" | "unknown_field" | "bad_entry" | "nothing_to_undo";
+export type ViewRefusal = "unknown_region" | "unknown_field" | "bad_entry" | "nothing_to_undo" | "no_such_revision";
 
 export interface UiView {
   readonly region: ViewRegion;
@@ -403,6 +411,13 @@ export interface UiView {
   readonly writtenAt: number;
   /** On a revision written by "undo": the revision whose view it restored (0 = the default). */
   readonly undoOf: number | null;
+  /** On a revision written by "restore" or "default": the revision whose view it restored (0 = the default). */
+  readonly restoreOf?: number | null;
+  /**
+   * The revision draws the default as this surface defines it now: its line names the default and
+   * holds no entries, so a later change to the default is drawn. True on revision 0.
+   */
+  readonly isDefault?: boolean;
 }
 
 /**
@@ -478,6 +493,14 @@ function load(): void {
     const region = v["region"];
     const revision = v["revision"];
     if (!isRegion(region) || typeof revision !== "number" || !Number.isInteger(revision) || revision < 1) continue;
+    // A line naming the default holds no entries: it draws the default as defined when read.
+    if (v["isDefault"] === true) {
+      passedOver.delete(region);
+      const list = history.get(region) ?? [];
+      list.push({ ...(v as unknown as UiView), entries: DEFAULT_VIEWS[region].entries, faces: DEFAULT_VIEWS[region].faces });
+      history.set(region, list);
+      continue;
+    }
     // A line that would be refused today is not drawn: the file never widens the vocabulary.
     // It is remembered, so the page can say which view it passed over and why.
     const checked = validate({ region, entries: v["entries"], faces: v["faces"], blocks: v["blocks"], limits: v["limits"], reports: v["reports"] });
@@ -644,7 +667,9 @@ function validate(input: { region: unknown; entries: unknown; faces?: unknown; b
 function append(v: UiView): void {
   const f = file();
   mkdirSync(dirname(f), { recursive: true });
-  appendFileSync(f, JSON.stringify(v) + "\n");
+  // A revision naming the default is stored without its entries or faces, so it is never a copy.
+  const { entries, faces, ...pointer } = v;
+  appendFileSync(f, JSON.stringify(v.isDefault ? pointer : v) + "\n");
   passedOver.delete(v.region);
   const list = history.get(v.region) ?? [];
   list.push(v);
@@ -652,7 +677,7 @@ function append(v: UiView): void {
 }
 
 function defaultView(region: ViewRegion): UiView {
-  return { region, revision: 0, id: `${region}@0`, entries: DEFAULT_VIEWS[region].entries, faces: DEFAULT_VIEWS[region].faces, note: null, writtenBy: null, run: null, writtenAt: 0, undoOf: null };
+  return { region, revision: 0, id: `${region}@0`, entries: DEFAULT_VIEWS[region].entries, faces: DEFAULT_VIEWS[region].faces, note: null, writtenBy: null, run: null, writtenAt: 0, undoOf: null, restoreOf: null, isDefault: true };
 }
 
 /**
@@ -725,20 +750,19 @@ export function writeView(
 }
 
 /**
- * Restore the view in force before the current one, as a new revision. Undoing the
- * first view restores the default.
+ * Draw a stored revision again, as a new revision; 0 is the default, as defined when read.
+ * A revision that names the default restores as one that names it, never as a copy.
  */
-export function undoView(region: unknown, writtenBy: string | null, now: number = Date.now(), run: ViewRun | null = null): ViewWrite {
-  load();
-  if (!isRegion(region)) return { ok: false, refusal: "unknown_region", detail: `regions: ${VIEW_REGIONS.join(", ")}` };
-  const list = history.get(region) ?? [];
-  const current = list.at(-1);
-  if (!current) return { ok: false, refusal: "nothing_to_undo", detail: `${region} draws its default` };
-  // The view in force before the current one: the previous revision, or the default.
-  // Undoing an undo therefore restores what that undo replaced.
-  const before = list.at(-2) ?? null;
-  const restoredRevision = before?.revision ?? 0;
-  const base = before ?? defaultView(region);
+function restoreAs(region: ViewRegion, restored: number, how: "undo" | "restore", writtenBy: string | null, now: number, run: ViewRun | null): ViewWrite {
+  const base = restored === 0 ? defaultView(region) : (history.get(region) ?? []).find((v) => v.revision === restored);
+  if (!base) return { ok: false, refusal: "no_such_revision", detail: `${region}@${restored} is not a revision drawn today` };
+  const isDefault = base.isDefault === true;
+  const current = currentView(region);
+  // Restoring what is in force changes nothing on screen; a default named over a copy of it does,
+  // since the copy stops following the default when it changes.
+  if (current.notDrawn === null && (current.isDefault === true) === isDefault && sameView(current, base.entries, base.faces)) {
+    return { ok: true, view: current, unchanged: true };
+  }
   const revision = nextRevision(region);
   const view: UiView = {
     region,
@@ -750,10 +774,41 @@ export function undoView(region: unknown, writtenBy: string | null, now: number 
     writtenBy,
     run,
     writtenAt: now,
-    undoOf: restoredRevision,
+    undoOf: how === "undo" ? restored : null,
+    restoreOf: how === "restore" ? restored : null,
+    isDefault,
   };
   append(view);
   return { ok: true, view };
+}
+
+/** Draw revision `restored` again, as a new revision; 0 is the default. */
+export function restoreView(region: unknown, restored: unknown, writtenBy: string | null, now: number = Date.now(), run: ViewRun | null = null): ViewWrite {
+  load();
+  if (!isRegion(region)) return { ok: false, refusal: "unknown_region", detail: `regions: ${VIEW_REGIONS.join(", ")}` };
+  if (typeof restored !== "number" || !Number.isInteger(restored) || restored < 0) return { ok: false, refusal: "no_such_revision", detail: "restore is a revision number, 0 for the default" };
+  return restoreAs(region, restored, "restore", writtenBy, now, run);
+}
+
+/**
+ * Restore the view in force before the current one, as a new revision. An undo steps back from
+ * the revision it restored, so undoing again goes further back, never between the last two;
+ * undoing the first view restores the default.
+ */
+export function undoView(region: unknown, writtenBy: string | null, now: number = Date.now(), run: ViewRun | null = null): ViewWrite {
+  load();
+  if (!isRegion(region)) return { ok: false, refusal: "unknown_region", detail: `regions: ${VIEW_REGIONS.join(", ")}` };
+  const list = history.get(region) ?? [];
+  const current = list.at(-1);
+  // Where the current view stands in the history: an undo stands at what it restored.
+  const at = current ? (current.undoOf ?? current.revision) : 0;
+  if (at === 0) return { ok: false, refusal: "nothing_to_undo", detail: `${region} draws its default` };
+  // The newest earlier revision that draws something else: one drawing the same view would undo nothing.
+  const shown = currentView(region);
+  const earlier = [...list.filter((v) => v.revision < at).reverse(), defaultView(region)];
+  const before = earlier.find((v) => (v.isDefault === true) !== (shown.isDefault === true) || !sameView(shown, v.entries, v.faces));
+  if (!before) return { ok: false, refusal: "nothing_to_undo", detail: `every earlier ${region} view draws what is drawn now` };
+  return restoreAs(region, before.revision, "undo", writtenBy, now, run);
 }
 
 /** For tests: forget what was read, so the next call reads the file again. */

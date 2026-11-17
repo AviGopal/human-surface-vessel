@@ -164,13 +164,17 @@ export interface RegionView {
   run: { dispatch_id: string | null; execution_id: string | null; template_id: string | null } | null;
   written_at: number | null;
   undo_of: number | null;
+  /** On a revision written by restore or default: the revision it restored (0 = the default). */
+  restore_of: number | null;
+  /** The region draws its default as defined now, not a copy of it. */
+  is_default: boolean;
 }
 
 function buildViews(): Record<string, RegionView> {
   const out: Record<string, RegionView> = {};
   for (const region of VIEW_REGIONS) {
     const v = currentView(region);
-    out[region] = { id: v.id, revision: v.revision, entries: v.entries, faces: v.faces, not_drawn: v.notDrawn, written_by: v.writtenBy, run: v.run ? { dispatch_id: v.run.dispatchId, execution_id: v.run.executionId, template_id: v.run.templateId } : null, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf };
+    out[region] = { id: v.id, revision: v.revision, entries: v.entries, faces: v.faces, not_drawn: v.notDrawn, written_by: v.writtenBy, run: v.run ? { dispatch_id: v.run.dispatchId, execution_id: v.run.executionId, template_id: v.run.templateId } : null, written_at: v.revision > 0 ? v.writtenAt : null, undo_of: v.undoOf, restore_of: v.restoreOf ?? null, is_default: v.isDefault === true };
   }
   return out;
 }

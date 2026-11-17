@@ -17,9 +17,9 @@ import type { UiViewState } from "../api/client";
 import { Entries } from "./Reports";
 import { QuestionView } from "./QuestionView";
 
-/** Which layout is in force, in plain words: the usual one, or one rearranged since. */
+/** Which layout is in force, in plain words: the usual one (its default, or a return to it), or one rearranged since. */
 export function viewLine(view: UiViewState): string {
-  return view.revision === 0 ? "My usual layout." : "A rearranged layout.";
+  return view.revision === 0 || view.isDefault === true ? "My usual layout." : "A rearranged layout.";
 }
 
 /** The view in force as records name it: its id and its writer, as written. */

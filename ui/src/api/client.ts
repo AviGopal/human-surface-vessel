@@ -71,6 +71,8 @@ export interface UiViewState {
   /** The face a row's words are drawn in, by the row's role: "serif" | "sans" | "mono". */
   readonly faces?: Readonly<Record<string, string>>;
   readonly writtenBy?: string | null;
+  /** The view draws the default as the surface defines it now: revision 0, or a revision naming it. */
+  readonly isDefault?: boolean;
   /** A newer stored view that is not drawn, and why; null when the newest is in force. */
   readonly notDrawn?: { readonly id: string; readonly refusal: string; readonly detail: string } | null;
   /** Who reads a person's verdict, by how it is written and the shape it judges, and what it leaves to show after one. */
