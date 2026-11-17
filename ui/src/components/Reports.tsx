@@ -394,6 +394,8 @@ function faceOf(role: unknown, faces: Readonly<Record<string, string>>): string 
 }
 
 function Word({ k, v, cut, described }: { k: string; v: unknown; cut: boolean; described: ReadonlyMap<string, string> }): ReactNode {
+  // An empty list has nothing to say: no line with a field's name and nothing after it.
+  if (Array.isArray(v) && v.length === 0) return null;
   if (isTextList(v)) return <div className="sf-row-words"><Items items={v} /></div>;
   const objects = objectsOf(v);
   if (objects) return <ObjectLines k={k} items={objects} described={described} />;

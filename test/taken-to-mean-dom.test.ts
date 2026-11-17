@@ -40,6 +40,12 @@ const B_ANSWER = answer("Questions now come first.", 7, hex("1"), B.id, B.id);
 const C_WANTED = wanted("An ask from before targets.", 8, hex("2"), [C.id], {});
 const C_ANSWER = answer("Done before targets.", 9, hex("3"), C.id, null);
 const ALL = [DESCRIBED, A, B, C, A_WANTED, A_ANSWER, B_WANTED, B_ANSWER, C_WANTED, C_ANSWER];
+// A newer reading of A than A_WANTED, as the judge would read it: one naming no target, one naming an empty list.
+const A_REREAD = wanted("Return the landing to its default.", 10, hex("5"), [A.id], { root: A.id });
+const A_EMPTY = wanted("Return the landing to its default.", 10, hex("6"), [A.id], { root: A.id, targets: [] });
+// A newer reading of A that names a different target: re-read, the ask is held to this one only.
+const A_NEWER = wanted("Return the landing to its default, the asks first.", 10, hex("7"), [A.id], { root: A.id, targets: [{ shape: "uiViewState", where: { region: "landing", "view.asksFirst": true } }] });
+let rows: readonly unknown[] = ALL;
 
 const sent: Record<string, unknown>[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -49,15 +55,20 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const p = JSON.parse(String(init?.body)).pointer as Record<string, unknown>;
     sent.push(p);
     if (p["type"] !== "record_read" || p["root"] !== undefined) return Response.json([]);
-    // records' read: shape, refs_to, where (equality) and has compose; rows oldest first.
+    // records' read, in its order: shape, then the newest row of each latest_by value, then has, refs_to and
+    // where (equality); rows oldest first.
     const where = (p["where"] ?? {}) as Record<string, unknown>;
-    return Response.json(ALL.filter((r) => {
-      const o = r as Record<string, unknown>;
-      return (p["shape"] === undefined || o["shape"] === p["shape"]) &&
-        (p["refs_to"] === undefined || (o["input_refs"] as string[]).includes(String(p["refs_to"]))) &&
-        (p["has"] === undefined || o[String(p["has"])] !== undefined) &&
-        Object.entries(where).every(([k, v]) => o[k] !== undefined && String(o[k]) === String(v));
-    }));
+    let out = (rows as Record<string, unknown>[]).filter((o) => p["shape"] === undefined || o["shape"] === p["shape"]);
+    if (p["latest_by"] !== undefined) {
+      const key = String(p["latest_by"]);
+      const latest = new Map<string, Record<string, unknown>>();
+      for (const o of out.filter((x) => x[key] !== undefined)) latest.set(String(o[key]), o);
+      out = [...latest.values()].sort((a, b) => Number(a["seq"]) - Number(b["seq"]));
+    }
+    return Response.json(out.filter((o) =>
+      (p["has"] === undefined || (o[String(p["has"])] !== undefined && o[String(p["has"])] !== null)) &&
+      (p["refs_to"] === undefined || (o["input_refs"] as string[]).includes(String(p["refs_to"]))) &&
+      Object.entries(where).every(([k, v]) => o[k] !== undefined && String(o[k]) === String(v))));
   }
   return Response.json({});
 }) as typeof fetch;
@@ -107,7 +118,45 @@ describe("what an ask was taken to mean is drawn under its answer", () => {
     // A shape its owner described says what it is in the owner's words; one no owner described is named alone.
     const said = [...taken!.querySelectorAll(".sf-row-object")].map((o) => o.querySelector(".sf-row-object-what")?.textContent ?? null);
     expect(said).toEqual([null, OUTCOME_SAID]);
-    expect(sent).toContainEqual({ type: "record_read", shape: "change_wanted", where: { root: A.id }, has: "targets" });
+    expect(sent).toContainEqual({ type: "record_read", shape: "change_wanted", latest_by: "root", where: { root: A.id }, has: "targets" });
+  });
+
+  test("must-fail: of two readings of one ask, each naming targets, only the newer is drawn", async () => {
+    rows = [...ALL, A_NEWER];
+    try {
+      const el = await mount();
+      const thread = rowIn(el, A_ANSWER.id)!.querySelector(".sf-thread")!;
+      expect([...thread.querySelectorAll(".sf-row")].map((r) => r.getAttribute("data-row"))).toEqual([A_NEWER.id]);
+      expect([...thread.querySelectorAll(".sf-row-object-line")].map((l) => l.textContent)).toEqual(["uiViewState where region landing, view.asksFirst yes"]);
+    } finally {
+      rows = ALL;
+    }
+  });
+
+  test("must-fail: when the newest reading names no target, nothing is drawn, never an older reading's targets", async () => {
+    rows = [...ALL, A_REREAD];
+    try {
+      const el = await mount();
+      expect(rowIn(el, A_ANSWER.id)!.querySelector(".sf-thread .sf-row")).toBeNull();
+      expect(el.textContent).not.toContain("view.drawsDefault");
+    } finally {
+      rows = ALL;
+    }
+  });
+
+  test("must-fail: a newest reading naming an empty list of targets draws its words and no target line", async () => {
+    rows = [...ALL, A_EMPTY];
+    try {
+      const el = await mount();
+      const taken = rowIn(rowIn(el, A_ANSWER.id)!, A_EMPTY.id);
+      expect(taken).not.toBeNull();
+      expect(taken!.querySelector(".sf-row-objects")).toBeNull();
+      expect(taken!.querySelector(".sf-row-words")?.textContent).toBe(A_EMPTY.what);
+      expect([...taken!.querySelectorAll("[data-field-line]")].some((l) => l.textContent?.startsWith("targets"))).toBe(false);
+      expect(el.textContent).not.toContain("view.drawsDefault");
+    } finally {
+      rows = ALL;
+    }
   });
 
   test("must-fail: a later ask's request citing this ask in its pool is never drawn under it", async () => {

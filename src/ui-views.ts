@@ -188,7 +188,9 @@ const WALK_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_B
  * `root`), never by citation, since a later ask's rows cite this one in their pool; and only a row naming its targets,
  * so rows written before targets were asked for draw nothing.
  */
-const TAKEN_TO_MEAN = { pointer: { type: "record_read", shape: "change_wanted", where: { root: "$row.root" }, has: "targets" }, form: "rows", show: 1, newest: true, words: ["what", "targets"], title: "Taken to mean" } as const;
+// Records keeps the newest change_wanted of each root before it asks for targets: when the newest reading of an ask
+// names none, nothing is drawn, never an older reading's targets the judge no longer holds the ask to.
+const TAKEN_TO_MEAN = { pointer: { type: "record_read", shape: "change_wanted", latest_by: "root", where: { root: "$row.root" }, has: "targets" }, form: "rows", show: 1, newest: true, words: ["what", "targets"], title: "Taken to mean" } as const;
 /** The walk's own grades of a change: land_verdicts citing it that the described-shape vessel wrote. */
 const LAND_GRADES: GradedRead = { pointer: { type: "record_read", refs_to: ROW_BINDING, shape: "land_verdict", where: { role: "described" } } };
 
