@@ -12,6 +12,7 @@
 import { describe, expect, test } from "bun:test";
 import { REGISTRATION_PAYLOAD } from "../src/discovery-registration.ts";
 import * as views from "../src/ui-views.ts";
+import { MAX_MARK_LABEL } from "../src/row-marks.ts";
 
 type Schema = Record<string, unknown>;
 const declared = (): Schema | undefined =>
@@ -193,6 +194,9 @@ describe("uiView_write declares its inputs, from the contract a write is checked
     expect(fits(declared()!, marked({ state: "waiting", label: "" }))).toBe(false);
     expect(fits(declared()!, marked({ state: "waiting", label: "x", colour: "red" }))).toBe(false);
     for (const list of [thread, deeper]) expect(fits(list, Array.from({ length: views.MAX_THREADS + 1 }, () => ({ pointer: read, form: "rows" })))).toBe(false);
+    expect(fits(declared()!, marked({ state: "waiting", label: "x".repeat(MAX_MARK_LABEL + 1) }))).toBe(false);
+    expect(fits(declared()!, marked("No tests were run"))).toBe(false);
+    for (const list of [thread, deeper]) expect(fits(list, ["rows"])).toBe(false);
   });
 
   test("control: a write the contract refuses does not fit either", () => {
