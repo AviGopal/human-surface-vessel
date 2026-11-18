@@ -1,23 +1,19 @@
 // THE CALLER-CREDENTIAL GOLDEN TABLE (operator security review, 2026-10-19).
 //
-// development-vessel owns src/lib/caller-credential.ts; goal-host-vessel and human-surface-vessel each carry a
-// byte-for-byte copy (src/caller-credential.ts: a header naming the source repo and commit, then the same bytes).
-// The copies are named debt until a shared package replaces them. This test is the same in every repo except for
-// the constants below, and runs the SAME table (test/fixtures/caller-credential-cases.json, identical in all):
+// human-surface-vessel carries src/caller-credential.ts, copied from development-vessel (a header naming the source
+// repo and commit, then the module); development-vessel is off the fleet, so this copy is the one in use and is named
+// debt until a shared package replaces it. This test runs the table (test/fixtures/caller-credential-cases.json):
 //   - every case's calls, against THIS repo's module, with identity and DNS stood in for;
 //   - mutating_primitives_include: every name the table lists must be in the module's MUTATING_PRIMITIVES and gated as
 //     a write (dispatch_goal: qa ruling). Red-provable without touching the module: the same row is run against a
 //     planted copy of the module with dispatch_goal removed, and must fail there;
 //   - module_sha256: the table pins the sha256 of the module bytes (after the copy header, in the copy), so
 //     an edit to the module reds this side until the table is re-pinned;
-//   - sibling parity: where both checkouts sit side by side (the fleet's vessels directory, the super-repo's
-//     repos/), the other side's module bytes and table must equal this side's. A re-pin on one side alone
-//     reds the other. Where no sibling checkout exists the parity test is SKIPPED, visibly, with a line.
 // No case touches the network: globalThis.fetch and dns.promises.lookup are stubbed and anything else fails.
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import dns from "node:dns";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,9 +21,6 @@ const REPO_ROOT = join(import.meta.dir, "..");
 const MODULE_FILE = join(REPO_ROOT, "src/caller-credential.ts");
 const cc = await import("../src/caller-credential");
 const { identityCredential, isNodeSelfCredential, __resetCredentialCacheForTests } = cc;
-const SIBLING_ROOT = join(REPO_ROOT, "..", "development-vessel");
-const SIBLING_MODULE_FILE = join(SIBLING_ROOT, "src/lib/caller-credential.ts");
-const SIBLING_TABLE_FILE = join(SIBLING_ROOT, "test", "fixtures", "caller-credential-cases.json");
 const TABLE_FILE = join(REPO_ROOT, "test", "fixtures", "caller-credential-cases.json");
 /** The copy header ends at this line; every byte after it is the source module. */
 const COPY_MARKER = "// --- end of copy header: every byte below this line is the source file, unchanged ---\n";
@@ -139,11 +132,4 @@ describe("caller-credential golden table", () => {
       expect(identityCalls).toBe(tc.expect_identity_calls);
     });
   }
-
-  const siblingPresent = existsSync(SIBLING_MODULE_FILE) && existsSync(SIBLING_TABLE_FILE);
-  if (!siblingPresent) process.stdout.write(`[caller-credential-golden] no sibling checkout at ${SIBLING_ROOT}: parity with the other copy is pinned by module_sha256 only\n`);
-  it.skipIf(!siblingPresent)("caller-credential-golden sibling parity: the other side's module bytes and table equal this side's", () => {
-    expect(sha256(moduleBody(readFileSync(SIBLING_MODULE_FILE, "utf8")))).toBe(sha256(moduleBody(readFileSync(MODULE_FILE, "utf8"))));
-    expect(readFileSync(SIBLING_TABLE_FILE, "utf8")).toBe(readFileSync(TABLE_FILE, "utf8"));
-  });
 });

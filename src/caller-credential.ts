@@ -1,9 +1,8 @@
-// COPY, NAMED DEBT. Source: development-vessel src/lib/caller-credential.ts at commit 1ff17026dd1dbe763b58b627d93acd57dff4ef90.
-// human-surface-vessel has no shared package to import the fleet's credential check from, so it carries this module byte
-// for byte until a shared package replaces every copy (goal-host-vessel carries the same one). Do not edit below the
-// marker: test/caller-credential-golden.test.ts pins those bytes to the shared table test/fixtures/caller-credential-cases.json,
-// which is identical in every repo that carries the module. Change the source in development-vessel, re-copy it here, and
-// re-pin the table on every side together. IDENTITY_VESSEL_URL is declared in src/config.ts; the read inside the copy
+// COPY, NAMED DEBT. Copied from development-vessel src/lib/caller-credential.ts at commit 1ff17026dd1dbe763b58b627d93acd57dff4ef90.
+// human-surface-vessel has no shared package to import the fleet's credential check from, so it carries this module
+// until a shared package replaces it. development-vessel is off the fleet and goal-host-vessel's copy retires with it, so
+// this copy is the one changed now. test/caller-credential-golden.test.ts pins the bytes below the marker to
+// test/fixtures/caller-credential-cases.json: change them here and re-pin that table. IDENTITY_VESSEL_URL is declared in src/config.ts; the read inside the copy
 // below is part of the pinned source bytes (use-time, as the source reads it) and goes when the shared package takes it as a parameter.
 // --- end of copy header: every byte below this line is the source file, unchanged ---
 // WHO IS CALLING: the one place this vessel asks identity-vessel about a caller's credential.
@@ -45,8 +44,10 @@ import dns from "node:dns";
 import { isIP } from "node:net";
 
 /** keyId: identity's id for the validated key (an identifier identity issues, not derived from the secret),
- *  when its answer carries one. Audit lines name the caller by it (routes/caller-identity.ts callerAuthLabel). */
-export type CallerCredential = { authenticated: boolean; scopes: string[]; keyId?: string; why?: string };
+ *  when its answer carries one. Audit lines name the caller by it (routes/caller-identity.ts callerAuthLabel).
+ *  userId: identity's id for the user the key belongs to, when its answer carries one. Carried only: no admission,
+ *  scope or node-self decision reads it. */
+export type CallerCredential = { authenticated: boolean; scopes: string[]; keyId?: string; userId?: string; why?: string };
 
 export const CREDENTIAL_VALIDATION_TTL_MS = 60_000;
 export const CREDENTIAL_CACHE_MAX_ENTRIES = 256;
@@ -227,14 +228,19 @@ export async function identityCredential(authHeader: string | undefined, opts: {
       if (res.status === 401 || res.status === 403) validated.delete(k);
       return { authenticated: false, scopes: [], why: `identity answered HTTP ${res.status}` };
     }
-    const j = (await res.json()) as { success?: boolean; data?: { authenticated?: boolean; scopes?: unknown; keyId?: unknown; key_id?: unknown } };
+    const j = (await res.json()) as { success?: boolean; data?: { authenticated?: boolean; scopes?: unknown; keyId?: unknown; key_id?: unknown; userId?: unknown } };
     if (j?.data?.authenticated !== true) {
       validated.delete(k);
       return { authenticated: false, scopes: [], why: "credential not authenticated" };
     }
     const scopes = Array.isArray(j.data.scopes) ? j.data.scopes.map(String) : [];
     const rawKeyId = j.data.keyId ?? j.data.key_id;
-    const cred: CallerCredential = { authenticated: true, scopes, ...(typeof rawKeyId === "string" && rawKeyId ? { keyId: rawKeyId } : {}) };
+    const rawUserId = j.data.userId;
+    const cred: CallerCredential = {
+      authenticated: true, scopes,
+      ...(typeof rawKeyId === "string" && rawKeyId ? { keyId: rawKeyId } : {}),
+      ...(typeof rawUserId === "string" && rawUserId ? { userId: rawUserId } : {}),
+    };
     remember(k, cred);
     return cred;
   } catch (err) {
