@@ -90,6 +90,8 @@ async function mount(entries: unknown[] = [STORED]): Promise<HTMLElement> {
 }
 const block = (el: HTMLElement): Element | null => el.querySelector("[data-page-own]");
 const rowIn = (scope: Element, id: string): Element | null => scope.querySelector(`.sf-row[data-row="${id}"]`);
+// A row's own words line, not one of a reply drawn under it.
+const ownWords = (row: Element): Element | undefined => [...row.children].find((c) => c.classList.contains("sf-row-words"));
 const judges = (scope: Element): string[] => [...scope.querySelectorAll(".sf-judge-word")].map((b) => b.getAttribute("aria-label") ?? b.textContent ?? "");
 
 describe("changes waiting on the person's grade are the page's own, first on the screen", () => {
@@ -246,6 +248,21 @@ describe("changes waiting on the person's grade are the page's own, first on the
     expect(w).not.toBeNull();
     expect(w.textContent).not.toContain("Not checked yet");
     expect(rowIn(w, DIFF.id)).toBeNull();
+  });
+
+  test("must-fail: a wait draws no name of its shape: what was asked, under it, says what waits", async () => {
+    rows = [ASK, DIFF, F_ASK, WAIT_ASK];
+    const w = rowIn(block(await mount())!, WAIT_ASK.id)!;
+    expect(w).not.toBeNull();
+    expect(ownWords(w)).toBeUndefined();
+    expect(w.textContent).not.toContain("person wait");
+    expect(rowIn(w, ASK.id)!.textContent).toContain(ASK.what);
+  });
+
+  test("control: a row with no words and no thread under it still names its shape", async () => {
+    rows = [ASK];
+    const el = await mount([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", title: "Asked" }]);
+    expect(ownWords(rowIn(el, ASK.id)!)!.textContent).toBe("world changed");
   });
 
   test("control: nothing waiting draws its title and a 0, and no row", async () => {

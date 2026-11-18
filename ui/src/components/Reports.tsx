@@ -601,9 +601,10 @@ function Rows({ rows, entry, reading, inThread = false }: { rows: readonly unkno
         const time = when(o["t"]);
         return (
           <li key={id ?? i} className={threads.length > 0 && !inThread ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined} data-face={faceOf(o["role"], reading.faces)}>
+            {/* A row with no words of its own names its shape, unless a thread under it says what it is: then the name is a label of the system's, not words for the person. */}
             {words.length > 0 ? (
               words.map((w, j) => <Word key={j} k={w.field} v={w.value} cut={o["truncated"] === true} described={reading.described} />)
-            ) : (
+            ) : id && threads.length > 0 ? null : (
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
             {judge === "land" ? <Typecheck tc={o["typecheck"]} /> : null}
