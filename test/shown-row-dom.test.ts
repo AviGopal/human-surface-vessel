@@ -70,7 +70,10 @@ afterAll(async () => {
   Element.prototype.getBoundingClientRect = realRect;
   await teardownDom();
 });
+let visibility: DocumentVisibilityState = "visible";
+Object.defineProperty(document, "visibilityState", { get: () => visibility, configurable: true });
 beforeEach(() => {
+  visibility = "visible";
   written.length = 0;
   signedIn = true;
   writeAnswer = () => Response.json({ success: true, body: { seq: 9, id: hex("9") } });
@@ -209,6 +212,20 @@ describe("what the page shows a signed-in person is their records row, citing no
       globalThis.MutationObserver = Real;
     }
     expect(watched.some((w) => w.el.classList.contains("sf-landing") && w.opts?.childList === true && w.opts?.subtree === true)).toBe(true);
+  });
+
+  test("must-fail: a page out of view writes nothing, however its rows change; back in view, it writes what it shows", async () => {
+    visibility = "hidden";
+    rows = [A];
+    const el = await mount();
+    await settle();
+    await later(el);
+    expect(written).toHaveLength(0);
+    visibility = "visible";
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    await settle();
+    expect(written).toHaveLength(1);
+    expect(written[0]!["shown"]).toEqual([{ id: A.id, shape: "world_changed" }, { id: hex("e"), shape: "gap" }]);
   });
 
   test("a page showing no rows writes nothing", async () => {

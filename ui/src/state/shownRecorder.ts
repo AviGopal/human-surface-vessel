@@ -1,8 +1,12 @@
 /**
  * Writes what the page shows the signed-in person (src/lib/shown.ts) as the page settles: after rows
- * arrive or change, and after the person scrolls or resizes, once the page has been still for
- * SETTLE_MS. Signed out, it measures nothing and writes nothing; a write refused as signed out stops
- * it until the session reads as signed in again.
+ * arrive or change, after the person scrolls or resizes, and when the page comes back into view, once
+ * it has been still for SETTLE_MS. A page out of view (a tab behind others) shows no one anything, so
+ * it measures nothing, however its rows change. Signed out, it measures nothing and writes nothing.
+ *
+ * A write refused as signed out stops this page writing until its session is read as signed out and
+ * then in again, or the page is loaded again. A write that fails for any other reason is not tried
+ * again: the set counts as written, so the page records less than it showed, never more.
  */
 import { useEffect, useRef, type RefObject } from "react";
 import { useSession } from "../api/session";
@@ -30,7 +34,7 @@ export function useShownRecorder(root: RefObject<HTMLElement | null>, presentati
     };
     function measure(): void {
       timer = null;
-      if (stopped) return;
+      if (stopped || document.visibilityState !== "visible") return;
       const shown = shownOn(el!, { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight });
       if (shown.length === 0) return;
       const now = Date.now();
@@ -47,6 +51,7 @@ export function useShownRecorder(root: RefObject<HTMLElement | null>, presentati
     observer.observe(el, { childList: true, subtree: true });
     window.addEventListener("scroll", settle, { passive: true });
     window.addEventListener("resize", settle);
+    document.addEventListener("visibilitychange", settle);
     settle();
     return () => {
       stopped = true;
@@ -54,6 +59,7 @@ export function useShownRecorder(root: RefObject<HTMLElement | null>, presentati
       observer.disconnect();
       window.removeEventListener("scroll", settle);
       window.removeEventListener("resize", settle);
+      document.removeEventListener("visibilitychange", settle);
     };
     // Re-armed once the landing is drawn: it is not there while its view is still being read.
   }, [signedIn, root, presentation !== null]);
