@@ -271,6 +271,22 @@ describe("changes waiting on the person's grade are the page's own, first on the
     expect(ownWords(rowIn(el, ASK.id)!)!.textContent).toBe("world changed");
   });
 
+  test("must-fail: a row whose bound thread has no words of its own and reads nothing still names its shape", async () => {
+    rows = [ASK];
+    const el = await mount([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", shape: "answer" }, form: "rows" } }]);
+    expect(ownWords(rowIn(el, ASK.id)!)!.textContent).toBe("world changed");
+  });
+
+  test("a row whose bound thread has a title, or is folded, draws no name of its shape: the thread says what is under it", async () => {
+    for (const thread of [{ title: "Answers" }, { folded: true }]) {
+      rows = [ASK];
+      const el = await mount([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", shape: "answer" }, form: "rows", ...thread } }]);
+      const row = rowIn(el, ASK.id)!;
+      expect(ownWords(row)).toBeUndefined();
+      expect(row.querySelector(".sf-thread")).not.toBeNull();
+    }
+  });
+
   test("a row stating none where its thread is bound, with the thread's words for none, draws those words and no name of its shape", async () => {
     rows = [WAIT_ASK, { ...WAIT_GAP, tree: null }];
     const el = await mount([{ pointer: { type: "record_read", shape: "person_wait" }, form: "rows", thread: { pointer: { type: "record_read", shape: "gitDiff", where: { tree: "$row.tree" } }, form: "rows", empty: "Nothing to grade." } }]);
@@ -286,10 +302,10 @@ describe("changes waiting on the person's grade are the page's own, first on the
     expect(ownWords(stated)!.textContent).toBe("person wait");
   });
 
-  test("a row with no id, no words and a thread that would read names its shape: a thread is drawn only under a row with an id", async () => {
+  test("a row with no id, no words and a thread sure to draw names its shape: a thread is drawn only under a row with an id", async () => {
     const { id: _id, ...noId } = ASK;
     rows = [noId];
-    const el = await mount([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", shape: "answer" }, form: "rows" } }]);
+    const el = await mount([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", shape: "answer" }, form: "rows", title: "Answers" } }]);
     const row = [...el.querySelectorAll(".sf-row")].find((r) => !block(el)!.contains(r))!;
     expect(ownWords(row)!.textContent).toBe("world changed");
   });
