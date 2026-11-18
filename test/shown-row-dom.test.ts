@@ -87,13 +87,17 @@ const settle = async (ms = 1_200): Promise<void> => {
 };
 
 // readFirst: the page is drawn while its view is still being read, and the view arrives after.
+// The page before is unmounted first, so no leg's page listens on into the next.
+let mounted: ReturnType<typeof createRoot> | null = null;
 async function mount(readFirst = false): Promise<HTMLElement> {
+  if (mounted) { const was = mounted; await act(async () => { was.unmount(); }); }
   resetViewsForTest();
   const view = { ...currentView("landing"), above: [], revision: 3, id: "landing@3", entries: ENTRIES, isDefault: false, drawsDefault: false };
   const el = document.createElement("div");
   document.body.replaceChildren(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const root = createRoot(el);
+  mounted = root;
   const draw = (v: typeof view | null) => root.render(React.createElement(QueryClientProvider, { client: qc },
     React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(Landing, { view: v, onOpenQuestion: () => {} } as never)))));
   if (readFirst) {
@@ -142,7 +146,7 @@ describe("what the page shows a signed-in person is their records row, citing no
     expect((written[0]!["shown"] as { id: string }[]).map((s) => s.id)).toEqual(rows.slice(0, 8).map((r) => r["id"]));
   });
 
-  test("the same rows on screen again write nothing more; a new set inside the minute waits for it, then is written", async () => {
+  test("the same rows on screen again write nothing more; a page loaded again writes its first set at once", async () => {
     rows = [A, B];
     await mount();
     await settle();
@@ -158,8 +162,8 @@ describe("what the page shows a signed-in person is their records row, citing no
   });
 
   // A new row put on the page past the minute: one the page has not shown, and one it already shows, drawn twice.
-  const later = async (el: HTMLElement, settled: "scroll" | "resize" = "scroll"): Promise<void> => {
-    setSystemTime(new Date(Date.now() + SHOWN_MIN_MS + 1_000));
+  const later = async (el: HTMLElement, settled: "scroll" | "resize" = "scroll", after = SHOWN_MIN_MS + 1_000): Promise<void> => {
+    setSystemTime(new Date(Date.now() + after));
     const list = el.querySelector(".sf-row[data-row]")!.parentElement!;
     await act(async () => {
       for (const [id, shape] of [[A.id, "world_changed"], [hex("e"), "gap"]] as const) {
@@ -184,6 +188,21 @@ describe("what the page shows a signed-in person is their records row, citing no
     expect(written).toHaveLength(2);
     expect(written[1]!["shown"]).toEqual([{ id: A.id, shape: "world_changed" }, { id: hex("e"), shape: "gap" }]);
   });
+
+  test("must-fail: one open page writes a new set no sooner than a minute after its last row, and then by itself", async () => {
+    rows = [A];
+    const el = await mount();
+    await settle();
+    expect(written).toHaveLength(1);
+    // A new set five seconds before the page's minute is up: nothing is written at once.
+    await later(el, "scroll", SHOWN_MIN_MS - 5_000);
+    expect(written).toHaveLength(1);
+    // The minute passes with no further event: the page's own wait writes the new set.
+    setSystemTime(new Date(Date.now() + SHOWN_MIN_MS));
+    await settle(6_000);
+    expect(written).toHaveLength(2);
+    expect(written[1]!["shown"]).toEqual([{ id: A.id, shape: "world_changed" }, { id: hex("e"), shape: "gap" }]);
+  }, 20_000);
 
   test("must-fail: a write refused as signed out stops the page writing", async () => {
     writeAnswer = () => Response.json({ error: "sign_in_required" }, { status: 401 });
