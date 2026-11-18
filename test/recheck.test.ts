@@ -95,6 +95,11 @@ const DEBT_LEARNERS = new Set([
 /** The in-memory history ring: it goes with the surface-kept state it bounds (3.4). */
 const DEBT_SURFACE_STATE = new Set(["MAX_HISTORY"]);
 /**
+ * Law-5 debt: when the page writes what it showed (ui/src/lib/shown.ts, ui/src/state/shownRecorder.ts).
+ * Their home is a rhythm row the page reads, once one carries a surface's cadence.
+ */
+const DEBT_RHYTHM = new Set(["SHOWN_MIN_MS", "SETTLE_MS"]);
+/**
  * The guard: what a write may contain or the surface may hold. The guard stays in the surface,
  * and a policy any node-key caller writes must not be able to raise it. Its own numbers, named.
  */
@@ -122,7 +127,7 @@ describe("no behaviour constant outside the named lists", () => {
         found.add(m[1]!);
       }
     }
-    const named = [BOOTSTRAP, DEBT_AUTH, DEBT_LEARNERS, DEBT_SURFACE_STATE, GUARD, PENDING];
+    const named = [BOOTSTRAP, DEBT_AUTH, DEBT_LEARNERS, DEBT_SURFACE_STATE, DEBT_RHYTHM, GUARD, PENDING];
     const unnamed = [...found].filter((n) => !named.some((list) => list.has(n)));
     expect(unnamed).toEqual([]);
   });

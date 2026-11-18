@@ -234,6 +234,11 @@ export function writeComplaint(text: string, about: string | null): Promise<RowW
   return writeRow({ shape: "world_changed", what: about ? `${text} (about question ${about})` : text, input_refs: [] });
 }
 
+/** What the page showed the signed-in person, as their row (src/lib/shown.ts). */
+export function writeShown(row: Record<string, unknown>): Promise<RowWrite> {
+  return writeRow(row);
+}
+
 /** A report's answer, or why there is none. `answer` is what the producer returned, uninterpreted. */
 /**
  * `signIn` marks the one refusal a person can act on: the surface sends a lookup only under the

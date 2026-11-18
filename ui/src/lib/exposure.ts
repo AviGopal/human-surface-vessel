@@ -405,7 +405,7 @@ function toRect(box: { x: number; y: number; width: number; height: number }): R
 }
 
 /** Client boxes of every ancestor that crops overflow. */
-function clipChain(element: HTMLElement): Rect[] {
+export function clipChain(element: HTMLElement): Rect[] {
   const clips: Rect[] = [];
   let parent = element.parentElement;
   while (parent) {

@@ -15,10 +15,11 @@
  * Rows here select what to look at. What is sent from this screen is a person's verdict on a
  * row an entry offers it on, and an answer to a question opened in place.
  */
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import type { UiViewState } from "../api/client";
 import { Entries } from "./Reports";
 import { QuestionView } from "./QuestionView";
+import { useShownRecorder } from "../state/shownRecorder";
 
 /** Which layout is in force, in plain words: the usual one (its default, a return to it, or a view that draws just what it does), or one rearranged since. */
 export function viewLine(view: UiViewState): string {
@@ -61,6 +62,8 @@ export function Landing({
   /** The page's live cadence (the render policy's); entries are re-read no faster than once a minute. */
   intervalMs?: number;
 }): ReactNode {
+  const measured = useRef<HTMLDivElement | null>(null);
+  useShownRecorder(measured, view?.id ?? null);
   if (!view) {
     return (
       <div className="sf-landing">
@@ -73,7 +76,7 @@ export function Landing({
   const listsQuestions = view.entries.some((e) => e.form === "questions");
   const about = passed ? "A newer layout for this page was not used" : "About this page's layout";
   return (
-    <div className="sf-landing" data-view-id={view.id} data-view-revision={view.revision}>
+    <div className="sf-landing" ref={measured} data-view-id={view.id} data-view-revision={view.revision}>
       <details className="sf-mark" data-fell-back={passed ? "" : undefined}>
         <summary aria-label={about} title={passed ? `${viewLine(view)} ${passed}` : viewLine(view)}>
           {passed ? "!" : "i"}
