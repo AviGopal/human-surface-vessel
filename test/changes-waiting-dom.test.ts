@@ -302,6 +302,14 @@ describe("changes waiting on the person's grade are the page's own, first on the
     expect(ownWords(stated)!.textContent).toBe("person wait");
   });
 
+  test("a row lacking the field its thread is bound by, though the thread has words for none, still names its shape", async () => {
+    rows = [ASK];
+    const el = await mount([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", shape: "gitDiff", where: { tree: "$row.tree" } }, form: "rows", empty: "Nothing to grade." } }]);
+    const row = rowIn(el, ASK.id)!;
+    expect(ownWords(row)!.textContent).toBe("world changed");
+    expect(row.textContent).not.toContain("Nothing to grade.");
+  });
+
   test("a row with no id, no words and a thread sure to draw names its shape: a thread is drawn only under a row with an id", async () => {
     const { id: _id, ...noId } = ASK;
     rows = [noId];
