@@ -265,6 +265,35 @@ describe("changes waiting on the person's grade are the page's own, first on the
     expect(ownWords(rowIn(el, ASK.id)!)!.textContent).toBe("world changed");
   });
 
+  test("must-fail: a row whose thread binds nothing on it still names its shape, so it is never drawn blank", async () => {
+    rows = [ASK];
+    const el = await mount([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", where: { id: "$row.root" } }, form: "rows" } }]);
+    expect(ownWords(rowIn(el, ASK.id)!)!.textContent).toBe("world changed");
+  });
+
+  test("a row stating none where its thread is bound, with the thread's words for none, draws those words and no name of its shape", async () => {
+    rows = [WAIT_ASK, { ...WAIT_GAP, tree: null }];
+    const el = await mount([{ pointer: { type: "record_read", shape: "person_wait" }, form: "rows", thread: { pointer: { type: "record_read", shape: "gitDiff", where: { tree: "$row.tree" } }, form: "rows", empty: "Nothing to grade." } }]);
+    const stated = rowIn([...el.querySelectorAll("[data-report]")].find((r) => !block(el)!.contains(r))!, WAIT_GAP.id)!;
+    expect(ownWords(stated)).toBeUndefined();
+    expect(stated.textContent).toContain("Nothing to grade.");
+  });
+
+  test("a row stating none where its thread is bound, with no words for none, still names its shape", async () => {
+    rows = [{ ...WAIT_GAP, tree: null }];
+    const el = await mount([{ pointer: { type: "record_read", shape: "person_wait" }, form: "rows", thread: { pointer: { type: "record_read", shape: "gitDiff", where: { tree: "$row.tree" } }, form: "rows" } }]);
+    const stated = rowIn([...el.querySelectorAll("[data-report]")].find((r) => !block(el)!.contains(r))!, WAIT_GAP.id)!;
+    expect(ownWords(stated)!.textContent).toBe("person wait");
+  });
+
+  test("a row with no id, no words and a thread that would read names its shape: a thread is drawn only under a row with an id", async () => {
+    const { id: _id, ...noId } = ASK;
+    rows = [noId];
+    const el = await mount([{ pointer: { type: "record_read", shape: "world_changed" }, form: "rows", thread: { pointer: { type: "record_read", shape: "answer" }, form: "rows" } }]);
+    const row = [...el.querySelectorAll(".sf-row")].find((r) => !block(el)!.contains(r))!;
+    expect(ownWords(row)!.textContent).toBe("world changed");
+  });
+
   test("control: nothing waiting draws its title and a 0, and no row", async () => {
     rows = [ASK, DIFF];
     const el = await mount();

@@ -481,13 +481,18 @@ export type Reading = { declared: ReadonlyMap<string, readonly string[]>; descri
  * Folded, it is one line of words under the row, its title and how many rows the read holds,
  * opened by the person: what the walk did with an ask is there to look into, not to read first.
  */
+/** Whether an entry's thread draws anything under this row: a read bound to it, or the thread's own words for a row stating none. */
+function threadDraws(entry: ViewEntry, row: Readonly<Record<string, unknown>>): boolean {
+  return bindRow(entry.pointer, row) !== null || (statesNone(entry.pointer, row) && entry.empty !== undefined);
+}
+
 function Thread({ entry, row, rowId, reading }: { entry: ViewEntry; row: Readonly<Record<string, unknown>>; rowId: string; reading: Reading }): ReactNode {
   // Bound to the row by its id or a field of it; a row the binding names no value of draws no thread.
   const pointer = bindRow(entry.pointer, row);
   const q = useReport(pointer ?? { type: "record_read" }, { enabled: reading.enabled && pointer !== null, intervalMs: reading.intervalMs });
   if (pointer === null) {
     // A row stating null where the read is bound has nothing to read by it: the thread's own words for none, read nothing.
-    return statesNone(entry.pointer, row) && entry.empty !== undefined ? (
+    return threadDraws(entry, row) ? (
       <div className="sf-thread" data-thread-of={rowId}>
         {entry.title ? <p className="sf-thread-title">{entry.title}</p> : null}
         <Empty said={entry.empty} why={null} />
@@ -601,10 +606,10 @@ function Rows({ rows, entry, reading, inThread = false }: { rows: readonly unkno
         const time = when(o["t"]);
         return (
           <li key={id ?? i} className={threads.length > 0 && !inThread ? "sf-row sf-row-parent" : "sf-row"} data-row={id ?? undefined} data-face={faceOf(o["role"], reading.faces)}>
-            {/* A row with no words of its own names its shape, unless a thread under it says what it is: then the name is a label of the system's, not words for the person. */}
+            {/* A row with no words of its own names its shape, unless a thread drawn under it says what it is: then the name is a label of the system's, not words for the person. */}
             {words.length > 0 ? (
               words.map((w, j) => <Word key={j} k={w.field} v={w.value} cut={o["truncated"] === true} described={reading.described} />)
-            ) : id && threads.length > 0 ? null : (
+            ) : id && threads.some((t) => threadDraws(t, o)) ? null : (
               <p className="sf-row-words sf-muted">{typeof o["shape"] === "string" ? reportTitle(o["shape"]) : "a row"}</p>
             )}
             {judge === "land" ? <Typecheck tc={o["typecheck"]} /> : null}
