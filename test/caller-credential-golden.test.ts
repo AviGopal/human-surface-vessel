@@ -22,8 +22,8 @@ const MODULE_FILE = join(REPO_ROOT, "src/caller-credential.ts");
 const cc = await import("../src/caller-credential");
 const { identityCredential, isNodeSelfCredential, __resetCredentialCacheForTests } = cc;
 const TABLE_FILE = join(REPO_ROOT, "test", "fixtures", "caller-credential-cases.json");
-/** The copy header ends at this line; every byte after it is the source module. */
-const COPY_MARKER = "// --- end of copy header: every byte below this line is the source file, unchanged ---\n";
+/** The copy header ends at this line; the bytes after it are the module the table pins. */
+const COPY_MARKER = "// --- end of copy header: the bytes below are the module, pinned by module_sha256 in test/fixtures/caller-credential-cases.json ---\n";
 
 type Expect = { authenticated: boolean; scopes?: string[]; keyId?: string; node_self?: boolean; why?: string; why_prefix?: string };
 type Call = { authorization: string | null; opts?: { cache?: boolean; xApiKeyPresented?: boolean }; expect: Expect };

@@ -4,7 +4,7 @@
 // this copy is the one changed now. test/caller-credential-golden.test.ts pins the bytes below the marker to
 // test/fixtures/caller-credential-cases.json: change them here and re-pin that table. IDENTITY_VESSEL_URL is declared in src/config.ts; the read inside the copy
 // below is part of the pinned source bytes (use-time, as the source reads it) and goes when the shared package takes it as a parameter.
-// --- end of copy header: every byte below this line is the source file, unchanged ---
+// --- end of copy header: the bytes below are the module, pinned by module_sha256 in test/fixtures/caller-credential-cases.json ---
 // WHO IS CALLING: the one place this vessel asks identity-vessel about a caller's credential.
 //
 // identity-vessel is the single validator (POST /v1/auth/resolve, the contract discovery-vessel's
