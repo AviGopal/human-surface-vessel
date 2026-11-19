@@ -14,7 +14,7 @@ GlobalRegistrator.register({ url: "http://surface.test/" });
 import { afterAll, afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { teardownDom, trackRoot } from "./setup.ts";
 import { currentView, resetViewsForTest } from "../src/ui-views.ts";
-import { SHOWN_MIN_MS, ShownGate } from "../ui/src/lib/shown";
+import { SHOWN_MIN_MS, ShownGate, shownOn } from "../ui/src/lib/shown";
 
 const hex = (c: string): string => c.repeat(64);
 const at = (seq: number): string => `2026-11-16T09:${String(seq).padStart(2, "0")}:00.000Z`;
@@ -112,8 +112,18 @@ async function mount(readFirst = false): Promise<HTMLElement> {
 describe("what the page shows a signed-in person is their records row, citing nothing and grading nothing", () => {
   test("must-fail: the rows on screen are written once the page settles, by id and shape, with no citation, no grade and nothing naming the person", async () => {
     rows = [A, B, GAP];
-    await mount();
-    await settle();
+    // The script the page runs from, as the browser executed it; a type nothing executes, so the test page runs nothing.
+    const script = document.createElement("script");
+    script.type = "text/plain";
+    script.src = "/assets/index-bundle1.js";
+    document.head.append(script);
+    const before = Date.now();
+    try {
+      await mount();
+      await settle();
+    } finally {
+      script.remove();
+    }
     expect(written).toHaveLength(1);
     const row = written[0]!;
     expect(row["shape"]).toBe("exposure");
@@ -121,7 +131,21 @@ describe("what the page shows a signed-in person is their records row, citing no
     expect("input_refs" in row).toBe(false);
     expect("r" in row).toBe(false);
     expect(row["presentation"]).toBe("landing@3");
+    // The conditions it was shown under: when, in what window, drawn by which bundle.
+    expect(Date.parse(String(row["at"]))).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(String(row["at"]))).toBeLessThanOrEqual(Date.now());
+    expect(row["viewport"]).toEqual({ width: 400, height: 400 });
+    expect(row["renderer_bundle"]).toBe("index-bundle1.js");
     expect(JSON.stringify(row)).not.toContain("key_person_1");
+  });
+
+  test("must-fail: what the page shows is measured only once it has been still for a second", async () => {
+    rows = [A, B];
+    await mount();
+    // Drawn a moment ago: rows passing under a scroll or still arriving were not shown yet.
+    expect(written).toHaveLength(0);
+    await settle();
+    expect(written).toHaveLength(1);
   });
 
   test("must-fail: a page drawn before its view arrives writes what it shows once the view is drawn", async () => {
@@ -214,6 +238,18 @@ describe("what the page shows a signed-in person is their records row, citing no
     expect(written).toHaveLength(1);
   });
 
+  test("must-fail: a write that fails for any other reason is not tried again, and later sets are still written", async () => {
+    writeAnswer = () => Response.json({ error: "records_unavailable" }, { status: 500 });
+    rows = [A];
+    const el = await mount();
+    await settle();
+    expect(written).toHaveLength(1);
+    await settle();
+    expect(written).toHaveLength(1);
+    await later(el);
+    expect(written).toHaveLength(2);
+  });
+
   test("must-fail: the page watches the whole landing for rows that arrive or change", async () => {
     const Real = globalThis.MutationObserver;
     const watched: { el: Element; opts: MutationObserverInit | undefined }[] = [];
@@ -269,5 +305,60 @@ describe("a page writes a new set on screen, and no sooner than a minute after i
 
   test("control: the minute is a cap, not a delay: the first set is written at once", () => {
     expect(new ShownGate().check(s("a"), 0)).toBe("write");
+  });
+
+  test("must-fail: the same rows drawn in another order are the same set", () => {
+    const g = new ShownGate();
+    g.wrote(s("a", "b"), 0);
+    expect(g.check(s("b", "a"), SHOWN_MIN_MS)).toBe("same");
+  });
+});
+
+describe("the rows shown are those at least half on screen, clipped by every scrolled box they sit in", () => {
+  const screen = { x: 0, y: 0, width: 400, height: 400 };
+  // Rows placed as above: the nth row of the document at n × 50 px, 40 px tall.
+  const rowEls = (ids: string[]): HTMLElement[] => ids.map((id) => {
+    const li = document.createElement("li");
+    li.className = "sf-row";
+    li.setAttribute("data-row", id);
+    li.setAttribute("data-shape", "world_changed");
+    return li;
+  });
+  const idsOf = (root: ParentNode, viewport = screen): string[] => shownOn(root, viewport).map((s) => s.id);
+  beforeEach(async () => {
+    if (mounted) { const was = mounted; mounted = null; await act(async () => { was.unmount(); }); }
+  });
+
+  test("must-fail: a row scrolled out of the box it sits in was not shown, though it is inside the window", async () => {
+    const box = document.createElement("div");
+    box.style.overflowY = "auto";
+    Object.defineProperty(box, "clientWidth", { value: 400 });
+    Object.defineProperty(box, "clientHeight", { value: 100 });
+    box.getBoundingClientRect = () => ({ x: 0, y: 0, width: 400, height: 100, top: 0, left: 0, right: 400, bottom: 100, toJSON: () => ({}) }) as DOMRect;
+    box.append(...rowEls([A.id, B.id, C.id, GAP.id]));
+    document.body.replaceChildren(box);
+    expect(idsOf(document.body)).toEqual([A.id, B.id]);
+  });
+
+  test("control: rows in no scrolled box are clipped by the window alone", async () => {
+    const ul = document.createElement("ul");
+    ul.append(...rowEls([A.id, B.id, C.id, GAP.id]));
+    document.body.replaceChildren(ul);
+    expect(idsOf(document.body)).toEqual([A.id, B.id, C.id, GAP.id]);
+  });
+
+  test("must-fail: a row naming no id is not among what was shown", async () => {
+    const ul = document.createElement("ul");
+    ul.append(...rowEls(["", A.id]));
+    document.body.replaceChildren(ul);
+    expect(idsOf(document.body)).toEqual([A.id]);
+  });
+
+  test("must-fail: a row exactly half on screen was shown; less than half was not", async () => {
+    const ul = document.createElement("ul");
+    ul.append(...rowEls([A.id]));
+    document.body.replaceChildren(ul);
+    expect(idsOf(document.body, { ...screen, height: 20 })).toEqual([A.id]);
+    expect(idsOf(document.body, { ...screen, height: 19 })).toEqual([]);
   });
 });
