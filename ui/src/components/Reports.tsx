@@ -705,6 +705,7 @@ function Questions({ rows, open, onOpen, lead = false, inline = true }: { rows: 
                     className="sf-landing-row"
                     aria-expanded={isOpen}
                     data-solicitation-id={id}
+                    data-shape={typeof (row as Record<string, unknown>)["shape"] === "string" ? ((row as Record<string, unknown>)["shape"] as string) : undefined}
                     data-exposure-role="list_row"
                     // The form the open question draws its body in: the form learner's evidence, read off this row at act time.
                     data-form={planFor(fromPanel(QUESTION_CONTENT_SHAPE, (row as Question).body), policy).form}

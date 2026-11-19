@@ -4,7 +4,8 @@
  * root nor a verdict; signed out, nothing. One row per new set on screen, no sooner than a minute after
  * the last.
  *
- * Shapes: the landing draws records rows as `.sf-row[data-row]`; a person's row reaches records
+ * Shapes: the landing draws records rows as `.sf-row[data-row]` and a questions form's rows as buttons naming
+ * `data-solicitation-id`; a person's row reaches records
  * through POST /api/discovery/resolve as {pointer: {type: "record_write", row}}, sent under their
  * key by the server, which stamps nothing of them into the row.
  */
@@ -15,6 +16,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, setSystemTime, test 
 import { teardownDom, trackRoot } from "./setup.ts";
 import { currentView, resetViewsForTest } from "../src/ui-views.ts";
 import { SHOWN_MIN_MS, ShownGate, shownOn } from "../ui/src/lib/shown";
+import { collectCandidates, visibleSlice } from "../ui/src/lib/exposure";
 
 const hex = (c: string): string => c.repeat(64);
 const at = (seq: number): string => `2026-11-16T09:${String(seq).padStart(2, "0")}:00.000Z`;
@@ -28,8 +30,14 @@ let rows: Record<string, unknown>[] = [];
 let signedIn = true;
 let writeAnswer: () => Response = () => Response.json({ success: true, body: { seq: 9, id: hex("9") } });
 const written: Record<string, unknown>[] = [];
+// What the exposure tick sends to this instance's observation journal (exposure-reporter.ts), in order.
+const observed: Record<string, unknown>[] = [];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
+  if (url.endsWith("/api/observations")) {
+    observed.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json({ ok: true });
+  }
   if (url.endsWith("/api/session")) return Response.json(signedIn ? { keySignIn: true, signedIn: true, person: { userId: "key_person_1", name: null, email: null, expiresAt: Date.now() + 900_000 } } : { keySignIn: true, signedIn: false });
   if (url.includes("/api/discovery/resolve")) {
     const p = JSON.parse(String(init?.body)).pointer as Record<string, unknown>;
@@ -45,10 +53,13 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 // happy-dom lays nothing out: each row is placed by its order in the page, 40 px tall, 50 px apart,
 // in a window 400 px tall, so rows past the eighth are below what the person sees.
+// The rows placed are named here, not by the selector under test, so a page drawing rows the recorder misses still
+// lays them out.
+const PLACED = ".sf-row[data-row], [data-solicitation-id]";
 const realRect = Element.prototype.getBoundingClientRect;
 Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
-  if (!(this as HTMLElement).matches?.(".sf-row[data-row]")) return realRect.call(this);
-  const i = [...document.querySelectorAll(".sf-row[data-row]")].indexOf(this);
+  if (!(this as HTMLElement).matches?.(PLACED)) return realRect.call(this);
+  const i = [...document.querySelectorAll(PLACED)].indexOf(this);
   const y = i * 50;
   return { x: 0, y, width: 400, height: 40, top: y, left: 0, right: 400, bottom: y + 40, toJSON: () => ({}) } as DOMRect;
 };
@@ -75,6 +86,7 @@ Object.defineProperty(document, "visibilityState", { get: () => visibility, conf
 beforeEach(() => {
   visibility = "visible";
   written.length = 0;
+  observed.length = 0;
   signedIn = true;
   writeAnswer = () => Response.json({ success: true, body: { seq: 9, id: hex("9") } });
   setSystemTime(new Date("2026-11-18T05:00:00.000Z"));
@@ -89,10 +101,10 @@ const settle = async (ms = 1_200): Promise<void> => {
 // readFirst: the page is drawn while its view is still being read, and the view arrives after.
 // The page before is unmounted first, so no leg's page listens on into the next.
 let mounted: ReturnType<typeof createRoot> | null = null;
-async function mount(readFirst = false): Promise<HTMLElement> {
+async function mount(readFirst = false, entries: readonly Record<string, unknown>[] = ENTRIES): Promise<HTMLElement> {
   if (mounted) { const was = mounted; await act(async () => { was.unmount(); }); }
   resetViewsForTest();
-  const view = { ...currentView("landing"), above: [], revision: 3, id: "landing@3", entries: ENTRIES, isDefault: false, drawsDefault: false };
+  const view = { ...currentView("landing"), above: [], revision: 3, id: "landing@3", entries, isDefault: false, drawsDefault: false };
   const el = document.createElement("div");
   document.body.replaceChildren(el);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -269,6 +281,35 @@ describe("what the page shows a signed-in person is their records row, citing no
     expect(watched.some((w) => w.el.classList.contains("sf-landing") && w.opts?.childList === true && w.opts?.subtree === true)).toBe(true);
   });
 
+  const QUESTIONS = [{ pointer: { type: "record_read", shape: "world_changed" }, form: "questions", title: "What people asked" }];
+
+  test("must-fail: rows drawn as questions are written as shown, by id and shape", async () => {
+    rows = [A, B];
+    await mount(false, QUESTIONS);
+    await settle();
+    expect(document.querySelectorAll("button.sf-landing-row[data-solicitation-id]")).toHaveLength(2);
+    expect(written).toHaveLength(1);
+    expect(written[0]!["shown"]).toEqual([{ id: A.id, shape: "world_changed" }, { id: B.id, shape: "world_changed" }]);
+  });
+
+  test("must-fail: the exposure tick measures rows drawn as questions the same with or without the shape they now name", async () => {
+    rows = [A, B];
+    const el = await mount(false, QUESTIONS);
+    await settle();
+    const list = el.querySelector(".sf-landing-list")!;
+    const screen = { x: 0, y: 0, width: 400, height: 400 };
+    const named = collectCandidates(list, screen);
+    for (const b of Array.from(list.querySelectorAll("[data-shape]"))) b.removeAttribute("data-shape");
+    const unnamed = collectCandidates(list, screen);
+    expect(named.length).toBe(2);
+    expect(named).toEqual(unnamed);
+    expect(visibleSlice(named)).toEqual(visibleSlice(unnamed));
+    // Its records name only the rows and the screen, never a row's shape.
+    const ticks = observed.filter((o) => o["obs_type"] === "exposure");
+    expect(ticks.length).toBeGreaterThan(0);
+    expect(JSON.stringify(ticks)).not.toContain("world_changed");
+  });
+
   test("must-fail: a page out of view writes nothing, however its rows change; back in view, it writes what it shows", async () => {
     visibility = "hidden";
     rows = [A];
@@ -360,5 +401,36 @@ describe("the rows shown are those at least half on screen, clipped by every scr
     document.body.replaceChildren(ul);
     expect(idsOf(document.body, { ...screen, height: 20 })).toEqual([A.id]);
     expect(idsOf(document.body, { ...screen, height: 19 })).toEqual([]);
+  });
+
+  const asked = (id: string, shape?: string): HTMLElement => {
+    const b = document.createElement("button");
+    b.className = "sf-landing-row";
+    b.setAttribute("data-solicitation-id", id);
+    if (shape !== undefined) b.setAttribute("data-shape", shape);
+    return b;
+  };
+
+  test("must-fail: a row drawn as a question naming no shape is shown with shape null, not left out", async () => {
+    const ul = document.createElement("ul");
+    ul.append(asked(A.id), asked(B.id, "world_changed"));
+    document.body.replaceChildren(ul);
+    expect(shownOn(document.body, screen)).toEqual([{ id: A.id, shape: null }, { id: B.id, shape: "world_changed" }]);
+  });
+
+  test("must-fail: records rows and rows drawn as questions are both shown", async () => {
+    const ul = document.createElement("ul");
+    ul.append(...rowEls([A.id]), asked(B.id, "world_changed"));
+    document.body.replaceChildren(ul);
+    expect(idsOf(document.body)).toEqual([A.id, B.id]);
+  });
+
+  test("must-fail: an element naming both a row and a question is one row, named by its row, shown once", async () => {
+    const both = rowEls([A.id])[0]!;
+    both.setAttribute("data-solicitation-id", B.id);
+    const ul = document.createElement("ul");
+    ul.append(both, asked(A.id, "world_changed"));
+    document.body.replaceChildren(ul);
+    expect(shownOn(document.body, screen)).toEqual([{ id: A.id, shape: "world_changed" }]);
   });
 });

@@ -9,10 +9,19 @@
  * neither, so what was shown is its own field, `shown`. It is not an ask either: records takes as
  * asks only the shapes an owner's schema declares.
  */
-import { MIN_VISIBLE_FRACTION, clipChain, visibleFraction, type PresentationConditions, type Rect } from "./exposure";
+import { MIN_VISIBLE_FRACTION, SOLICITATION_ATTR, clipChain, visibleFraction, type PresentationConditions, type Rect } from "./exposure";
 
-/** The rows the page draws, each naming its id and shape (Reports.tsx Rows). */
-export const SHOWN_SELECTOR = ".sf-row[data-row]";
+/**
+ * Every row the page draws that a person can act on, each naming its id: a records row (Reports.tsx Rows, data-row)
+ * and a row drawn as a question (Reports.tsx Questions, the solicitation id). A row's shape is its data-shape, null
+ * where the row names none. An element carrying both ids is one row, named by its data-row.
+ *
+ * This row is the successor of the browser's exposure tick (exposure-reporter.ts), which writes the same name,
+ * "exposure", to this instance's observation journal for importance-learn and form-learn. The tick runs beside this
+ * row, measuring question rows only, and retires with its journal and those learners once a reader of these records
+ * rows grades what was shown.
+ */
+export const SHOWN_SELECTOR = `.sf-row[data-row], [${SOLICITATION_ATTR}]`;
 
 /**
  * The fewest milliseconds between two rows from one page. A behaviour constant, named as debt: the
@@ -31,7 +40,7 @@ export function shownOn(root: ParentNode, viewport: Rect): Shown[] {
   const out: Shown[] = [];
   const seen = new Set<string>();
   for (const el of Array.from(root.querySelectorAll<HTMLElement>(SHOWN_SELECTOR))) {
-    const id = el.getAttribute("data-row");
+    const id = el.getAttribute("data-row") ?? el.getAttribute(SOLICITATION_ATTR);
     if (!id || seen.has(id)) continue;
     const box = el.getBoundingClientRect();
     if (visibleFraction({ x: box.x, y: box.y, width: box.width, height: box.height }, [...clipChain(el), viewport]) < MIN_VISIBLE_FRACTION) continue;
