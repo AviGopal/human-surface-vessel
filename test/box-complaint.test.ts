@@ -3,7 +3,7 @@
  * STARTS with "hard to see:", "hard to understand:" or "wrong:" is written as the
  * person's row, `world_changed` in their own words, where an ask goes, naming the open
  * question when there is one. It is never filed by the surface itself. The form is gone;
- * chips in the Issues drawer and on the questions page fill the box and never send.
+ * the chips on the questions page fill the box and never send.
  */
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register({ url: "http://surface.test/" });
@@ -37,7 +37,7 @@ const { QueryClient, QueryClientProvider } = await import(Bun.resolveSync("@tans
 const { LiveControlsProvider } = await import("../ui/src/state/liveControls");
 const { QuestionsProvider } = await import("../ui/src/state/questions");
 const { TopBar } = await import("../ui/src/components/TopBar");
-const { IssuesDrawer } = await import("../ui/src/components/IssuesDrawer");
+const { ComplaintChips } = await import("../ui/src/components/ComplainButton");
 const box = await import("../ui/src/lib/box");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -66,7 +66,7 @@ async function mount(node: unknown): Promise<HTMLElement> {
   return el;
 }
 const topBar = (props: Record<string, unknown> = {}) =>
-  React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false, ...props });
+  React.createElement(TopBar, { ...props });
 
 async function type(el: HTMLElement, text: string): Promise<void> {
   const t = el.querySelector("textarea")!;
@@ -142,8 +142,8 @@ describe("the box files a complaint", () => {
 });
 
 describe("the form is gone; chips fill the box", () => {
-  test("must-fail: the Issues drawer has no complaint form, and its chips fill the box and send nothing", async () => {
-    const el = await mount(React.createElement(React.Fragment, null, topBar(), React.createElement(IssuesDrawer, { onClose: () => {} })));
+  test("must-fail: the chips fill the box and send nothing", async () => {
+    const el = await mount(React.createElement(React.Fragment, null, topBar(), React.createElement(ComplaintChips)));
     for (let i = 0; i < 3; i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     expect([...el.querySelectorAll("button")].map((b) => b.textContent)).not.toContain("Report a problem");
     expect(el.querySelector(".sf-complain")).toBeNull();

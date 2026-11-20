@@ -1,10 +1,11 @@
 /**
- * The gap routes (/api/gaps, /api/gaps/:id) serve no key id: a gap row has no field that names
+ * The gap route (/api/gaps/:id) serves no key id: a gap row has no field that names
  * whoever wrote it. The gap store records a write's key only as a 6-character prefix in its own
  * write-event log (development-vessel substrate-gap.ts, appendGapWriteEvent), which the
  * `substrateGap` read does not serve; a gap names its writer by the session marker in `operator`.
- * So the routes carry no unnaming: this pins that a gap a person reported, as the store serves it,
+ * So the route carries no unnaming: this pins that a gap a person reported, as the store serves it,
  * reaches the browser with no key id, and fails if the store or the route starts serving one.
+ * The list route (/api/gaps) went with the Issues list it served; a leg pins that it is gone.
  *
  * Shape: one node 11-11. A key id reached signed-out viewers through the records read
  * (agf_m1wjuqnt8og3); these two routes were read for the same field and serve none.
@@ -45,12 +46,9 @@ app.route("/", proxyRouter);
 const own = `http://127.0.0.1:${PORT + 10_000}`;
 
 describe("the gap routes serve no key id", () => {
-  test("/api/gaps: a person-reported gap reaches the browser with no key id", async () => {
+  test("/api/gaps is no route: the Issues list it served is gone", async () => {
     const r = await app.request(`${own}/api/gaps`);
-    const text = await r.text();
-    expect(r.status).toBe(200);
-    expect(JSON.parse(text).gaps[0].id).toBe(GAP.id);
-    expect(text).not.toMatch(/key_[A-Za-z0-9_-]+/);
+    expect(r.status).toBe(404);
   });
 
   test("/api/gaps/:id: the same gap by id carries no key id", async () => {

@@ -83,7 +83,7 @@ function Page({ entries }: { entries: unknown[] }) {
   return React.createElement(
     React.Fragment,
     null,
-    React.createElement(TopBar, { context, onSetAside: clearAbout, onAsked: clearAbout, openIssues: null, onToggleIssues: () => {}, issuesOpen: false }),
+    React.createElement(TopBar, { context, onSetAside: clearAbout, onAsked: clearAbout }),
     React.createElement(Entries, { entries, enabled: true, intervalMs: 60_000, onOpenQuestion: () => {} }),
   );
 }

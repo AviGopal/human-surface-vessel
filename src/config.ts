@@ -24,10 +24,10 @@ export const HOST = process.env.HOST ?? "0.0.0.0";
  * Stated explicitly rather than left to Bun's ~10s default, because a route's
  * error path is only reachable if the handler outlives its own upstream budget.
  *
- * Measured: `/api/gaps` fans out sequentially with a per-candidate timeout. When
- * those summed past the default, the connection was closed mid-handler and the
+ * Measured: when a route that fanned out sequentially with a per-candidate
+ * timeout summed past the default, the connection was closed mid-handler and the
  * caller got an EMPTY REPLY — never the route's honest 502. The bug read as
- * "the gaps panel is broken" when the panel was correct and unable to speak.
+ * "the panel is broken" when the panel was correct and unable to speak.
  *
  * This is the ceiling; the per-route budgets are what keep handlers under it.
  * Raising this to paper over a slow route would re-hide exactly that failure.

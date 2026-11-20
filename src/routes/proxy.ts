@@ -200,9 +200,8 @@ async function readViaDiscovery(pointer: Record<string, unknown>, timeoutMs?: nu
  * perfectly good answer sitting inside the response it just rejected.
  *
  * That is the second half of "the surface never shows data": fixing the resolve
- * PATH got the transport to answer, and the answer was still unreadable. The
- * `/api/gaps` route already unwrapped both envelopes; this route did not, and a
- * per-route unwrap is how one of them gets forgotten.
+ * PATH got the transport to answer, and the answer was still unreadable. A
+ * per-route unwrap is how one route gets forgotten.
  *
  * Tolerant on purpose — the wrapper is not uniform. When the owner succeeded,
  * `content.body` is the payload; when it failed, `content.body` is the owner's
@@ -526,28 +525,6 @@ proxyRouter.get("/api/page-frame/:id", (c) => {
       "Cache-Control": "no-store",
     },
   });
-});
-
-// ─── interface gaps (browser read) ──────────────────────────────────────────
-
-/**
- * The surface renders the gap store's view of ITSELF.
- *
- * These are `ui_legibility` gaps: some `substrate_detected` by the substrate's
- * own legibility scan reading this surface, some `human_reported` from a person
- * complaining about it. They share one keyspace on purpose, so a reader can see
- * both kinds of finding in one place — and can watch one close.
- */
-proxyRouter.get("/api/gaps", async (c) => {
-  // By shape, through discovery, which places the read wherever a gap store runs.
-  const answer = await readViaDiscovery({ type: "substrateGap", category: "ui_legibility", limit: 40 }, getRenderPolicy().timeouts.issuesMs);
-  if (answer && Array.isArray(answer["gaps"])) return c.json({ gaps: answer["gaps"] }, 200, corsHeaders(c.req.header("Origin")));
-
-  return c.json(
-    { gaps: [], error: "no vessel serving substrateGap answered" },
-    502,
-    corsHeaders(c.req.header("Origin")),
-  );
 });
 
 /**

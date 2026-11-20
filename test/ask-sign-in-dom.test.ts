@@ -67,7 +67,7 @@ async function mount(): Promise<HTMLElement> {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     createRoot(el).render(
-      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false })))),
+      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, {})))),
     );
   });
   await settle();

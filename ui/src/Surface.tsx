@@ -10,10 +10,9 @@
  */
 
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useRenderPolicy, useUiView } from "./api/queries";
-import { IssuesDrawer, useInterfaceGaps } from "./components/IssuesDrawer";
 import { Landing } from "./components/Landing";
 import { TopBar } from "./components/TopBar";
 import { boxContext } from "./lib/box";
@@ -42,12 +41,8 @@ function Workbench(): ReactNode {
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { questionId?: string };
   const questionId = params.questionId ?? null;
-  const [issuesOpen, setIssuesOpen] = useState(false);
-  const closeIssues = useCallback(() => setIssuesOpen(false), []);
 
   const questions = useQuestions();
-  const gaps = useInterfaceGaps();
-  const openGaps = gaps.data ? gaps.data.filter((g) => g.status !== "closed").length : null;
 
   // Nothing selected: the landing, drawn from its view.
   const landingView = useUiView("landing", { enabled: !paused, intervalMs });
@@ -62,7 +57,6 @@ function Workbench(): ReactNode {
 
   // Opening the open question again closes it.
   const openQuestion = (id: string): void => {
-    setIssuesOpen(false);
     void (id === questionId ? navigate({ to: "/" }) : navigate({ to: "/question/$questionId", params: { questionId: id } }));
   };
 
@@ -74,9 +68,6 @@ function Workbench(): ReactNode {
         complaintRegion={questionId}
         onSetAside={() => (context.kind === "about" ? clearAbout() : setSetAside(open?.id ?? null))}
         onAsked={clearAbout}
-        openIssues={openGaps}
-        issuesOpen={issuesOpen}
-        onToggleIssues={() => setIssuesOpen((v) => !v)}
       />
 
       <main className="sf-main">
@@ -89,7 +80,6 @@ function Workbench(): ReactNode {
           openQuestion={questionId}
         />
       </main>
-      {issuesOpen ? <IssuesDrawer onClose={closeIssues} /> : null}
     </div>
   );
 }

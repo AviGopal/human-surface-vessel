@@ -21,8 +21,6 @@ export const RECHECK_KEYS = [
   "reportMinMs",
   /** No view is re-read more often than this. */
   "viewMinMs",
-  /** The Issues drawer's floor. */
-  "issuesMinMs",
   /** The questions list's floor. */
   "questionsMinMs",
   /** How often the page asks whether the person is still signed in. */
@@ -43,7 +41,6 @@ export const DEFAULT_RECHECK: Recheck = {
   streamFallbackMs: 60_000,
   reportMinMs: 60_000,
   viewMinMs: 5_000,
-  issuesMinMs: 15_000,
   questionsMinMs: 5_000,
   sessionMs: 60_000,
   gapStatusTtlMs: 600_000,
@@ -64,7 +61,6 @@ export const RECHECK_RANGES: Readonly<Record<RecheckKey, readonly [number, numbe
   streamFallbackMs: [5_000, 3_600_000],
   reportMinMs: [5_000, 3_600_000],
   viewMinMs: [1_000, 600_000],
-  issuesMinMs: [1_000, 600_000],
   questionsMinMs: [1_000, 600_000],
   sessionMs: [5_000, 3_600_000],
   gapStatusTtlMs: [10_000, 86_400_000],

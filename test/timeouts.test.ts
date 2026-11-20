@@ -25,9 +25,11 @@ const WRITE = `
   }
   const ok = await write({ timeouts: { resolveMs: 3000 } });
   const unbounded = await write({ timeouts: { shapesMs: null } });
-  const tooLong = await write({ timeouts: { issuesMs: 60000 } });
+  const tooLong = await write({ timeouts: { shapesMs: 60000 } });
+  const retired = await write({ timeouts: { issuesMs: 8000 }, recheck: { issuesMinMs: 15000 } });
   console.log(JSON.stringify({ ok: ok.status, unbounded: unbounded.status, tooLong: tooLong.status,
-    rejected: [...unbounded.body.rejected_values, ...tooLong.body.rejected_values], timeouts: store.getRenderPolicy().timeouts }));
+    rejected: [...unbounded.body.rejected_values, ...tooLong.body.rejected_values], timeouts: store.getRenderPolicy().timeouts,
+    retired: { status: retired.status, rejected: retired.body.rejected_values }, recheck: store.getRenderPolicy().recheck }));
 `;
 const REPLAY = `
   const store = await import(${JSON.stringify(storeModule)});
@@ -73,10 +75,22 @@ describe("timeouts is a policy field", () => {
       expect([w["ok"], w["unbounded"], w["tooLong"]]).toEqual([200, 422, 422]);
       expect(w["rejected"]).toEqual([
         "timeouts.shapesMs must be an integer from 500 to 25000",
-        "timeouts.issuesMs must be an integer from 500 to 25000",
+        "timeouts.shapesMs must be an integer from 500 to 25000",
       ]);
       expect(w["timeouts"]).toEqual({ ...DEFAULT_TIMEOUTS, resolveMs: 3000 });
       expect(run(REPLAY, workspace)["timeouts"]).toEqual(w["timeouts"]);
+    });
+  });
+
+  test("must-fail: the Issues list's two keys went with it; a write naming either is refused as not read", () => {
+    inWorkspace((workspace) => {
+      const w = run(WRITE, workspace);
+      const retired = w["retired"] as { status: number; rejected: string[] };
+      expect(retired.status).toBe(422);
+      expect(retired.rejected.some((r) => r.startsWith("timeouts.issuesMs is not read"))).toBe(true);
+      expect(retired.rejected.some((r) => r.startsWith("recheck.issuesMinMs is not read"))).toBe(true);
+      expect("issuesMs" in (w["timeouts"] as object)).toBe(false);
+      expect("issuesMinMs" in (w["recheck"] as object)).toBe(false);
     });
   });
 

@@ -23,8 +23,6 @@ export const DEFAULT_TIMEOUTS = {
   resolveMs: 10_000,
   /** A registry's shape vocabulary. */
   shapesMs: 10_000,
-  /** The interface issues list. */
-  issuesMs: 8_000,
   /** One gap's status, read in the background for the questions list. */
   gapStatusMs: 4_000,
 } as const;
@@ -42,7 +40,6 @@ const CEILING_MS = (SERVER_IDLE_TIMEOUT_S * 1000 * 5) / 6;
 export const TIMEOUT_RANGES: Readonly<Record<TimeoutKey, readonly [number, number]>> = {
   resolveMs: [500, CEILING_MS],
   shapesMs: [500, CEILING_MS],
-  issuesMs: [500, CEILING_MS],
   gapStatusMs: [500, CEILING_MS],
 };
 

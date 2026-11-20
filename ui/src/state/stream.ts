@@ -44,7 +44,7 @@ export function streamAwareInterval(intervalMs: number, isConnected: boolean, fa
 export const EVENT_QUERIES: Readonly<Record<string, readonly (readonly string[])[]>> = {
   panel_added: [["humanQuestions"]],
   panel_updated: [["humanQuestions"]],
-  feedback_received: [["humanQuestions"], ["interfaceGaps"]],
+  feedback_received: [["humanQuestions"]],
   // Literal rather than imported: api/queries imports this module.
   renderPolicy: [["renderPolicy"]],
   surface_intent: [["renderPolicy"]],

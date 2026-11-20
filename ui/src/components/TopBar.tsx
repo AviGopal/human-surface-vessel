@@ -28,9 +28,6 @@ import { Glyph } from "./Glyph";
 const REPLY_ECHO: Readonly<Record<string, string>> = { answered: "Answer", declined: "Declined", insufficient_context: "Need more" };
 
 export function TopBar({
-  openIssues,
-  onToggleIssues,
-  issuesOpen,
   complaintRegion = null,
   context = NEW_ASK,
   onSetAside,
@@ -42,9 +39,6 @@ export function TopBar({
   onSetAside?: () => void;
   /** An ask was stored: what the box was about is spent, and the next message is a new ask. */
   onAsked?: () => void;
-  openIssues: number | null;
-  onToggleIssues: () => void;
-  issuesOpen: boolean;
   /** What a complaint typed now is about: the question open on the questions page; otherwise the surface. */
   complaintRegion?: string | null;
 }): ReactNode {
@@ -91,7 +85,7 @@ export function TopBar({
   const words = boxWords(context);
   const pending = asking.isPending || answer.isPending || complain.isPending;
 
-  // A chip elsewhere on the page (the Issues drawer, the questions page) fills the box.
+  // A chip elsewhere on the page (the questions page) fills the box.
   useEffect(() => {
     const onFill = (e: Event): void => put(String((e as CustomEvent).detail ?? ""), false);
     window.addEventListener("sf:fill-box", onFill);
@@ -286,15 +280,6 @@ export function TopBar({
             }
           }}
         />
-        <button
-          type="button"
-          className="sf-button sf-button-quiet"
-          aria-expanded={issuesOpen}
-          aria-controls="sf-issues"
-          onClick={onToggleIssues}
-        >
-          Issues{openIssues !== null ? <span className="sf-count">{openIssues}</span> : null}
-        </button>
       </div>
 
       {asking.isError ? (

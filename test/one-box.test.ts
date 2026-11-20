@@ -72,7 +72,7 @@ async function mount(props: Record<string, unknown>): Promise<HTMLElement> {
   roots.push(root);
   await act(async () => {
     root.render(
-      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false, ...props })))),
+      React.createElement(QueryClientProvider, { client: qc }, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null, React.createElement(TopBar, { ...props })))),
     );
   });
   return el;

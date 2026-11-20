@@ -81,7 +81,7 @@ describe("the page draws as much as the policy's limits say", () => {
     Object.defineProperty(window.HTMLTextAreaElement.prototype, "scrollHeight", { configurable: true, get: () => 1000 });
     const height = async (limits: Record<string, number> | null) => {
       const el = await draw(limits, React.createElement(LiveControlsProvider, null, React.createElement(QuestionsProvider, null,
-        React.createElement(TopBar, { openIssues: null, onToggleIssues: () => {}, issuesOpen: false }))));
+        React.createElement(TopBar, {}))));
       const t = el.querySelector("textarea")!;
       await act(async () => {
         Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!.call(t, "a\nb\nc\nd");

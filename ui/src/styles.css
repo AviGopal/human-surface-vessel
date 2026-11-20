@@ -1461,19 +1461,6 @@ body { overflow: hidden; }
   vertical-align: middle;
 }
 .sf-live-dot[data-paused="true"] { background: none; box-shadow: inset 0 0 0 1.5px var(--sf-ink-3); }
-.sf-count {
-  display: inline-block;
-  min-width: 1.5em;
-  margin-left: var(--sf-space-2);
-  padding: 0 var(--sf-space-1);
-  border-radius: var(--sf-radius-md);
-  background: var(--sf-panel-alt);
-  color: var(--sf-ink-2);
-  font-size: var(--sf-text-xs);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-.sf-count[data-attention="true"] { background: var(--sf-waiting-bg); color: var(--sf-ink); }
 .sf-outcome-line {
   flex: 1 1 100%;
   display: flex;
@@ -1609,7 +1596,7 @@ body { overflow: hidden; }
 .sf-trace-candidates { margin-top: var(--sf-space-1); font-size: var(--sf-text-xs); color: var(--sf-ink-2); }
 .sf-trace-candidates ul { margin: var(--sf-space-1) 0 0; padding-left: var(--sf-space-5); }
 .sf-walklog-details { margin-top: var(--sf-space-4); font-size: var(--sf-text-sm); }
-.sf-walklog-details summary, .sf-history summary, .sf-inject summary, .sf-issue-more summary, .sf-issues-closed summary { cursor: pointer; color: var(--sf-ink-2); }
+.sf-walklog-details summary, .sf-history summary, .sf-inject summary { cursor: pointer; color: var(--sf-ink-2); }
 .sf-walklog { font-family: var(--sf-font-mono); font-size: var(--sf-text-xs); padding-left: var(--sf-space-6); overflow-wrap: anywhere; }
 
 /* question */
@@ -1623,35 +1610,10 @@ body { overflow: hidden; }
 .sf-question-complain { padding-top: var(--sf-space-5); }
 .sf-inject-body { display: flex; flex-direction: column; gap: var(--sf-space-2); margin-top: var(--sf-space-2); max-width: var(--sf-measure-prose); }
 
-/* issues drawer — shares the main pane's grid cell, over it; scrolls as a panel */
-.sf-issues {
-  grid-area: main;
-  justify-self: end;
-  width: min(40rem, 100%);
-  min-height: 0;
-  overflow-y: auto;
-  background: var(--sf-panel);
-  border-left: 1px solid var(--sf-rule);
-  box-shadow: var(--sf-shadow);
-  padding: var(--sf-space-4) var(--sf-space-5) var(--sf-space-6);
-  z-index: 4;
-}
-.sf-issues-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sf-space-3); }
-.sf-issues-report { padding: var(--sf-space-3) 0; border-bottom: 1px solid var(--sf-rule); }
-.sf-issue-list { list-style: none; margin: 0; padding: 0; }
-.sf-issue { padding: var(--sf-space-4) 0; border-bottom: 1px solid var(--sf-rule); }
-.sf-issue-facts { display: flex; flex-wrap: wrap; gap: var(--sf-space-2); align-items: center; margin: 0; font-size: var(--sf-text-xs); color: var(--sf-ink-3); }
-.sf-issue-lead { margin: var(--sf-space-2) 0 0; font-size: var(--sf-text-base); line-height: var(--sf-leading-normal); color: var(--sf-ink); overflow-wrap: anywhere; }
-.sf-issue-more { margin-top: var(--sf-space-2); font-size: var(--sf-text-sm); }
-.sf-issue-more p { margin: var(--sf-space-2) 0 0; line-height: var(--sf-leading-prose); color: var(--sf-ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
-.sf-issue-id { margin: var(--sf-space-2) 0 0; font-size: var(--sf-text-xs); color: var(--sf-ink-3); overflow-wrap: anywhere; }
-.sf-issues-closed { margin-top: var(--sf-space-4); font-size: var(--sf-text-sm); }
-
 /* narrow: still one screen — the bar, then the main pane */
 @media (max-width: 760px) {
   .sf-main > article { padding: var(--sf-space-4); }
   .sf-landing-block { padding: var(--sf-space-4) var(--sf-space-4) 0; }
-  .sf-issues { width: 100%; }
 }
 .sf-question-subject { font-size: var(--sf-text-lg); max-width: var(--sf-measure-prose); }
 .sf-answer-basis { margin-top: var(--sf-space-4); font-size: var(--sf-text-sm); }
@@ -1708,7 +1670,6 @@ body { overflow: hidden; }
 .sf-cut { font-size: var(--sf-text-xs); color: var(--sf-ink); background: var(--sf-waiting-bg); border-radius: var(--sf-radius-sm); padding: 0 var(--sf-space-2); }
 .sf-streaming { font-size: var(--sf-text-xs); color: var(--sf-running); }
 .sf-rendered-row { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.sf-issue-more .sf-rendered { margin-top: var(--sf-space-2); }
 
 /* ── Interaction widgets ── */
 .sf-interaction { display: flex; flex-direction: column; gap: var(--sf-space-2); max-width: var(--sf-measure-prose); }
